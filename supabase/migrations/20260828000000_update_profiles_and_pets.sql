@@ -45,9 +45,11 @@ alter table public.pets
   add constraint pets_age_year_check check (age_year >= 0);
 
 alter table public.pets
-  alter column species type public.pet_species
-  using (
-    case lower(trim(species))
+  add column species_migrated public.pet_species;
+
+update public.pets
+set species_migrated = (
+    case lower(trim(species::text))
       when 'dog' then 'dog'
       when 'cat' then 'cat'
       when 'rabbit' then 'rabbit'
@@ -87,6 +89,12 @@ alter table public.pets
       else 'other'
     end
   )::public.pet_species;
+
+alter table public.pets
+  drop column species;
+
+alter table public.pets
+  rename column species_migrated to species;
 
 alter table public.pets
   alter column species set not null;

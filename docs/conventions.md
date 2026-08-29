@@ -64,6 +64,35 @@ Before non-trivial work, ask: “Will this establish a durable, non-obvious dire
 - Keep user-visible states explicit: loading, empty, error, and success. The VibeCode reference is the source of visual and interaction truth.
 - Style with Tailwind utilities and the design tokens in the `@theme` block of `web/src/shared/styles/global.css`. Use the `brand-*` scale and Tailwind's default spacing and typography scales instead of raw colours, arbitrary values such as `bg-[#0f766e]`, or ad-hoc component variants. A colour needed more than once belongs in `@theme`; shared control styles belong in `@layer components` in the same file.
 
+### TanStack Query patterns
+
+- **Layered data flow**:
+  - `lib/*Api.ts`: Pure async functions calling Supabase client (e.g. `getSupabaseClient().from(...)` or `auth.getSession()`). Contains no React hooks.
+  - `hooks/use*.ts`: Encapsulates `useQuery` or `useMutation` and exports query keys.
+  - `components/*.tsx`: Consumes feature hooks and renders explicit states (`isLoading`, `isError`, and data).
+- **Query key factories**: Define typed query keys per feature to prevent key typos and simplify invalidation:
+  ```ts
+  export const bookingKeys = {
+    all: ['bookings'] as const,
+    mine: () => [...bookingKeys.all, 'mine'] as const,
+    detail: (id: string) => [...bookingKeys.all, 'detail', id] as const,
+  };
+  ```
+- **Mutations & Cache Invalidation**: Wrap write operations with `useMutation` and invalidate or update affected query keys in `onSuccess`:
+  ```ts
+  export function useCreateBookingRequest() {
+    const queryClient = useQueryClient();
+    return useMutation({
+      mutationFn: (values: BookingInsert) => createBookingRequest(values),
+      onSuccess: () => {
+        void queryClient.invalidateQueries({ queryKey: bookingKeys.all });
+      },
+    });
+  }
+  ```
+- **Auth & Global Configuration**: The global `QueryClient` is initialized in `web/src/main.tsx` with default caching policies (`staleTime: 30_000`, `retry: 1`, `refetchOnWindowFocus: false`). Real-time auth changes synchronize directly with the TanStack Query cache via Supabase's `onAuthStateChange` listener.
+
+
 ## Testing
 
 - Place deterministic unit tests beside pure code as .test.ts files.

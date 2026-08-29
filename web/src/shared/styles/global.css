@@ -1,12 +1,43 @@
-:root {
-  color: #1f2937;
-  background: #f8fafc;
-  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Prompt', sans-serif;
+
+  --color-brand-50: #f0fdfa;
+  --color-brand-100: #ccfbf1;
+  --color-brand-200: #99f6e4;
+  --color-brand-300: #5eead4;
+  --color-brand-400: #2dd4bf;
+  --color-brand-500: #14b8a6;
+  --color-brand-600: #0d9488;
+  --color-brand-700: #0f766e;
+  --color-brand-800: #115e59;
+  --color-brand-900: #134e4a;
 }
 
-* { box-sizing: border-box; }
-body { margin: 0; }
-.placeholder-screen { max-width: 720px; margin: 0 auto; padding: 6rem 1.5rem; }
-.eyebrow { color: #0f766e; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; }
-h1 { font-size: clamp(2rem, 7vw, 4rem); margin: 0.5rem 0; }
-p { line-height: 1.6; }
+@layer base {
+  body { @apply bg-gray-50 text-gray-800 font-sans; }
+}
+
+@layer components {
+  .page-container { @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8; }
+  .card-hover { @apply transition-all duration-200; }
+  .card-hover:hover { @apply -translate-y-0.5 shadow-lg; }
+
+  .btn-primary { @apply bg-brand-600 text-white py-2.5 px-4 rounded-lg hover:bg-brand-700 font-medium transition-colors; }
+  .btn-secondary { @apply bg-gray-100 text-gray-700 py-2.5 px-4 rounded-lg hover:bg-gray-200 font-medium transition-colors; }
+  .input-field { @apply w-full border border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-brand-500 focus:border-transparent outline-none; }
+
+  .badge-brand { @apply bg-brand-50 text-brand-700 px-2 py-1 rounded-full text-xs font-medium; }
+  .badge-green { @apply bg-green-50 text-green-700 px-2 py-1 rounded-full text-xs font-medium; }
+  .badge-yellow { @apply bg-yellow-50 text-yellow-700 px-2 py-1 rounded-full text-xs font-medium; }
+  .badge-red { @apply bg-red-50 text-red-700 px-2 py-1 rounded-full text-xs font-medium; }
+  .badge-gray { @apply bg-gray-100 text-gray-600 px-2 py-1 rounded-full text-xs font-medium; }
+
+  /* Preserved from the pre-Tailwind foundation: existing placeholder routes
+     depend on these, and Preflight removes the element defaults they relied on. */
+  .placeholder-screen { @apply max-w-3xl mx-auto px-6 py-24; }
+  .placeholder-screen h1 { @apply text-4xl sm:text-5xl font-bold my-2; }
+  .placeholder-screen p { @apply leading-relaxed; }
+  .eyebrow { @apply text-brand-700 font-bold uppercase tracking-wide; }
+}

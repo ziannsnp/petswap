@@ -62,7 +62,7 @@ Before non-trivial work, ask: “Will this establish a durable, non-obvious dire
 - Keep query keys in a per-feature factory, scoped by user when applicable. Mutations invalidate or safely update the affected query data.
 - A browser permission check is user experience, not security. The later Supabase implementation must enforce ownership through RLS and database constraints.
 - Keep user-visible states explicit: loading, empty, error, and success. The VibeCode reference is the source of visual and interaction truth.
-- When design tokens are introduced, use semantic tokens instead of repeated raw colours, spacing values, or ad-hoc component variants.
+- Style with Tailwind utilities and the design tokens in the `@theme` block of `web/src/shared/styles/global.css`. Use the `brand-*` scale and Tailwind's default spacing and typography scales instead of raw colours, arbitrary values such as `bg-[#0f766e]`, or ad-hoc component variants. A colour needed more than once belongs in `@theme`; shared control styles belong in `@layer components` in the same file.
 
 ## Testing
 

@@ -42,3 +42,4 @@ Usually does not deserve an ADR:
 | [0003](0003-booking-rules-and-scope.md) | Booking rules and ratings-free scope | Accepted |
 | [0004](0004-supabase-mvp-foundation.md) | Commit the Supabase MVP foundation | Accepted |
 | [0005](0005-cloudflare-workers-hosting.md) | Cloudflare Workers static assets for web hosting | Accepted |
+| [0006](0006-tailwind-and-design-tokens.md) | Tailwind CSS and base design tokens | Accepted |

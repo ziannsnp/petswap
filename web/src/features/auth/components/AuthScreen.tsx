@@ -1,5 +1,5 @@
-import { FeaturePlaceholderScreen } from '@/shared/components/FeaturePlaceholderScreen';
+import { RegisterForm } from "./RegisterForm";
 
 export function AuthScreen() {
-  return <FeaturePlaceholderScreen feature="Account access" requirement="FR-1.1" />;
+  return <RegisterForm />;
 }

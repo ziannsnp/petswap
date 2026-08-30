@@ -63,6 +63,7 @@ Before non-trivial work, ask: “Will this establish a durable, non-obvious dire
 - A browser permission check is user experience, not security. The later Supabase implementation must enforce ownership through RLS and database constraints.
 - Keep user-visible states explicit: loading, empty, error, and success. The VibeCode reference is the source of visual and interaction truth.
 - Style with Tailwind utilities and the design tokens in the `@theme` block of `web/src/shared/styles/global.css`. Use the `brand-*` scale and Tailwind's default spacing and typography scales instead of raw colours, arbitrary values such as `bg-[#0f766e]`, or ad-hoc component variants. A colour needed more than once belongs in `@theme`; shared control styles belong in `@layer components` in the same file.
+- Use `lucide-react` for interface icons. Size and colour them with Tailwind classes such as `h-5 w-5 text-brand-600`; the icons render as SVG and inherit `currentColor`. Do not hand-roll an SVG for an icon the library already provides.
 
 ### TanStack Query patterns
 

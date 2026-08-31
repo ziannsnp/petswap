@@ -13,6 +13,8 @@ const STATUS_LABELS: Record<BookingStatus, string> = {
   completed: 'Completed',
 };
 
+const SKELETON_ROWS = [0, 1] as const;
+
 const dateFormatter = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
 
 function formatBookingDate(date: string): string {
@@ -46,6 +48,37 @@ function BookingCard({ booking }: { readonly booking: BookingWithDetails }) {
   );
 }
 
+function BookingListSkeleton() {
+  return (
+    <ul className="booking-list" aria-hidden="true">
+      {SKELETON_ROWS.map((row) => (
+        <li key={row} className="booking-card booking-card--skeleton">
+          <div className="skeleton-line skeleton-line--title" />
+          <div className="skeleton-line skeleton-line--body" />
+          <div className="skeleton-line skeleton-line--body skeleton-line--short" />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+interface BookingErrorBannerProps {
+  readonly message: string;
+  readonly retrying: boolean;
+  readonly onRetry: () => void;
+}
+
+function BookingErrorBanner({ message, retrying, onRetry }: BookingErrorBannerProps) {
+  return (
+    <div className="booking-error" role="alert">
+      <p className="booking-error__message">{message}</p>
+      <button type="button" className="booking-error__retry" onClick={onRetry} disabled={retrying}>
+        {retrying ? 'Retrying…' : 'Retry'}
+      </button>
+    </div>
+  );
+}
+
 interface BookingSectionProps {
   readonly title: string;
   readonly emptyMessage: string;
@@ -54,11 +87,22 @@ interface BookingSectionProps {
 
 function BookingSection({ title, emptyMessage, query }: BookingSectionProps) {
   return (
-    <section className="booking-section">
+    <section className="booking-section" aria-busy={query.isLoading}>
       <h2>{title}</h2>
-      {query.isPending && <p className="booking-section__status">Loading&hellip;</p>}
+      {query.isLoading && (
+        <>
+          <span className="sr-only" role="status">
+            Loading {title.toLowerCase()}&hellip;
+          </span>
+          <BookingListSkeleton />
+        </>
+      )}
       {query.isError && (
-        <p className="booking-section__status booking-section__status--error">{query.error.message}</p>
+        <BookingErrorBanner
+          message={query.error.message}
+          retrying={query.isFetching}
+          onRetry={() => void query.refetch()}
+        />
       )}
       {query.isSuccess && query.data.length === 0 && <p className="booking-section__status">{emptyMessage}</p>}
       {query.isSuccess && query.data.length > 0 && (
@@ -76,12 +120,27 @@ export function BookingsScreen() {
   const outgoing = useOutgoingBookings();
   const incoming = useIncomingBookings();
 
+  const noRelatedBookings =
+    outgoing.isSuccess && incoming.isSuccess && outgoing.data.length === 0 && incoming.data.length === 0;
+
   return (
     <main className="bookings-screen">
       <p className="eyebrow">Don't Like My Pets</p>
       <h1>Bookings</h1>
-      <BookingSection title="Outgoing requests" emptyMessage="You haven't requested any bookings yet." query={outgoing} />
-      <BookingSection title="Incoming requests" emptyMessage="No one has requested your listings yet." query={incoming} />
+      {noRelatedBookings ? (
+        <p className="booking-empty-all">
+          <strong>No bookings yet.</strong> Requests you send and requests on your listings will show up here.
+        </p>
+      ) : (
+        <>
+          <BookingSection title="Outgoing requests" emptyMessage="You haven't sent any requests yet" query={outgoing} />
+          <BookingSection
+            title="Incoming requests"
+            emptyMessage="No incoming requests on your listings"
+            query={incoming}
+          />
+        </>
+      )}
     </main>
   );
 }

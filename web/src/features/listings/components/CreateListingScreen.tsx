@@ -82,7 +82,7 @@ export function CreateListingScreen() {
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900">
       <ListingsNavigation />
-      <main className="mx-auto w-[calc(100%_-_2rem)] max-w-md py-6 sm:py-8">
+      <main className="relative left-[50vw] w-[calc(100%_-_2rem)] max-w-md -translate-x-1/2 py-6 sm:py-8">
         <Link className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-brand-700" to="/listings">
           <ArrowLeft className="h-4 w-4" aria-hidden="true" /> Back to my listings
         </Link>

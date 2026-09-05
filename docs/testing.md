@@ -1,6 +1,28 @@
 # Testing strategy
 
-Testing is required evidence, not a final-week activity.
+Testing is required evidence, not a final-week activity. A test is an executable record of
+product behavior: a failing test means the behavior changed, and either the implementation
+regressed or the product changed on purpose and the test must be updated in the same change.
+
+## What earns a test
+
+Choose tests by user and operational risk, not by file count or a coverage percentage.
+
+- Every bug fix adds the smallest stable regression test that would have prevented it.
+- Use unit tests for dense, deterministic rules — booking conflict detection, status
+  transitions, validation, parsing — where the rule itself is the behavior worth protecting.
+- Prefer component/integration tests at public boundaries: user input, observable result, and
+  the API adapter calls that cross into Supabase. Mock Supabase, routers, and clocks at that
+  boundary; do not mock the code under test into a copy of its own implementation.
+- Keep end-to-end tests for the few critical journeys that cannot be verified below the real
+  platform boundary — currently just login → booking request → confirmation → status
+  verification.
+- Do not add snapshot tests for behavioral logic, or a test whose only assertion is that a
+  private helper was called.
+
+The result should be integration-heavy, with fewer focused unit tests and very few end-to-end
+tests. "Fewer" never means leaving a high-risk contract — like the booking overlap rule —
+unprotected.
 
 ## Test layers
 
@@ -10,6 +32,33 @@ Testing is required evidence, not a final-week activity.
 | React components | Jest + React Testing Library | Cover form validation, empty/error states, and protected UI behaviour. |
 | End-to-end flow | Playwright | Cover login → booking request → confirmation → status verification once Supabase test data is available. |
 | Manual UI checks | Markdown evidence | Squad B records listing/search cases; QA records regressions using the template. |
+
+## Test quality contract
+
+A test in the required PR gate must be:
+
+- **Behavioral:** its name states the user-visible rule or failure mode, not an implementation
+  step. Arrange/act/assert details may change without rewriting the test when the behavior is
+  unchanged.
+- **Deterministic and hermetic:** no live network, shared Supabase project, wall-clock
+  dependence, or order dependence. Reset local Supabase state (`npx supabase db reset`) rather
+  than relying on data left over from a previous run.
+- **Diagnostic:** one failed assertion should identify the broken contract and the relevant
+  inputs.
+- **Independent:** it can run alone, in parallel, or repeatedly with the same result, and cleans
+  up any state it creates.
+- **Proportionate:** prefer the lowest layer that exercises the whole risk. Do not duplicate the
+  same assertion at every layer — a component test that exercises the booking form should not
+  re-verify `hasBookingConflict()`'s own logic.
+
+Flaky tests are defects, not background noise. Do not hide them behind automatic retries. If an
+emergency quarantine is unavoidable, link an owner and a repair issue, set a removal date, and
+keep the gap visible in CI rather than silently deleting or skipping the test.
+
+If the required PR suite's runtime grows meaningfully as automated checks are added — for
+example, a Supabase database-contract job that spins up a local stack — move genuinely slow or
+live-service checks to a scheduled or pre-release workflow rather than growing the required gate
+unbounded. Do not weaken high-risk coverage merely to keep the gate fast.
 
 ## Required checks
 

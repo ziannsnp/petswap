@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import type { AuthError, Session, User } from '@supabase/supabase-js';
 import { getSupabaseClient, type AppSupabaseClient } from '@/shared/lib/supabase';
+import { CURRENT_CONSENT_VERSION } from '@/features/consent';
 import { SignUpError, signUp } from './authApi';
 
 jest.mock('@/shared/lib/supabase', () => ({
@@ -44,7 +45,7 @@ describe('signUp', () => {
     expect(signUpMock).toHaveBeenCalledWith({
       email: 'pet@example.com',
       password: ' password ',
-      options: { data: { display_name: 'Pat' } },
+      options: { data: { display_name: 'Pat', consent_version: CURRENT_CONSENT_VERSION } },
     });
   });
 

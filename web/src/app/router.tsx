@@ -1,6 +1,7 @@
 import { createBrowserRouter } from 'react-router-dom';
 import { AuthScreen, ProtectedRoute } from '@/features/auth';
 import { BookingsScreen } from '@/features/bookings';
+import { PrivacyNoticeScreen, TermsOfServiceScreen } from '@/features/consent';
 import { ListingsScreen } from '@/features/listings';
 import { PetsScreen } from '@/features/pets';
 import { ProfileScreen } from '@/features/profiles';
@@ -11,6 +12,8 @@ export const router = createBrowserRouter([
   // Public routes
   { path: '/', Component: SearchScreen },
   { path: '/login', Component: AuthScreen },
+  { path: '/privacy', Component: PrivacyNoticeScreen },
+  { path: '/terms', Component: TermsOfServiceScreen },
 
   // Protected routes
   {

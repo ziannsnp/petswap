@@ -1,4 +1,5 @@
 import { getSupabaseClient } from '@/shared/lib/supabase';
+import { CURRENT_CONSENT_VERSION } from '@/features/consent';
 import type { AuthError, Session, User } from '@supabase/supabase-js';
 import type { SignUpErrorCode, SignUpInput, SignUpResult } from '../types';
 
@@ -40,6 +41,7 @@ export async function signUp(input: SignUpInput): Promise<SignUpResult> {
     options: {
       data: {
         display_name: input.displayName.trim(),
+        consent_version: CURRENT_CONSENT_VERSION,
       },
     },
   });

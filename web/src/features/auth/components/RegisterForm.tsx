@@ -1,16 +1,55 @@
 import { useState, type FormEvent } from 'react';
 import { PawPrint } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { useSignUp } from '../hooks/useSignUp';
+import { SignUpError } from '../lib/authApi';
 
 export function RegisterForm() {
+  const navigate = useNavigate();
+  const signUpMutation = useSignUp();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const [confirmationSent, setConfirmationSent] = useState(false);
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    // Intentionally empty: wiring to the signup API adapter is a separate card.
+    setValidationError(null);
+    setConfirmationSent(false);
+
+    if (!email.trim() || !password || !displayName.trim()) {
+      setValidationError('Complete all required fields.');
+      return;
+    }
+
+    if (!acceptedTerms) {
+      setValidationError('You must accept the Terms of Service and Privacy Policy.');
+      return;
+    }
+
+    try {
+      const { session } = await signUpMutation.mutateAsync({ email, password, displayName });
+
+      if (session) {
+        void navigate('/profile', { replace: true });
+      } else {
+        setConfirmationSent(true);
+      }
+    } catch {
+      // The mutation exposes its translated error below.
+    }
   }
+
+  const requestError =
+    signUpMutation.error instanceof SignUpError
+      ? signUpMutation.error.message
+      : signUpMutation.isError
+        ? "We couldn't create your account. Please try again."
+        : null;
+
+  const errorMessage = validationError ?? requestError;
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-brand-50 to-brand-100 px-4 py-8">
@@ -23,7 +62,7 @@ export function RegisterForm() {
 
         <h2 className="text-lg font-semibold text-gray-900">Create your account</h2>
 
-        <form onSubmit={handleSubmit} className="space-y-4 mt-4">
+        <form onSubmit={handleSubmit} className="space-y-4 mt-4" noValidate>
           <div>
             <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
               Email
@@ -35,6 +74,8 @@ export function RegisterForm() {
               onChange={(event) => setEmail(event.target.value)}
               placeholder="your@email.com"
               className="input-field"
+              autoComplete="email"
+              required
             />
           </div>
 
@@ -49,6 +90,8 @@ export function RegisterForm() {
               onChange={(event) => setPassword(event.target.value)}
               placeholder="••••••••"
               className="input-field"
+              autoComplete="new-password"
+              required
             />
           </div>
 
@@ -63,6 +106,8 @@ export function RegisterForm() {
               onChange={(event) => setDisplayName(event.target.value)}
               placeholder="Your name"
               className="input-field"
+              autoComplete="name"
+              required
             />
           </div>
 
@@ -79,8 +124,24 @@ export function RegisterForm() {
             </label>
           </div>
 
-          <button type="submit" className="w-full btn-primary">
-            Create account
+          {errorMessage && (
+            <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+              {errorMessage}
+            </p>
+          )}
+
+          {confirmationSent && (
+            <p role="status" className="rounded-lg bg-brand-50 px-3 py-2 text-sm text-brand-700">
+              Account created. Check your email to confirm your account before signing in.
+            </p>
+          )}
+
+          <button
+            type="submit"
+            className="w-full btn-primary disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={signUpMutation.isPending || confirmationSent}
+          >
+            {signUpMutation.isPending ? 'Creating account...' : 'Create account'}
           </button>
         </form>
       </div>

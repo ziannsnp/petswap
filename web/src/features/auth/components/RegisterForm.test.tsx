@@ -1,10 +1,16 @@
 /** @jest-environment jsdom */
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { RegisterForm } from './RegisterForm';
 import { useSignUp } from '../hooks/useSignUp';
 import { SignUpError } from '../lib/authApi';
+
+const mockNavigate = jest.fn();
+jest.mock('react-router-dom', () => ({
+  ...jest.requireActual('react-router-dom'),
+  useNavigate: () => mockNavigate,
+}));
 
 // Factory form avoids loading the real modules, which transitively hit import.meta.env.
 jest.mock('../hooks/useSignUp', () => ({ useSignUp: jest.fn() }));
@@ -72,7 +78,7 @@ describe('RegisterForm', () => {
     expect(mutateAsync).not.toHaveBeenCalled();
   });
 
-  it('submits trimmed input and shows a confirmation message when no session is returned', async () => {
+  it('forwards the entered values and shows the confirmation message when no session is returned', async () => {
     const user = userEvent.setup();
     const mutateAsync = jest.fn().mockResolvedValue({ user: { id: 'user-1' }, session: null });
     mockedUseSignUp.mockReturnValue(mutationResult({ mutateAsync }));
@@ -92,6 +98,25 @@ describe('RegisterForm', () => {
     expect(await screen.findByRole('status')).toHaveTextContent(
       'Check your email to confirm your account',
     );
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it('redirects to /profile when signup returns a session', async () => {
+    const user = userEvent.setup();
+    const mutateAsync = jest
+      .fn()
+      .mockResolvedValue({ user: { id: 'user-1' }, session: { access_token: 'token' } });
+    mockedUseSignUp.mockReturnValue(mutationResult({ mutateAsync }));
+    renderForm();
+
+    await user.type(screen.getByLabelText(/email/i), 'pet@example.com');
+    await user.type(screen.getByLabelText(/^password$/i), 'password123');
+    await user.type(screen.getByLabelText(/display name/i), 'Pat');
+    await user.click(screen.getByRole('checkbox'));
+    await user.click(screen.getByRole('button', { name: /create account/i }));
+
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/profile', { replace: true }));
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 
   it("renders the mutation error's message when signup fails", () => {
@@ -101,6 +126,17 @@ describe('RegisterForm', () => {
     renderForm();
 
     expect(screen.getByRole('alert')).toHaveTextContent('EMAIL_ALREADY_USED');
+  });
+
+  it('renders a generic fallback message when the failure is not a SignUpError', () => {
+    mockedUseSignUp.mockReturnValue(
+      mutationResult({ isError: true, error: new Error('Network error') }),
+    );
+    renderForm();
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      "We couldn't create your account. Please try again.",
+    );
   });
 
   it('disables the submit button while the request is pending', () => {

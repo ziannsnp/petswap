@@ -33,7 +33,7 @@ export function CreateListingScreen() {
   const [title, setTitle] = useState('');
   const [location, setLocation] = useState('');
   const [description, setDescription] = useState('');
-  const [capacity, setCapacity] = useState(1);
+  const [capacity, setCapacity] = useState<number | ''>(1);
   const [acceptedPetTypes, setAcceptedPetTypes] = useState<string[]>(['Dog']);
   const [facilities, setFacilities] = useState<string[]>([]);
   const [photos, setPhotos] = useState<SelectedPhoto[]>([]);
@@ -74,6 +74,7 @@ export function CreateListingScreen() {
     if (Object.keys(nextErrors).length > 0) return;
 
     setIsSaving(true);
+    // TODO(T-2.1.5): Replace this UI-only delay with the create-listing mutation.
     await new Promise((resolve) => window.setTimeout(resolve, 700));
     setIsSaving(false);
     setShowSuccess(true);
@@ -82,7 +83,7 @@ export function CreateListingScreen() {
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900">
       <ListingsNavigation />
-      <main className="relative left-[50vw] w-[calc(100%_-_2rem)] max-w-md -translate-x-1/2 py-6 sm:py-8">
+      <main className="mx-auto max-w-3xl px-4 py-6 sm:px-6 sm:py-8">
         <Link className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-brand-700" to="/listings">
           <ArrowLeft className="h-4 w-4" aria-hidden="true" /> Back to my listings
         </Link>
@@ -144,9 +145,11 @@ export function CreateListingScreen() {
               min="1"
               step="1"
               value={capacity}
-              onChange={(event) => setCapacity(Number(event.target.value))}
+              onChange={(event) => setCapacity(event.target.value === '' ? '' : Number(event.target.value))}
               aria-invalid={Boolean(errors.capacity)}
-              aria-describedby={errors.capacity ? 'listing-capacity-error' : 'listing-capacity-help'}
+              aria-describedby={errors.capacity
+                ? 'listing-capacity-help listing-capacity-error'
+                : 'listing-capacity-help'}
             />
             <p className="mt-1 text-xs text-gray-500" id="listing-capacity-help">Maximum number of pets hosted at one time.</p>
             {errors.capacity && <p className="mt-1 text-xs text-red-700" id="listing-capacity-error">{errors.capacity}</p>}

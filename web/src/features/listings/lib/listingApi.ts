@@ -36,9 +36,21 @@ export async function listPublishedListings(): Promise<Listing[]> {
 }
 
 export async function listMyListings(): Promise<Listing[]> {
-  const { data, error } = await getSupabaseClient()
+  const supabase = getSupabaseClient();
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+
+  if (userError) {
+    throw userError;
+  }
+
+  if (!userData.user) {
+    return [];
+  }
+
+  const { data, error } = await supabase
     .from('listings')
     .select('*, listing_images(*)')
+    .eq('owner_id', userData.user.id)
     .order('created_at', { ascending: false });
 
   if (error) {

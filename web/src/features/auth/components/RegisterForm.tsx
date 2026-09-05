@@ -120,7 +120,11 @@ export function RegisterForm() {
               className="mt-1 h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
             />
             <label htmlFor="consent" className="text-sm text-gray-600">
-              I agree to the Terms of Service and{' '}
+              I agree to the{' '}
+              <Link to="/terms" className="text-brand-600 underline">
+                Terms of Service
+              </Link>{' '}
+              and{' '}
               <Link to="/privacy" className="text-brand-600 underline">
                 Privacy Policy
               </Link>

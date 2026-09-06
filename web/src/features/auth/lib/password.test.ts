@@ -2,11 +2,20 @@ import { describe, expect, it } from '@jest/globals';
 import { isValidPassword } from './password';
 
 describe('isValidPassword', () => {
-  it.each(['abcdefg1', 'password!', 'รหัสผ่าน1'])('accepts %s', (password) => {
+  it.each(['Password1!', 'PETswap_2026', 'Aa1!aaaa'])('accepts %s', (password) => {
     expect(isValidPassword(password)).toBe(true);
   });
 
-  it.each(['abcdef1', 'abcdefgh', '12345678', '!!!!!!!!'])('rejects %s', (password) => {
+  it.each([
+    'Pass1!',
+    'PASSWORD1!',
+    'password1!',
+    'Password!',
+    'Password1',
+    'รหัสผ่านA1!',
+    'Password 1!',
+    'Password1😊',
+  ])('rejects %s', (password) => {
     expect(isValidPassword(password)).toBe(false);
   });
 });

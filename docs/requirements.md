@@ -10,7 +10,7 @@ The platform focuses on discovering sitters, creating booking requests, and prev
 
 ### FR-1.1 Registration and login
 
-Users can register, log in, and log out with Supabase Authentication. Registration requires a valid unique email, a unique username, and a password of at least eight characters containing at least one letter and one non-letter. A username contains 3–30 lowercase letters, numbers, or underscores; uppercase input is normalized to lowercase. Users can log in with either their email or username and password. Invalid credentials, used emails, used usernames, and network failures show safe errors without exposing private account data. Protected pages require authentication.
+Users can register, log in, and log out with Supabase Authentication. Registration requires a valid unique email, a unique username, and an ASCII password of at least eight characters containing at least one lowercase English letter, uppercase English letter, number, and special character, with no spaces. A username contains 3–30 lowercase letters, numbers, or underscores; uppercase input is normalized to lowercase. Users can log in with either their email or username and password. Invalid credentials, used emails, used usernames, and network failures show safe errors without exposing private account data. Protected pages require authentication.
 
 ### FR-1.2 Profile management
 

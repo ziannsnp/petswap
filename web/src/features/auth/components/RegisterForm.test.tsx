@@ -69,7 +69,7 @@ describe('RegisterForm', () => {
 
     await user.type(screen.getByLabelText(/email/i), 'pet@example.com');
     await user.type(screen.getByLabelText(/username/i), 'pat_sitter');
-    await user.type(screen.getByLabelText(/^password$/i), 'password123');
+    await user.type(screen.getByLabelText(/^password$/i), 'Password1!');
     await user.type(screen.getByLabelText(/display name/i), 'Pat');
     await user.click(screen.getByRole('button', { name: /create account/i }));
 
@@ -87,7 +87,7 @@ describe('RegisterForm', () => {
 
     await user.type(screen.getByLabelText(/email/i), 'pet@example.com');
     await user.type(screen.getByLabelText(/username/i), 'pat-sitter');
-    await user.type(screen.getByLabelText(/^password$/i), 'password123');
+    await user.type(screen.getByLabelText(/^password$/i), 'Password1!');
     await user.type(screen.getByLabelText(/display name/i), 'Pat');
     await user.click(screen.getByRole('checkbox'));
     await user.click(screen.getByRole('button', { name: /create account/i }));
@@ -112,7 +112,7 @@ describe('RegisterForm', () => {
     await user.click(screen.getByRole('button', { name: /create account/i }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Password must be at least 8 characters and include a letter and a non-letter.',
+      'Password must be at least 8 characters and include lowercase, uppercase, number, and special characters.',
     );
     expect(mutateAsync).not.toHaveBeenCalled();
   });
@@ -125,7 +125,7 @@ describe('RegisterForm', () => {
 
     await user.type(screen.getByLabelText(/email/i), 'pet@example.com');
     await user.type(screen.getByLabelText(/username/i), '  Pat_Sitter  ');
-    await user.type(screen.getByLabelText(/^password$/i), 'password123');
+    await user.type(screen.getByLabelText(/^password$/i), 'Password1!');
     await user.type(screen.getByLabelText(/display name/i), 'Pat');
     await user.click(screen.getByRole('checkbox'));
     await user.click(screen.getByRole('button', { name: /create account/i }));
@@ -133,7 +133,7 @@ describe('RegisterForm', () => {
     expect(mutateAsync).toHaveBeenCalledWith({
       email: 'pet@example.com',
       username: 'pat_sitter',
-      password: 'password123',
+      password: 'Password1!',
       displayName: 'Pat',
     });
     expect(await screen.findByRole('status')).toHaveTextContent(
@@ -152,7 +152,7 @@ describe('RegisterForm', () => {
 
     await user.type(screen.getByLabelText(/email/i), 'pet@example.com');
     await user.type(screen.getByLabelText(/username/i), 'pat_sitter');
-    await user.type(screen.getByLabelText(/^password$/i), 'password123');
+    await user.type(screen.getByLabelText(/^password$/i), 'Password1!');
     await user.type(screen.getByLabelText(/display name/i), 'Pat');
     await user.click(screen.getByRole('checkbox'));
     await user.click(screen.getByRole('button', { name: /create account/i }));

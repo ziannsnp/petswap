@@ -134,7 +134,7 @@ export function RegisterForm() {
               required
             />
             <p id="password-requirements" className="mt-1 text-xs text-gray-500">
-              At least 8 characters, including a letter and a non-letter.
+              At least 8 characters with lowercase, uppercase, number, and special characters.
             </p>
           </div>
 

@@ -37,3 +37,21 @@ left join information_schema.columns c
   on c.table_schema = 'public'
   and c.table_name = 'profiles'
   and c.column_name = expected.column_name;
+
+select
+  'usernames are lowercase and format constrained' as check_name,
+  exists (
+    select 1
+    from pg_constraint
+    where conname = 'profiles_username_format_check'
+      and conrelid = 'public.profiles'::regclass
+  ) as passed;
+
+select
+  'username availability does not expose email addresses' as check_name,
+  p.prorettype = 'boolean'::regtype
+    and pg_get_function_result(p.oid) = 'boolean' as passed
+from pg_proc p
+join pg_namespace n on n.oid = p.pronamespace
+where n.nspname = 'public'
+  and p.proname = 'is_username_available';

@@ -74,6 +74,20 @@ cp web/.env.example web/.env.local
 
 Use only the local anon/publishable key. Service-role keys are for trusted server processes only and must not appear in browser env vars, committed docs, screenshots, or client code.
 
+The `sign-in` Edge Function resolves usernames without exposing Auth email addresses. Supabase provides `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` to the function runtime; do not copy the service-role value into `web/.env.local`. Serve it locally with:
+
+In the hosted Supabase Dashboard, configure Auth password security with a minimum length of 8 and require both a letter and a non-letter. The browser validation is user feedback only; the hosted Auth setting is the enforcement boundary.
+
+```bash
+npx supabase functions serve sign-in --no-verify-jwt
+```
+
+After its migration and function are reviewed, deploy it with:
+
+```bash
+npx supabase functions deploy sign-in --no-verify-jwt
+```
+
 ## Daily commands
 
 Create a migration:

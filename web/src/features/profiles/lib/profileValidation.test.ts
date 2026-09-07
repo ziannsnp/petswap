@@ -22,6 +22,14 @@ describe('profileValidation', () => {
       expect(normalizePhoneNumber('(081) 234 5678')).toBe('0812345678');
       expect(normalizePhoneNumber(' 02-123-4567 ')).toBe('021234567');
     });
+
+    it('converts international Thai prefix +66 and 66 to standard leading 0', () => {
+      expect(normalizePhoneNumber('+66812345678')).toBe('0812345678');
+      expect(normalizePhoneNumber('+66-81-234-5678')).toBe('0812345678');
+      expect(normalizePhoneNumber('+66 (81) 234-5678')).toBe('0812345678');
+      expect(normalizePhoneNumber('66812345678')).toBe('0812345678');
+      expect(normalizePhoneNumber('+6621234567')).toBe('021234567');
+    });
   });
 
   describe('validateDisplayName and isValidDisplayName', () => {
@@ -68,6 +76,13 @@ describe('profileValidation', () => {
       expect(validatePhoneNumber('081-234-5678')).toBeNull();
       expect(isValidPhoneNumber('081-234-5678')).toBe(true);
       expect(validatePhoneNumber('(02) 123-4567')).toBeNull();
+    });
+
+    it('accepts numbers with international prefix +66 and normalizes to 10 digits', () => {
+      expect(validatePhoneNumber('+66812345678')).toBeNull();
+      expect(isValidPhoneNumber('+66812345678')).toBe(true);
+      expect(validatePhoneNumber('+66-81-234-5678')).toBeNull();
+      expect(isValidPhoneNumber('+66-81-234-5678')).toBe(true);
     });
 
     it('rejects empty or whitespace-only phone numbers', () => {
@@ -146,51 +161,66 @@ describe('profileValidation', () => {
 
   describe('validateProfileForm aggregate validator', () => {
     it('reports all required field errors when fields are empty', () => {
-      const errors = validateProfileForm({
+      const result = validateProfileForm({
         displayName: '',
         phoneNumber: '',
         location: '',
       });
 
-      expect(errors.displayName).toBe('Display name cannot be empty.');
-      expect(errors.phoneNumber).toBe('Phone number cannot be empty.');
-      expect(errors.location).toBe('Location cannot be empty.');
+      expect(result.isValid).toBe(false);
+      expect(result.errors.displayName).toBe('Display name cannot be empty.');
+      expect(result.errors.phoneNumber).toBe('Phone number cannot be empty.');
+      expect(result.errors.location).toBe('Location cannot be empty.');
     });
 
     it('reports malformed photo URL alongside required field errors if invalid', () => {
-      const errors = validateProfileForm({
+      const result = validateProfileForm({
         displayName: 'Alice',
         phoneNumber: '0812345678',
         location: 'Bangkok',
         photoUrl: 'bad-url',
       });
 
-      expect(errors.displayName).toBeUndefined();
-      expect(errors.phoneNumber).toBeUndefined();
-      expect(errors.location).toBeUndefined();
-      expect(errors.photoUrl).toBe('Enter a valid photo URL starting with http:// or https://.');
+      expect(result.isValid).toBe(false);
+      expect(result.errors.displayName).toBeUndefined();
+      expect(result.errors.phoneNumber).toBeUndefined();
+      expect(result.errors.location).toBeUndefined();
+      expect(result.errors.photoUrl).toBe('Enter a valid photo URL starting with http:// or https://.');
     });
 
-    it('returns empty errors object when all fields are valid', () => {
-      const errors = validateProfileForm({
+    it('returns empty errors object and sanitized database-ready values when all fields are valid', () => {
+      const result = validateProfileForm({
+        displayName: '  Alice Smith  ',
+        phoneNumber: '  +66-81-234-5678  ',
+        location: '  Bangkok, Thailand  ',
+        photoUrl: '  https://images.petswap.com/avatars/user1.jpg  ',
+      });
+
+      expect(result.isValid).toBe(true);
+      expect(Object.keys(result.errors)).toHaveLength(0);
+
+      // Ensures caller receives clean, sanitized values safe for varchar(10)
+      expect(result.sanitizedValues).toEqual({
         displayName: 'Alice Smith',
-        phoneNumber: '081-234-5678',
+        phoneNumber: '0812345678',
         location: 'Bangkok, Thailand',
         photoUrl: 'https://images.petswap.com/avatars/user1.jpg',
       });
-
-      expect(Object.keys(errors)).toHaveLength(0);
+      expect(result.sanitizedValues.phoneNumber.length).toBeLessThanOrEqual(10);
     });
 
-    it('supports snake_case database property names interchangeably', () => {
-      const errors = validateProfileForm({
+    it('supports snake_case database property names interchangeably and sets empty photoUrl to null', () => {
+      const result = validateProfileForm({
         display_name: 'Bob Marley',
         phone_number: '0898765432',
         location: 'Phuket',
-        photo_url: null,
+        photo_url: '',
       });
 
-      expect(Object.keys(errors)).toHaveLength(0);
+      expect(result.isValid).toBe(true);
+      expect(Object.keys(result.errors)).toHaveLength(0);
+      expect(result.sanitizedValues.photoUrl).toBeNull();
+      expect(result.sanitizedValues.phoneNumber).toBe('0898765432');
     });
   });
 });

@@ -20,6 +20,9 @@ export {
 export type {
   ProfileFormFields,
   ProfileValidationErrors,
+  SanitizedProfileData,
+  ProfileFormValidationResult,
 } from './lib/profileValidation';
 export type { Profile } from './lib/profileApi';
+
 

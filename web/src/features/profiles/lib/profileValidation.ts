@@ -11,10 +11,21 @@ const DIGITS_ONLY_PATTERN = /^\d+$/;
 const URL_PATTERN = /^https?:\/\/[^\s/$.?#].[^\s]*$/i;
 
 /**
- * Strips formatting characters (spaces, dashes, parentheses) from a phone number string.
+ * Strips formatting characters (spaces, dashes, parentheses) from a phone number string,
+ * and converts Thai country code prefixes (+66 or 66) to standard local 0-prefix
+ * so that numbers safely conform to database varchar(10) column limits.
  */
 export function normalizePhoneNumber(value: string): string {
-  return value.replace(/[\s\-()]/g, '');
+  const cleaned = value.replace(/[\s\-()]/g, '');
+
+  if (cleaned.startsWith('+66')) {
+    return `0${cleaned.slice(3)}`;
+  }
+  if (cleaned.startsWith('66') && cleaned.length >= 11) {
+    return `0${cleaned.slice(2)}`;
+  }
+
+  return cleaned;
 }
 
 /**
@@ -129,11 +140,27 @@ export interface ProfileValidationErrors {
   photoUrl?: string;
 }
 
+export interface SanitizedProfileData {
+  displayName: string;
+  phoneNumber: string;
+  location: string;
+  photoUrl: string | null;
+}
+
+export interface ProfileFormValidationResult {
+  isValid: boolean;
+  errors: ProfileValidationErrors;
+  sanitizedValues: SanitizedProfileData;
+}
+
 /**
- * Validates all profile fields at once, returning an error object containing
- * all invalid field messages. Returns an empty object if valid.
+ * Validates all profile fields at once.
+ * Returns an object containing:
+ * - isValid: boolean indicating if all fields passed validation
+ * - errors: error messages for any invalid fields
+ * - sanitizedValues: cleaned, trimmed, and normalized data ready for DB persistence
  */
-export function validateProfileForm(fields: ProfileFormFields): ProfileValidationErrors {
+export function validateProfileForm(fields: ProfileFormFields): ProfileFormValidationResult {
   const errors: ProfileValidationErrors = {};
 
   const nameVal = fields.displayName ?? fields.display_name ?? '';
@@ -160,5 +187,16 @@ export function validateProfileForm(fields: ProfileFormFields): ProfileValidatio
     errors.photoUrl = photoError;
   }
 
-  return errors;
+  const sanitizedValues: SanitizedProfileData = {
+    displayName: nameVal.trim(),
+    phoneNumber: normalizePhoneNumber(phoneVal.trim()),
+    location: locVal.trim(),
+    photoUrl: photoVal && photoVal.trim() ? photoVal.trim() : null,
+  };
+
+  return {
+    isValid: Object.keys(errors).length === 0,
+    errors,
+    sanitizedValues,
+  };
 }

@@ -40,4 +40,50 @@
   .placeholder-screen h1 { @apply text-4xl sm:text-5xl font-bold my-2; }
   .placeholder-screen p { @apply leading-relaxed; }
   .eyebrow { @apply text-brand-700 font-bold uppercase tracking-wide; }
+
+  /* Booking feature styles */
+  .bookings-screen { @apply max-w-3xl mx-auto px-6 py-12; }
+  .booking-section { @apply mt-10; }
+  .booking-section h2 { @apply text-2xl font-bold mb-4 text-gray-800; }
+  .booking-section__status { @apply text-gray-500; }
+
+  .booking-empty-all {
+    @apply mt-10 p-8 border border-dashed border-gray-300 rounded-xl text-gray-500 text-center;
+  }
+  .booking-empty-all strong { @apply text-gray-800 font-semibold; }
+
+  .booking-error {
+    @apply flex items-center justify-between gap-4 border border-red-200 bg-red-50 rounded-xl p-4 mb-4;
+  }
+  .booking-error__message { @apply m-0 text-red-700 font-medium; }
+  .booking-error__retry {
+    @apply shrink-0 border border-red-700 text-red-700 bg-white rounded-lg px-4 py-1.5 font-semibold cursor-pointer hover:bg-red-50 transition-colors disabled:opacity-60;
+  }
+
+  .booking-list { @apply list-none m-0 p-0 flex flex-col gap-3; }
+  .booking-card {
+    @apply border border-gray-200 rounded-xl p-4 sm:p-5 bg-white shadow-sm hover:shadow transition-shadow;
+  }
+  .booking-card__row { @apply flex items-center justify-between gap-4; }
+  .booking-card__pet { @apply font-semibold text-gray-900; }
+  .booking-card__species { @apply font-normal text-gray-500; }
+  .booking-card__listing { @apply mt-1 text-gray-700; }
+  .booking-card__dates { @apply mt-0.5 text-gray-500 text-sm; }
+
+  .booking-card--skeleton { @apply flex flex-col gap-2 animate-pulse; }
+  .skeleton-line {
+    @apply h-3.5 rounded bg-gray-200;
+  }
+  .skeleton-line--title { @apply w-[45%] h-4; }
+  .skeleton-line--body { @apply w-[70%]; }
+  .skeleton-line--short { @apply w-[40%]; }
+
+  .booking-status {
+    @apply shrink-0 text-xs font-bold uppercase tracking-wider px-2.5 py-1 rounded-full;
+  }
+  .booking-status--pending { @apply bg-amber-100 text-amber-800; }
+  .booking-status--confirmed { @apply bg-emerald-100 text-emerald-800; }
+  .booking-status--declined { @apply bg-red-100 text-red-800; }
+  .booking-status--cancelled { @apply bg-gray-200 text-gray-700; }
+  .booking-status--completed { @apply bg-blue-100 text-blue-800; }
 }

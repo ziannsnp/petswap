@@ -1,6 +1,7 @@
 import type { UseQueryResult } from '@tanstack/react-query';
 import { useIncomingBookings, useOutgoingBookings } from '../hooks/useBookings';
 import type { BookingWithDetails } from '../lib/bookingApi';
+import { isDevMockEmpty, isDevMockSession } from '../lib/mockBookings';
 import type { Database } from '@/shared/types/database.types';
 
 type BookingStatus = Database['public']['Enums']['booking_status'];
@@ -120,11 +121,53 @@ export function BookingsScreen() {
   const outgoing = useOutgoingBookings();
   const incoming = useIncomingBookings();
 
+  const isDevMock = isDevMockSession();
+  const isMockEmpty = isDevMockEmpty();
+
+  const toggleEmptyState = () => {
+    if (isMockEmpty) {
+      localStorage.removeItem('petswap_dev_mock_empty');
+    } else {
+      localStorage.setItem('petswap_dev_mock_empty', 'true');
+    }
+    window.location.reload();
+  };
+
+  const handleSignOut = () => {
+    localStorage.removeItem('petswap_dev_mock_session');
+    localStorage.removeItem('petswap_dev_mock_empty');
+    window.location.href = '/login';
+  };
+
   const noRelatedBookings =
     outgoing.isSuccess && incoming.isSuccess && outgoing.data.length === 0 && incoming.data.length === 0;
 
   return (
     <main className="bookings-screen">
+      {isDevMock && (
+        <div className="mb-6 rounded-xl border border-amber-300 bg-amber-50 p-3.5 text-xs text-amber-900 shadow-sm flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <span className="font-semibold">🛠️ Dev Demo Mode Active</span>
+            <span className="text-amber-700">(Signed in as Demo User)</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={toggleEmptyState}
+              className="rounded bg-amber-200 px-2.5 py-1 font-medium hover:bg-amber-300 transition-colors cursor-pointer"
+            >
+              {isMockEmpty ? 'View Populated Bookings' : 'Test Empty State'}
+            </button>
+            <button
+              type="button"
+              onClick={handleSignOut}
+              className="rounded bg-white border border-amber-300 px-2.5 py-1 font-medium hover:bg-amber-100 transition-colors cursor-pointer"
+            >
+              Sign Out
+            </button>
+          </div>
+        </div>
+      )}
       <p className="eyebrow">Don't Like My Pets</p>
       <h1>Bookings</h1>
       {noRelatedBookings ? (

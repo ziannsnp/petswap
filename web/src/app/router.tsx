@@ -12,11 +12,6 @@ export const router = createBrowserRouter([
   // Public routes
   { path: '/', Component: SearchScreen },
   { path: '/login', Component: AuthScreen },
-  //will be removed in the future, but for now we need it to test the listings screen
-  //....................
-  { path: '/preview/listings', Component: ListingsScreen },
-  { path: '/preview/listings/new', Component: CreateListingScreen },
-  //....................
   { path: '/privacy', Component: PrivacyNoticeScreen },
   { path: '/terms', Component: TermsOfServiceScreen },
 

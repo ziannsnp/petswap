@@ -4,6 +4,7 @@ import { ArrowLeft, ImagePlus, LoaderCircle, X } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { validateListingForm } from '../lib/listingForm';
 import type { ListingFormErrors } from '../lib/listingForm';
+import { useCreateListing } from '../hooks/useCreateListing';
 import { ListingsNavigation } from './ListingsNavigation';
 
 const PET_TYPES = ['Dog', 'Cat', 'Rabbit', 'Bird'];
@@ -40,6 +41,7 @@ export function CreateListingScreen() {
   const [errors, setErrors] = useState<ListingFormErrors>({});
   const [isSaving, setIsSaving] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const createListingMutation = useCreateListing();
 
   useEffect(() => () => {
     previewUrls.current.forEach((url) => URL.revokeObjectURL(url));
@@ -74,10 +76,23 @@ export function CreateListingScreen() {
     if (Object.keys(nextErrors).length > 0) return;
 
     setIsSaving(true);
-    // TODO(T-2.1.5): Replace this UI-only delay with the create-listing mutation.
-    await new Promise((resolve) => window.setTimeout(resolve, 700));
-    setIsSaving(false);
-    setShowSuccess(true);
+    try {
+      await createListingMutation.mutateAsync({
+        title,
+        location,
+        description,
+        capacity: capacity as number,
+        acceptedPetTypes,
+        facilities,
+        photos: photos.map((photo) => photo.file),
+      });
+      setShowSuccess(true);
+      void navigate('/listings');
+    } catch {
+      setShowSuccess(false);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -246,6 +261,12 @@ export function CreateListingScreen() {
           {showSuccess && (
             <p className="border-l-4 border-green-600 bg-green-50 px-4 py-3 text-sm text-green-700" role="status">
               Listing details checked successfully.
+            </p>
+          )}
+
+          {createListingMutation.isError && (
+            <p className="border-l-4 border-red-600 bg-red-50 px-4 py-3 text-sm text-red-700" role="alert">
+              We could not save your listing. Check your connection and try again.
             </p>
           )}
 

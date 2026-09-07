@@ -1,10 +1,92 @@
 import { getSupabaseClient } from '@/shared/lib/supabase';
 import type { Database } from '@/shared/types/database.types';
 
+export interface CreateListingValues {
+  title: string;
+  location: string;
+  description: string;
+  capacity: number;
+  acceptedPetTypes: string[];
+  facilities: string[];
+  photos: File[];
+}
+
 export type Listing = Database['public']['Tables']['listings']['Row'] & {
   listing_images: Database['public']['Tables']['listing_images']['Row'][];
   cover_photo_url: string | null;
 };
+
+function photoStoragePath(listingId: string, file: File): string {
+  const extension = file.name.includes('.') ? `.${file.name.split('.').pop()}` : '';
+  return `${listingId}/${crypto.randomUUID()}${extension.toLowerCase()}`;
+}
+
+async function removeCreatedListing(listingId: string, storagePaths: string[]) {
+  const supabase = getSupabaseClient();
+
+  if (storagePaths.length > 0) {
+    await supabase.storage.from('listing-photos').remove(storagePaths);
+  }
+
+  await supabase.from('listings').delete().eq('id', listingId);
+}
+
+export async function createListing(values: CreateListingValues): Promise<Listing> {
+  const supabase = getSupabaseClient();
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+
+  if (userError) throw userError;
+  if (!userData.user) throw new Error('You must be signed in to create a listing.');
+
+  const { data: listing, error: listingError } = await supabase
+    .from('listings')
+    .insert({
+      owner_id: userData.user.id,
+      title: values.title.trim(),
+      location: values.location.trim(),
+      description: values.description.trim(),
+      capacity: values.capacity,
+      accepted_pet_types: values.acceptedPetTypes,
+      facilities: values.facilities.length > 0 ? values.facilities.join('\n') : null,
+      status: 'published',
+      published_at: new Date().toISOString(),
+    })
+    .select()
+    .single();
+
+  if (listingError) throw listingError;
+
+  const storagePaths: string[] = [];
+  try {
+    const imageRows: Database['public']['Tables']['listing_images']['Insert'][] = [];
+
+    for (const [sortOrder, photo] of values.photos.entries()) {
+      const storagePath = photoStoragePath(listing.id, photo);
+      const { error: uploadError } = await supabase.storage
+        .from('listing-photos')
+        .upload(storagePath, photo, { contentType: photo.type, upsert: false });
+
+      if (uploadError) throw uploadError;
+      storagePaths.push(storagePath);
+      imageRows.push({
+        listing_id: listing.id,
+        storage_path: storagePath,
+        alt_text: photo.name,
+        sort_order: sortOrder,
+      });
+    }
+
+    if (imageRows.length > 0) {
+      const { error: imagesError } = await supabase.from('listing_images').insert(imageRows);
+      if (imagesError) throw imagesError;
+    }
+  } catch (error) {
+    await removeCreatedListing(listing.id, storagePaths);
+    throw error;
+  }
+
+  return { ...listing, listing_images: [], cover_photo_url: null };
+}
 
 function addCoverPhotoUrl(
   listing: Database['public']['Tables']['listings']['Row'] & {

@@ -1,8 +1,8 @@
 import { createBrowserRouter } from 'react-router-dom';
 import { AuthScreen, ProtectedRoute } from '@/features/auth';
 import { BookingsScreen } from '@/features/bookings';
+import { CreateListingScreen, ListingsScreen } from '@/features/listings';
 import { PrivacyNoticeScreen, TermsOfServiceScreen } from '@/features/consent';
-import { ListingsScreen } from '@/features/listings';
 import { PetsScreen } from '@/features/pets';
 import { ProfileScreen } from '@/features/profiles';
 import { SearchScreen } from '@/features/search';
@@ -22,6 +22,7 @@ export const router = createBrowserRouter([
       { path: '/profile', Component: ProfileScreen },
       { path: '/pets', Component: PetsScreen },
       { path: '/listings', Component: ListingsScreen },
+      { path: '/listings/new', Component: CreateListingScreen },
       { path: '/bookings', Component: BookingsScreen },
     ],
   },

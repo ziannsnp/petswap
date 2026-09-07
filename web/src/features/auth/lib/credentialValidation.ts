@@ -110,7 +110,7 @@ export interface RegistrationValidationFields {
   password: string;
   passwordConfirmation?: string;
   displayName?: string;
-  acceptedTerms?: boolean;
+  acceptedTerms: boolean;
 }
 
 export type RegistrationValidationErrors = Partial<Record<keyof RegistrationValidationFields, string>>;
@@ -139,7 +139,7 @@ export function validateRegistration(fields: RegistrationValidationFields): Regi
     if (nameError) errors.displayName = nameError;
   }
 
-  if (fields.acceptedTerms !== undefined && !fields.acceptedTerms) {
+  if (!fields.acceptedTerms) {
     errors.acceptedTerms = 'You must accept the Terms of Service and Privacy Policy.';
   }
 

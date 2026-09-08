@@ -1,0 +1,55 @@
+name: Database contract
+
+# Spins up a local Supabase stack, rebuilds it from migrations + seed, and runs
+# the SQL contract checks in supabase/tests/. This is deliberately NOT part of the
+# required Quality gate (see docs/testing.md): it boots containers and is slower,
+# so it runs only when something under supabase/ changes, on a weekly schedule,
+# and on demand. Treat a red result as a blocker for merging a schema change even
+# though branch protection does not enforce it yet.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'supabase/migrations/**'
+      - 'supabase/seed.sql'
+      - 'supabase/config.toml'
+      - 'supabase/tests/**'
+      - '.github/workflows/db-contract.yml'
+  workflow_dispatch:
+  schedule:
+    - cron: '17 6 * * 1' # Mondays 06:17 UTC, before the week's work starts
+
+concurrency:
+  group: db-contract-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contract:
+    name: Reset local database and run contract checks
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start local Supabase stack
+        run: supabase start
+
+      - name: Rebuild database from migrations and seed
+        run: supabase db reset
+
+      - name: Schema contract checks
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/database_contract.sql
+
+      - name: Booking rules behavioural checks
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/booking_rules.test.sql
+
+      - name: Stop local Supabase stack
+        if: always()
+        run: supabase stop || true

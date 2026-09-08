@@ -18,7 +18,12 @@
 -- are inserted here rather than by the auth trigger, and bookings are seeded
 -- directly in their final status instead of going through the pending-only
 -- guard. CHECK and EXCLUDE constraints stay enforced, so a bad row still fails
--- the reset.
+-- the reset; it also skips foreign-key triggers, so the block at the end
+-- re-checks every seeded row for a missing parent.
+--
+-- No listing_images rows: the local storage bucket has no matching files, so
+-- seeding image metadata would only render broken images. Add both together when
+-- there are local photo fixtures to upload.
 
 set session_replication_role = replica;
 
@@ -96,7 +101,7 @@ values
   ('30000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000001',
    'Sunny garden room', 'Chiang Mai',
    'Fenced garden, quiet street, daily photo updates for your pet.',
-   2, array['dog', 'cat'], 'Fenced yard, crate available, vet 5 minutes away',
+   2, array['dog', 'cat', 'rabbit'], 'Fenced yard, crate available, vet 5 minutes away',
    'published', now(), null),
   ('30000000-0000-4000-8000-000000000002', '10000000-0000-4000-8000-000000000001',
    'Quiet studio with catio', 'Chiang Mai',
@@ -120,16 +125,15 @@ values
    'deleted', null, now())
 on conflict (id) do nothing;
 
-insert into public.listing_images (id, listing_id, storage_path, alt_text, sort_order)
-values
-  ('31000000-0000-4000-8000-000000000001', '30000000-0000-4000-8000-000000000001', '30000000-0000-4000-8000-000000000001/main.jpg',   'Garden room with pet bed', 0),
-  ('31000000-0000-4000-8000-000000000002', '30000000-0000-4000-8000-000000000001', '30000000-0000-4000-8000-000000000001/garden.jpg', 'Fenced back garden',       1),
-  ('31000000-0000-4000-8000-000000000003', '30000000-0000-4000-8000-000000000003', '30000000-0000-4000-8000-000000000003/field.jpg',  'Open field for dogs',      0)
-on conflict (id) do nothing;
-
 -- ---------------------------------------------------------------------------
 -- Bookings: one row per lifecycle status, plus a back-to-back confirmed pair
--- on listing 1 (2026-11-10..14 then 2026-11-14..18 - end-exclusive, no conflict)
+-- on listing 1 (2026-11-10..14 then 2026-11-14..18 - end-exclusive, no conflict).
+--
+-- A booking's pet species is not tied to the listing's accepted_pet_types at the
+-- database level - that match is a search filter only (FR-4.2). Confirmed and
+-- pending rows keep the pet within a listing that accepts its species; the
+-- declined row (...004) is deliberately an unsuitable request (a dog at a
+-- cat-only listing) that the owner turned down.
 -- ---------------------------------------------------------------------------
 insert into public.bookings (
   id, listing_id, pet_id, requester_id, status, start_date, end_date,
@@ -144,7 +148,7 @@ values
    'confirmed', date '2026-11-14', date '2026-11-18', 'Pixel is quiet, mostly stays in her pen.', null, now(), null, null, null),
   ('40000000-0000-4000-8000-000000000004', '30000000-0000-4000-8000-000000000002', '20000000-0000-4000-8000-000000000004', '10000000-0000-4000-8000-000000000003',
    'declined',  date '2026-11-05', date '2026-11-08', null, 'Sorry, only set up for cats here.', null, now(), null, null),
-  ('40000000-0000-4000-8000-000000000005', '30000000-0000-4000-8000-000000000002', '20000000-0000-4000-8000-000000000003', '10000000-0000-4000-8000-000000000002',
+  ('40000000-0000-4000-8000-000000000005', '30000000-0000-4000-8000-000000000001', '20000000-0000-4000-8000-000000000003', '10000000-0000-4000-8000-000000000002',
    'cancelled', date '2026-11-20', date '2026-11-23', 'Trip postponed, will rebook later.', null, null, null, now(), null),
   ('40000000-0000-4000-8000-000000000006', '30000000-0000-4000-8000-000000000003', '20000000-0000-4000-8000-000000000004', '10000000-0000-4000-8000-000000000003',
    'completed', date '2026-09-01', date '2026-09-05', null, null, date '2026-08-20', null, null, now()),
@@ -153,3 +157,35 @@ values
 on conflict (id) do nothing;
 
 reset session_replication_role;
+
+-- Foreign-key triggers were off during the load, so re-check that every seeded
+-- row has its parent. Fails the reset loudly if an id is ever mistyped here.
+do $$
+declare
+  orphans integer;
+begin
+  select count(*) into orphans from (
+    select 1 from public.profiles p
+      left join auth.users u on u.id = p.id where u.id is null
+    union all
+    select 1 from public.pets x
+      left join public.profiles p on p.id = x.owner_id where p.id is null
+    union all
+    select 1 from public.listings x
+      left join public.profiles p on p.id = x.owner_id where p.id is null
+    union all
+    select 1 from public.bookings b
+      left join public.listings l on l.id = b.listing_id where l.id is null
+    union all
+    select 1 from public.bookings b
+      left join public.pets pt on pt.id = b.pet_id where pt.id is null
+    union all
+    select 1 from public.bookings b
+      left join public.profiles p on p.id = b.requester_id where p.id is null
+  ) as missing_parents;
+
+  if orphans > 0 then
+    raise exception 'seed integrity: % row(s) reference a missing parent', orphans;
+  end if;
+end;
+$$;

@@ -37,3 +37,14 @@ left join information_schema.columns c
   on c.table_schema = 'public'
   and c.table_name = 'profiles'
   and c.column_name = expected.column_name;
+
+select
+  'listings accept only pet_species values as accepted pet types' as check_name,
+  exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'listings'
+      and column_name = 'accepted_pet_types'
+      and udt_name = '_pet_species'
+  ) as passed;

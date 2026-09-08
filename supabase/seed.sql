@@ -22,7 +22,7 @@ select
   'Local demo neighborhood',
   'A deterministic local listing for smoke testing once a demo user exists.',
   2,
-  array['dog', 'cat'],
+  array['dog', 'cat']::public.pet_species[],
   'Fenced yard, quiet room, daily photo updates',
   'published',
   now()

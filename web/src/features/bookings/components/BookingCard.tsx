@@ -43,10 +43,19 @@ export function BookingCard({
   return (
     <li className="booking-card">
       <div className="booking-card__row">
-        <span className="booking-card__pet">
-          {booking.pet.name}{" "}
-          <span className="booking-card__species">
-            ({formatSpecies(booking.pet.species)})
+        <span className="booking-card__pet" style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}>
+          {booking.pet.photo_url && (
+            <img 
+              src={booking.pet.photo_url} 
+              alt={booking.pet.name} 
+              className="w-6 h-6 rounded-full object-cover bg-gray-100" 
+            />
+          )}
+          <span>
+            {booking.pet.name}{" "}
+            <span className="booking-card__species">
+              ({formatSpecies(booking.pet.species)})
+            </span>
           </span>
         </span>
         <BookingStatusBadge status={booking.status} />

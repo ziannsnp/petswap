@@ -1,5 +1,5 @@
 import { getSupabaseClient, type AppSupabaseClient } from '@/shared/lib/supabase';
-import { listIncomingBookings, listOutgoingBookings } from '../lib/bookingApi';
+import { listIncomingBookings, listOutgoingBookings } from './bookingApi';
 
 // Explicit factory so the real module (and its Vite-only `import.meta.env` usage) never loads under Jest.
 jest.mock('@/shared/lib/supabase', () => ({ getSupabaseClient: jest.fn() }));

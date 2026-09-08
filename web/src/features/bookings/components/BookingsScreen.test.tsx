@@ -2,7 +2,7 @@
 import '@testing-library/jest-dom';
 import { fireEvent, render, screen } from '@testing-library/react';
 import type { UseQueryResult } from '@tanstack/react-query';
-import { BookingsScreen } from '../components/BookingsScreen';
+import { BookingsScreen } from './BookingsScreen';
 import { useIncomingBookings, useOutgoingBookings } from '../hooks/useBookings';
 import type { BookingWithDetails } from '../lib/bookingApi';
 

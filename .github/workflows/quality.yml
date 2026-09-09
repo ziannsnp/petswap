@@ -79,13 +79,33 @@ jobs:
               print('Broken documentation links:')
               print('\n'.join(failures))
               sys.exit(1)
-  
+
 # CD Pipeline for Supabase DB Push
+  changes:
+    name: Detect changed paths
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    outputs:
+      supabase: ${{ steps.filter.outputs.supabase }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            supabase:
+              - 'supabase/**'
+
   supabase-migration:
     name: Supabase DB Push
     runs-on: ubuntu-latest
-    if: github.event_name == 'push'
-    
+    needs: changes
+    # The workflow-level `push.paths` filter above also matches docs/**, README.md,
+    # and AGENTS.md, so a documentation-only push to main still triggers this job
+    # unless it re-checks that supabase/** actually changed. Without this guard,
+    # a docs PR silently runs `supabase db push` against the real database.
+    if: github.event_name == 'push' && needs.changes.outputs.supabase == 'true'
+
     steps:
       - uses: actions/checkout@v4
 

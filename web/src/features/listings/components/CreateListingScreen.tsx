@@ -6,8 +6,14 @@ import { validateListingForm } from '../lib/listingForm';
 import type { ListingFormErrors } from '../lib/listingForm';
 import { useCreateListing } from '../hooks/useCreateListing';
 import { ListingsNavigation } from './ListingsNavigation';
+import type { PetSpecies } from '../../../shared/types/database.types';
 
-const PET_TYPES = ['Dog', 'Cat', 'Rabbit', 'Bird'];
+const PET_TYPE_OPTIONS: { value: PetSpecies; label: string }[] = [
+  { value: 'dog', label: 'Dog' },
+  { value: 'cat', label: 'Cat' },
+  { value: 'rabbit', label: 'Rabbit' },
+  { value: 'bird', label: 'Bird' },
+];
 const FACILITIES = [
   'Fenced yard',
   'Air conditioning',
@@ -35,7 +41,7 @@ export function CreateListingScreen() {
   const [location, setLocation] = useState('');
   const [description, setDescription] = useState('');
   const [capacity, setCapacity] = useState<number | ''>(1);
-  const [acceptedPetTypes, setAcceptedPetTypes] = useState<string[]>(['Dog']);
+  const [acceptedPetTypes, setAcceptedPetTypes] = useState<PetSpecies[]>(['dog']);
   const [facilities, setFacilities] = useState<string[]>([]);
   const [photos, setPhotos] = useState<SelectedPhoto[]>([]);
   const [errors, setErrors] = useState<ListingFormErrors>({});
@@ -47,7 +53,7 @@ export function CreateListingScreen() {
     previewUrls.current.forEach((url) => URL.revokeObjectURL(url));
   }, []);
 
-  const toggleChoice = (value: string, selected: string[], update: (next: string[]) => void) => {
+  const toggleChoice = <T extends string,>(value: T, selected: T[], update: (next: T[]) => void) => {
     update(selected.includes(value) ? selected.filter((item) => item !== value) : [...selected, value]);
   };
 
@@ -173,8 +179,8 @@ export function CreateListingScreen() {
           <fieldset>
             <legend className={labelClassName}>Accepted pet types</legend>
             <div className="flex flex-wrap gap-2">
-              {PET_TYPES.map((petType) => {
-                const isSelected = acceptedPetTypes.includes(petType);
+              {PET_TYPE_OPTIONS.map((petType) => {
+                const isSelected = acceptedPetTypes.includes(petType.value);
                 return (
                   <button
                     className={`min-h-10 rounded-lg border px-4 py-2 text-sm transition-colors ${
@@ -183,11 +189,11 @@ export function CreateListingScreen() {
                         : 'border-gray-200 bg-white text-gray-700 hover:border-brand-500 hover:bg-brand-50'
                     }`}
                     type="button"
-                    key={petType}
+                    key={petType.value}
                     aria-pressed={isSelected}
-                    onClick={() => toggleChoice(petType, acceptedPetTypes, setAcceptedPetTypes)}
+                    onClick={() => toggleChoice(petType.value, acceptedPetTypes, setAcceptedPetTypes)}
                   >
-                    {petType}
+                    {petType.label}
                   </button>
                 );
               })}

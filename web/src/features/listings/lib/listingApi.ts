@@ -1,12 +1,12 @@
 import { getSupabaseClient } from '@/shared/lib/supabase';
-import type { Database } from '@/shared/types/database.types';
+import type { Database, PetSpecies } from '@/shared/types/database.types';
 
 export interface CreateListingValues {
   title: string;
   location: string;
   description: string;
   capacity: number;
-  acceptedPetTypes: string[];
+  acceptedPetTypes: PetSpecies[];
   facilities: string[];
   photos: File[];
 }
@@ -21,14 +21,11 @@ function photoStoragePath(listingId: string, file: File): string {
   return `${listingId}/${crypto.randomUUID()}${extension.toLowerCase()}`;
 }
 
-async function removeCreatedListing(listingId: string, storagePaths: string[]) {
-  const supabase = getSupabaseClient();
+async function removeUploadedPhotos(storagePaths: string[]) {
+  if (storagePaths.length === 0) return;
 
-  if (storagePaths.length > 0) {
-    await supabase.storage.from('listing-photos').remove(storagePaths);
-  }
-
-  await supabase.from('listings').delete().eq('id', listingId);
+  const { error } = await getSupabaseClient().storage.from('listing-photos').remove(storagePaths);
+  if (error) throw error;
 }
 
 export async function createListing(values: CreateListingValues): Promise<Listing> {
@@ -48,8 +45,8 @@ export async function createListing(values: CreateListingValues): Promise<Listin
       capacity: values.capacity,
       accepted_pet_types: values.acceptedPetTypes,
       facilities: values.facilities.length > 0 ? values.facilities.join('\n') : null,
-      status: 'published',
-      published_at: new Date().toISOString(),
+      status: 'draft',
+      published_at: null,
     })
     .select()
     .single();
@@ -80,12 +77,18 @@ export async function createListing(values: CreateListingValues): Promise<Listin
       const { error: imagesError } = await supabase.from('listing_images').insert(imageRows);
       if (imagesError) throw imagesError;
     }
+
+    return { ...listing, listing_images: [], cover_photo_url: null };
   } catch (error) {
-    await removeCreatedListing(listing.id, storagePaths);
+    try {
+      await removeUploadedPhotos(storagePaths);
+    } catch (cleanupError) {
+      const originalMessage = error instanceof Error ? error.message : String(error);
+      const cleanupMessage = cleanupError instanceof Error ? cleanupError.message : String(cleanupError);
+      throw new Error(`Listing creation failed: ${originalMessage}; photo cleanup failed: ${cleanupMessage}`);
+    }
     throw error;
   }
-
-  return { ...listing, listing_images: [], cover_photo_url: null };
 }
 
 function addCoverPhotoUrl(

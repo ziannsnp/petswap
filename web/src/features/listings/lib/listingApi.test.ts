@@ -49,7 +49,7 @@ describe('createListing', () => {
     jest.clearAllMocks();
   });
 
-  it('creates a published listing and stores its photos', async () => {
+  it('creates a draft listing and stores its photos', async () => {
     const listing = {
       id: 'listing-123',
       owner_id: 'owner-123',
@@ -57,11 +57,11 @@ describe('createListing', () => {
       location: 'Chiang Mai',
       description: 'A calm place for pets.',
       capacity: 2,
-      accepted_pet_types: ['Dog'],
+      accepted_pet_types: ['dog'],
       facilities: 'Fenced yard',
-      status: 'published',
+      status: 'draft',
       deleted_at: null,
-      published_at: '2026-09-07T00:00:00.000Z',
+      published_at: null,
       created_at: '2026-09-07T00:00:00.000Z',
       updated_at: '2026-09-07T00:00:00.000Z',
     };
@@ -93,18 +93,19 @@ describe('createListing', () => {
       location: ' Chiang Mai ',
       description: ' A calm place for pets. ',
       capacity: 2,
-      acceptedPetTypes: ['Dog'],
+      acceptedPetTypes: ['dog'],
       facilities: ['Fenced yard'],
       photos: [photo],
-    })).resolves.toMatchObject({ id: 'listing-123', status: 'published' });
+    })).resolves.toMatchObject({ id: 'listing-123', status: 'draft' });
 
     expect(listingInsert).toHaveBeenCalledWith(expect.objectContaining({
       owner_id: 'owner-123',
       title: 'A quiet home',
       location: 'Chiang Mai',
       description: 'A calm place for pets.',
+      accepted_pet_types: ['dog'],
       facilities: 'Fenced yard',
-      status: 'published',
+      status: 'draft',
     }));
     expect(upload).toHaveBeenCalledWith(
       expect.stringMatching(/^listing-123\/[0-9a-f-]+\.jpg$/),
@@ -126,7 +127,7 @@ describe('createListing', () => {
       location: 'Chiang Mai',
       description: 'A calm place for pets.',
       capacity: 2,
-      accepted_pet_types: ['Dog'],
+      accepted_pet_types: ['dog'],
       facilities: 'Fenced yard',
       status: 'published',
       deleted_at: null,
@@ -135,7 +136,6 @@ describe('createListing', () => {
       updated_at: '2026-09-07T00:00:00.000Z',
     };
     const single = jest.fn().mockResolvedValue({ data: listing, error: null });
-    const listingDelete = jest.fn().mockReturnValue({ eq: jest.fn().mockResolvedValue({ error: null }) });
     const listingSelect = jest.fn().mockReturnValue({ single });
     const listingInsert = jest.fn().mockReturnValue({ select: listingSelect });
     const imageInsert = jest.fn().mockResolvedValue({ data: null, error: new Error('metadata failed') });
@@ -143,7 +143,7 @@ describe('createListing', () => {
     const remove = jest.fn().mockResolvedValue({ data: [], error: null });
     const storageFrom = jest.fn().mockReturnValue({ upload, remove });
     const from = jest.fn((table: string) => {
-      if (table === 'listings') return { insert: listingInsert, delete: listingDelete };
+      if (table === 'listings') return { insert: listingInsert };
       if (table === 'listing_images') return { insert: imageInsert };
       throw new Error(`Unexpected table: ${table}`);
     });
@@ -164,13 +164,12 @@ describe('createListing', () => {
       location: 'Chiang Mai',
       description: 'A calm place for pets.',
       capacity: 2,
-      acceptedPetTypes: ['Dog'],
+      acceptedPetTypes: ['dog'],
       facilities: ['Fenced yard'],
       photos: [photo],
     })).rejects.toThrow('metadata failed');
 
     expect(remove).toHaveBeenCalledWith([expect.stringMatching(/^listing-123\/[0-9a-f-]+\.jpg$/)]);
-    expect(listingDelete).toHaveBeenCalled();
   });
 
   it('removes the listing when a photo upload fails', async () => {
@@ -181,7 +180,7 @@ describe('createListing', () => {
       location: 'Chiang Mai',
       description: 'A calm place for pets.',
       capacity: 2,
-      accepted_pet_types: ['Dog'],
+      accepted_pet_types: ['dog'],
       facilities: 'Fenced yard',
       status: 'published',
       deleted_at: null,
@@ -190,13 +189,12 @@ describe('createListing', () => {
       updated_at: '2026-09-07T00:00:00.000Z',
     };
     const single = jest.fn().mockResolvedValue({ data: listing, error: null });
-    const listingDelete = jest.fn().mockReturnValue({ eq: jest.fn().mockResolvedValue({ error: null }) });
     const listingSelect = jest.fn().mockReturnValue({ single });
     const listingInsert = jest.fn().mockReturnValue({ select: listingSelect });
     const upload = jest.fn().mockResolvedValue({ data: null, error: new Error('upload failed') });
     const storageFrom = jest.fn().mockReturnValue({ upload });
     const from = jest.fn((table: string) => {
-      if (table === 'listings') return { insert: listingInsert, delete: listingDelete };
+      if (table === 'listings') return { insert: listingInsert };
       if (table === 'listing_images') return { insert: jest.fn() };
       throw new Error(`Unexpected table: ${table}`);
     });
@@ -217,12 +215,64 @@ describe('createListing', () => {
       location: 'Chiang Mai',
       description: 'A calm place for pets.',
       capacity: 2,
-      acceptedPetTypes: ['Dog'],
+      acceptedPetTypes: ['dog'],
       facilities: ['Fenced yard'],
       photos: [photo],
     })).rejects.toThrow('upload failed');
 
     expect(upload).toHaveBeenCalled();
-    expect(listingDelete).toHaveBeenCalled();
+  });
+
+  it('reports a photo cleanup failure while leaving the listing as a draft', async () => {
+    const listing = {
+      id: 'listing-123',
+      owner_id: 'owner-123',
+      title: 'A quiet home',
+      location: 'Chiang Mai',
+      description: 'A calm place for pets.',
+      capacity: 2,
+      accepted_pet_types: ['dog'],
+      facilities: 'Fenced yard',
+      status: 'draft',
+      deleted_at: null,
+      published_at: null,
+      created_at: '2026-09-07T00:00:00.000Z',
+      updated_at: '2026-09-07T00:00:00.000Z',
+    };
+    const single = jest.fn().mockResolvedValue({ data: listing, error: null });
+    const listingSelect = jest.fn().mockReturnValue({ single });
+    const listingInsert = jest.fn().mockReturnValue({ select: listingSelect });
+    const imageInsert = jest.fn().mockResolvedValue({ data: null, error: new Error('metadata failed') });
+    const upload = jest.fn().mockResolvedValue({ data: { path: 'listing-123/photo.jpg' }, error: null });
+    const remove = jest.fn().mockResolvedValue({ data: null, error: new Error('cleanup failed') });
+    const storageFrom = jest.fn().mockReturnValue({ upload, remove });
+    const from = jest.fn((table: string) => {
+      if (table === 'listings') return { insert: listingInsert };
+      if (table === 'listing_images') return { insert: imageInsert };
+      throw new Error(`Unexpected table: ${table}`);
+    });
+    const getUser = jest.fn().mockResolvedValue({
+      data: { user: { id: 'owner-123' } },
+      error: null,
+    });
+
+    mockedGetSupabaseClient.mockReturnValue({
+      auth: { getUser },
+      from,
+      storage: { from: storageFrom },
+    } as never);
+
+    const photo = new File(['photo'], 'front-yard.jpg', { type: 'image/jpeg' });
+    await expect(createListing({
+      title: 'A quiet home',
+      location: 'Chiang Mai',
+      description: 'A calm place for pets.',
+      capacity: 2,
+      acceptedPetTypes: ['dog'],
+      facilities: ['Fenced yard'],
+      photos: [photo],
+    })).rejects.toThrow('photo cleanup failed: cleanup failed');
+
+    expect(remove).toHaveBeenCalled();
   });
 });

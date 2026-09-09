@@ -1,5 +1,7 @@
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
+export type PetSpecies = Database['public']['Enums']['pet_species'];
+
 export type Database = {
   public: {
     Tables: {
@@ -92,7 +94,7 @@ export type Database = {
           location: string;
           description: string;
           capacity: number;
-          accepted_pet_types: string[];
+          accepted_pet_types: PetSpecies[];
           facilities: string | null;
           status: Database['public']['Enums']['listing_status'];
           deleted_at: string | null;
@@ -107,7 +109,7 @@ export type Database = {
           location: string;
           description: string;
           capacity: number;
-          accepted_pet_types?: string[];
+          accepted_pet_types?: PetSpecies[];
           facilities?: string | null;
           status?: Database['public']['Enums']['listing_status'];
           deleted_at?: string | null;

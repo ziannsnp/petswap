@@ -23,7 +23,7 @@ select
   'A deterministic local listing for smoke testing once a demo user exists.',
   2,
   array['dog', 'cat']::public.pet_species[],
-  'Fenced yard, quiet room, daily photo updates',
+  E'Fenced yard\nAir conditioning\nDaily photo updates',
   'published',
   now()
 from public.profiles p

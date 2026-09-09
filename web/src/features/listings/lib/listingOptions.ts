@@ -35,7 +35,7 @@ export const PET_TYPE_OPTIONS: readonly PetTypeOption[] = (
   ['dog', 'cat', 'rabbit', 'bird'] as const
 ).map((value) => ({ value, label: PET_SPECIES_LABELS[value] }));
 
-/** `listings.facilities` is plain text (FR-3.1), so these labels are stored verbatim. */
+/** The facilities the create and edit forms offer as checkboxes. */
 export const FACILITY_OPTIONS: readonly string[] = [
   'Fenced yard',
   'Air conditioning',
@@ -44,3 +44,23 @@ export const FACILITY_OPTIONS: readonly string[] = [
   'Daily photo updates',
   'Near a vet clinic',
 ];
+
+/**
+ * `listings.facilities` is a single plain-text column (FR-3.1, ADR 0006), so selections
+ * are stored one per line. A newline cannot occur inside a facility label, which keeps
+ * the split unambiguous where a comma would not.
+ */
+export function serializeFacilities(facilities: readonly string[]): string | null {
+  const cleaned = facilities.map((facility) => facility.trim()).filter(Boolean);
+  return cleaned.length > 0 ? cleaned.join('\n') : null;
+}
+
+/**
+ * Returns every stored facility, including any that is not in `FACILITY_OPTIONS`, so a
+ * later edit re-serialises what it read instead of silently dropping a value that was
+ * written by an earlier option list or by hand.
+ */
+export function parseFacilities(stored: string | null): string[] {
+  if (!stored) return [];
+  return stored.split('\n').map((facility) => facility.trim()).filter(Boolean);
+}

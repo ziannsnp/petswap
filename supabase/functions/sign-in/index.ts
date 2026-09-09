@@ -1,8 +1,12 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.57.4';
 
-const productionOrigin = 'https://petswap-web.zianporrutai.workers.dev';
-const previewOriginPattern = /^https:\/\/[a-z0-9-]+-petswap-web\.zianporrutai\.workers\.dev$/;
-const localOrigins = new Set(['http://localhost:5173', 'http://127.0.0.1:5173']);
+const allowedOrigins = new Set(
+  (Deno.env.get('SIGN_IN_ALLOWED_ORIGINS') ?? '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean),
+);
+const previewHostnameSuffix = Deno.env.get('SIGN_IN_PREVIEW_HOSTNAME_SUFFIX')?.trim();
 const usernamePattern = /^[a-z0-9_]{3,30}$/;
 const supabaseUrl = Deno.env.get('SUPABASE_URL');
 const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
@@ -23,17 +27,27 @@ const authClient =
 type ErrorCode = 'INVALID_CREDENTIALS' | 'EMAIL_NOT_CONFIRMED' | 'RATE_LIMITED' | 'UNKNOWN';
 
 function isAllowedOrigin(origin: string | null): boolean {
-  return (
-    origin === null ||
-    origin === productionOrigin ||
-    localOrigins.has(origin) ||
-    (origin !== null && previewOriginPattern.test(origin))
-  );
+  if (origin === null || allowedOrigins.has(origin)) return true;
+  if (!previewHostnameSuffix) return false;
+
+  try {
+    const url = new URL(origin);
+    const prefix = url.hostname.slice(0, -previewHostnameSuffix.length);
+    return (
+      url.origin === origin &&
+      url.protocol === 'https:' &&
+      url.port === '' &&
+      url.hostname.endsWith(previewHostnameSuffix) &&
+      /^[a-z0-9-]+$/.test(prefix)
+    );
+  } catch {
+    return false;
+  }
 }
 
 function corsHeaders(origin: string | null): Record<string, string> {
   return {
-    'Access-Control-Allow-Origin': origin ?? productionOrigin,
+    ...(origin === null ? {} : { 'Access-Control-Allow-Origin': origin }),
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     Vary: 'Origin',

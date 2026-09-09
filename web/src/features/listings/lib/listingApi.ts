@@ -1,5 +1,6 @@
 import { getSupabaseClient } from '@/shared/lib/supabase';
 import type { Database, PetSpecies } from '@/shared/types/database.types';
+import { FACILITY_SEPARATOR } from './listingOptions';
 
 export interface CreateListingValues {
   title: string;
@@ -44,7 +45,7 @@ export async function createListing(values: CreateListingValues): Promise<Listin
       description: values.description.trim(),
       capacity: values.capacity,
       accepted_pet_types: values.acceptedPetTypes,
-      facilities: values.facilities.length > 0 ? values.facilities.join('\n') : null,
+      facilities: values.facilities.length > 0 ? values.facilities.join(FACILITY_SEPARATOR) : null,
       status: 'draft',
       published_at: null,
     })
@@ -68,17 +69,22 @@ export async function createListing(values: CreateListingValues): Promise<Listin
       imageRows.push({
         listing_id: listing.id,
         storage_path: storagePath,
-        alt_text: photo.name,
+        alt_text: null,
         sort_order: sortOrder,
       });
     }
 
+    let insertedImages: Database['public']['Tables']['listing_images']['Row'][] = [];
     if (imageRows.length > 0) {
-      const { error: imagesError } = await supabase.from('listing_images').insert(imageRows);
+      const { data: imageData, error: imagesError } = await supabase
+        .from('listing_images')
+        .insert(imageRows)
+        .select();
       if (imagesError) throw imagesError;
+      insertedImages = imageData;
     }
 
-    return { ...listing, listing_images: [], cover_photo_url: null };
+    return addCoverPhotoUrl({ ...listing, listing_images: insertedImages });
   } catch (error) {
     try {
       await removeUploadedPhotos(storagePaths);

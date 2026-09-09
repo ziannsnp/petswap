@@ -5,6 +5,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { validateListingForm } from '../lib/listingForm';
 import type { ListingFormErrors } from '../lib/listingForm';
 import { useCreateListing } from '../hooks/useCreateListing';
+import { FACILITY_OPTIONS } from '../lib/listingOptions';
 import { ListingsNavigation } from './ListingsNavigation';
 import type { PetSpecies } from '../../../shared/types/database.types';
 
@@ -14,15 +15,6 @@ const PET_TYPE_OPTIONS: { value: PetSpecies; label: string }[] = [
   { value: 'rabbit', label: 'Rabbit' },
   { value: 'bird', label: 'Bird' },
 ];
-const FACILITIES = [
-  'Fenced yard',
-  'Air conditioning',
-  'Security cameras',
-  'Indoor play area',
-  'Daily photo updates',
-  'Near a vet clinic',
-];
-
 const labelClassName = 'mb-2 block text-sm font-medium text-gray-700';
 
 interface SelectedPhoto {
@@ -46,7 +38,6 @@ export function CreateListingScreen() {
   const [photos, setPhotos] = useState<SelectedPhoto[]>([]);
   const [errors, setErrors] = useState<ListingFormErrors>({});
   const [isSaving, setIsSaving] = useState(false);
-  const [showSuccess, setShowSuccess] = useState(false);
   const createListingMutation = useCreateListing();
 
   useEffect(() => () => {
@@ -75,11 +66,14 @@ export function CreateListingScreen() {
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setShowSuccess(false);
     const nextErrors = validateListingForm({ title, location, description, capacity });
     setErrors(nextErrors);
 
     if (Object.keys(nextErrors).length > 0) return;
+    if (capacity === '') {
+      setErrors({ capacity: 'Capacity must be at least 1.' });
+      return;
+    }
 
     setIsSaving(true);
     try {
@@ -87,15 +81,14 @@ export function CreateListingScreen() {
         title,
         location,
         description,
-        capacity: capacity as number,
+        capacity,
         acceptedPetTypes,
         facilities,
         photos: photos.map((photo) => photo.file),
       });
-      setShowSuccess(true);
       void navigate('/listings');
     } catch {
-      setShowSuccess(false);
+      return;
     } finally {
       setIsSaving(false);
     }
@@ -203,7 +196,7 @@ export function CreateListingScreen() {
           <fieldset>
             <legend className={labelClassName}>Facilities</legend>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {FACILITIES.map((facility) => (
+              {FACILITY_OPTIONS.map((facility) => (
                 <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-600" key={facility}>
                   <input
                     className="h-4 w-4 accent-brand-600"
@@ -263,12 +256,6 @@ export function CreateListingScreen() {
               onChange={handlePhotoSelection}
             />
           </div>
-
-          {showSuccess && (
-            <p className="border-l-4 border-green-600 bg-green-50 px-4 py-3 text-sm text-green-700" role="status">
-              Listing details checked successfully.
-            </p>
-          )}
 
           {createListingMutation.isError && (
             <p className="border-l-4 border-red-600 bg-red-50 px-4 py-3 text-sm text-red-700" role="alert">

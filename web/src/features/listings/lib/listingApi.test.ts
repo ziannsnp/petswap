@@ -68,9 +68,21 @@ describe('createListing', () => {
     const single = jest.fn().mockResolvedValue({ data: listing, error: null });
     const listingSelect = jest.fn().mockReturnValue({ single });
     const listingInsert = jest.fn().mockReturnValue({ select: listingSelect });
-    const imageInsert = jest.fn().mockResolvedValue({ data: [], error: null });
+    const insertedImage = {
+      id: 'image-123',
+      listing_id: 'listing-123',
+      storage_path: 'listing-123/photo.jpg',
+      alt_text: null,
+      sort_order: 0,
+      created_at: '2026-09-07T00:00:00.000Z',
+    };
+    const imageInsertSelect = jest.fn().mockResolvedValue({ data: [insertedImage], error: null });
+    const imageInsert = jest.fn().mockReturnValue({ select: imageInsertSelect });
     const upload = jest.fn().mockResolvedValue({ data: { path: 'listing-123/photo.jpg' }, error: null });
-    const storageFrom = jest.fn().mockReturnValue({ upload });
+    const storageFrom = jest.fn().mockReturnValue({
+      upload,
+      getPublicUrl: jest.fn().mockReturnValue({ data: { publicUrl: 'https://example.test/photo.jpg' } }),
+    });
     const from = jest.fn((table: string) => {
       if (table === 'listings') return { insert: listingInsert };
       if (table === 'listing_images') return { insert: imageInsert };
@@ -94,9 +106,14 @@ describe('createListing', () => {
       description: ' A calm place for pets. ',
       capacity: 2,
       acceptedPetTypes: ['dog'],
-      facilities: ['Fenced yard'],
+      facilities: ['Fenced yard', 'Daily photo updates'],
       photos: [photo],
-    })).resolves.toMatchObject({ id: 'listing-123', status: 'draft' });
+    })).resolves.toMatchObject({
+      id: 'listing-123',
+      status: 'draft',
+      listing_images: [insertedImage],
+      cover_photo_url: 'https://example.test/photo.jpg',
+    });
 
     expect(listingInsert).toHaveBeenCalledWith(expect.objectContaining({
       owner_id: 'owner-123',
@@ -104,7 +121,7 @@ describe('createListing', () => {
       location: 'Chiang Mai',
       description: 'A calm place for pets.',
       accepted_pet_types: ['dog'],
-      facilities: 'Fenced yard',
+      facilities: 'Fenced yard\nDaily photo updates',
       status: 'draft',
     }));
     expect(upload).toHaveBeenCalledWith(
@@ -114,7 +131,7 @@ describe('createListing', () => {
     );
     expect(imageInsert).toHaveBeenCalledWith([expect.objectContaining({
       listing_id: 'listing-123',
-      alt_text: 'front-yard.jpg',
+      alt_text: null,
       sort_order: 0,
     })]);
   });
@@ -138,7 +155,8 @@ describe('createListing', () => {
     const single = jest.fn().mockResolvedValue({ data: listing, error: null });
     const listingSelect = jest.fn().mockReturnValue({ single });
     const listingInsert = jest.fn().mockReturnValue({ select: listingSelect });
-    const imageInsert = jest.fn().mockResolvedValue({ data: null, error: new Error('metadata failed') });
+    const imageInsertSelect = jest.fn().mockResolvedValue({ data: null, error: new Error('metadata failed') });
+    const imageInsert = jest.fn().mockReturnValue({ select: imageInsertSelect });
     const upload = jest.fn().mockResolvedValue({ data: { path: 'listing-123/photo.jpg' }, error: null });
     const remove = jest.fn().mockResolvedValue({ data: [], error: null });
     const storageFrom = jest.fn().mockReturnValue({ upload, remove });
@@ -242,7 +260,8 @@ describe('createListing', () => {
     const single = jest.fn().mockResolvedValue({ data: listing, error: null });
     const listingSelect = jest.fn().mockReturnValue({ single });
     const listingInsert = jest.fn().mockReturnValue({ select: listingSelect });
-    const imageInsert = jest.fn().mockResolvedValue({ data: null, error: new Error('metadata failed') });
+    const imageInsertSelect = jest.fn().mockResolvedValue({ data: null, error: new Error('metadata failed') });
+    const imageInsert = jest.fn().mockReturnValue({ select: imageInsertSelect });
     const upload = jest.fn().mockResolvedValue({ data: { path: 'listing-123/photo.jpg' }, error: null });
     const remove = jest.fn().mockResolvedValue({ data: null, error: new Error('cleanup failed') });
     const storageFrom = jest.fn().mockReturnValue({ upload, remove });

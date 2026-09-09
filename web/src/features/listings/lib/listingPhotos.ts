@@ -5,6 +5,14 @@
  */
 export const LISTING_PHOTO_MAX_BYTES = 10_485_760;
 
+/**
+ * No functional requirement fixes a photo count; Squad B agreed on ten while reviewing
+ * PR #30 on 9 September 2026 — enough for a listing gallery, bounded enough that one
+ * listing cannot fill the bucket. The upload integration enforces the same number,
+ * because a browser limit is user experience rather than a constraint.
+ */
+export const LISTING_PHOTO_MAX_COUNT = 10;
+
 export const LISTING_PHOTO_MIME_TYPES = [
   'image/jpeg',
   'image/png',
@@ -44,9 +52,12 @@ function rejectionReason(file: SelectableFile): string | null {
 /**
  * Splits a selection so the caller can keep the valid photos and explain the rest.
  * Rejecting a file never affects the others, which is what FR-3.1's photo rule asks for.
+ * `alreadySelected` is how many photos the form is holding, so the cap applies to the
+ * listing rather than to one trip through the file picker.
  */
 export function partitionListingPhotos<T extends SelectableFile>(
   files: readonly T[],
+  alreadySelected = 0,
 ): PartitionedListingPhotos<T> {
   const accepted: T[] = [];
   const rejected: RejectedListingPhoto[] = [];
@@ -55,9 +66,18 @@ export function partitionListingPhotos<T extends SelectableFile>(
     const reason = rejectionReason(file);
     if (reason) {
       rejected.push({ fileName: file.name, reason });
-    } else {
-      accepted.push(file);
+      continue;
     }
+
+    if (alreadySelected + accepted.length >= LISTING_PHOTO_MAX_COUNT) {
+      rejected.push({
+        fileName: file.name,
+        reason: `A listing can have at most ${LISTING_PHOTO_MAX_COUNT} photos.`,
+      });
+      continue;
+    }
+
+    accepted.push(file);
   }
 
   return { accepted, rejected };

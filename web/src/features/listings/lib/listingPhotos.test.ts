@@ -1,5 +1,6 @@
 import {
   LISTING_PHOTO_MAX_BYTES,
+  LISTING_PHOTO_MAX_COUNT,
   partitionListingPhotos,
   type SelectableFile,
 } from './listingPhotos';
@@ -47,5 +48,44 @@ describe('partitionListingPhotos', () => {
       accepted: [],
       rejected: [{ fileName: 'huge.png', reason: 'Larger than the 10 MB limit.' }],
     });
+  });
+});
+
+describe('partitionListingPhotos photo cap', () => {
+  const supported = (name: string) => photo(name, 'image/jpeg', 1024);
+
+  it('rejects the files that would take the listing past the cap', () => {
+    const files = Array.from({ length: 12 }, (_, index) => supported(`photo-${index}.jpg`));
+
+    const { accepted, rejected } = partitionListingPhotos(files);
+
+    expect(accepted).toHaveLength(LISTING_PHOTO_MAX_COUNT);
+    expect(rejected).toEqual([
+      { fileName: 'photo-10.jpg', reason: 'A listing can have at most 10 photos.' },
+      { fileName: 'photo-11.jpg', reason: 'A listing can have at most 10 photos.' },
+    ]);
+  });
+
+  it('counts photos the form already holds, not just this selection', () => {
+    const { accepted, rejected } = partitionListingPhotos(
+      [supported('ninth.jpg'), supported('tenth.jpg'), supported('eleventh.jpg')],
+      8,
+    );
+
+    expect(accepted.map((file) => file.name)).toEqual(['ninth.jpg', 'tenth.jpg']);
+    expect(rejected).toEqual([
+      { fileName: 'eleventh.jpg', reason: 'A listing can have at most 10 photos.' },
+    ]);
+  });
+
+  it('reports an unsupported file by its own reason rather than the cap', () => {
+    const { rejected } = partitionListingPhotos([photo('notes.pdf', 'application/pdf', 512)], 10);
+
+    expect(rejected).toEqual([
+      {
+        fileName: 'notes.pdf',
+        reason: 'Unsupported file type. Choose a JPG, PNG, WebP, or GIF file.',
+      },
+    ]);
   });
 });

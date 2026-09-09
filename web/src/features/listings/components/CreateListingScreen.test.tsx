@@ -2,7 +2,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
-import { LISTING_PHOTO_MAX_BYTES } from '../lib/listingPhotos';
+import { LISTING_PHOTO_MAX_BYTES, LISTING_PHOTO_MAX_COUNT } from '../lib/listingPhotos';
 import { CreateListingScreen } from './CreateListingScreen';
 
 function fileOfSize(name: string, type: string, size: number): File {
@@ -19,10 +19,17 @@ function renderScreen() {
   );
 }
 
+let objectUrlCount = 0;
+
 beforeAll(() => {
-  // jsdom has no object URLs, and the previews only need a stable stand-in.
-  URL.createObjectURL = jest.fn(() => 'blob:listing-photo');
+  // jsdom has no object URLs. Handing out a distinct one per call keeps the preview keys
+  // unique and lets the removal test assert which URL was released.
+  URL.createObjectURL = jest.fn(() => `blob:listing-photo-${(objectUrlCount += 1)}`);
   URL.revokeObjectURL = jest.fn();
+});
+
+beforeEach(() => {
+  jest.clearAllMocks();
 });
 
 describe('CreateListingScreen', () => {
@@ -91,6 +98,66 @@ describe('CreateListingScreen', () => {
 
     expect(screen.queryByText('Listing title is required.')).not.toBeInTheDocument();
     expect(screen.getByText('Location is required.')).toBeInTheDocument();
+  });
+
+  it('selects and deselects a facility independently of the others', async () => {
+    const user = userEvent.setup();
+    renderScreen();
+
+    const fencedYard = screen.getByRole('checkbox', { name: 'Fenced yard' });
+    const airConditioning = screen.getByRole('checkbox', { name: 'Air conditioning' });
+    expect(fencedYard).not.toBeChecked();
+
+    await user.click(fencedYard);
+    await user.click(airConditioning);
+    expect(fencedYard).toBeChecked();
+    expect(airConditioning).toBeChecked();
+
+    await user.click(fencedYard);
+    expect(fencedYard).not.toBeChecked();
+    expect(airConditioning).toBeChecked();
+  });
+
+  it('releases the object URL of a removed photo and leaves the others alone', async () => {
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.upload(screen.getByLabelText(/add listing photos/i), [
+      fileOfSize('yard.jpg', 'image/jpeg', 2048),
+      fileOfSize('room.png', 'image/png', 2048),
+    ]);
+
+    const removedUrl = screen.getByRole('img', { name: 'yard.jpg' }).getAttribute('src');
+    const keptUrl = screen.getByRole('img', { name: 'room.png' }).getAttribute('src');
+
+    await user.click(screen.getByRole('button', { name: 'Remove yard.jpg' }));
+
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith(removedUrl);
+    expect(URL.revokeObjectURL).not.toHaveBeenCalledWith(keptUrl);
+    expect(screen.queryByRole('img', { name: 'yard.jpg' })).not.toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'room.png' })).toBeInTheDocument();
+  });
+
+  it('applies the photo cap across selections, not just within one', async () => {
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.upload(
+      screen.getByLabelText(/add listing photos/i),
+      Array.from({ length: LISTING_PHOTO_MAX_COUNT }, (_, index) =>
+        fileOfSize(`photo-${index}.jpg`, 'image/jpeg', 1024)),
+    );
+    expect(screen.getAllByRole('img')).toHaveLength(LISTING_PHOTO_MAX_COUNT);
+
+    await user.upload(
+      screen.getByLabelText(/add more/i),
+      fileOfSize('one-too-many.jpg', 'image/jpeg', 1024),
+    );
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'one-too-many.jpg: A listing can have at most 10 photos.',
+    );
+    expect(screen.getAllByRole('img')).toHaveLength(LISTING_PHOTO_MAX_COUNT);
   });
 
   it('labels pet types for people while tracking the pet_species value', async () => {

@@ -50,7 +50,10 @@ export function CreateListingScreen() {
   }, []);
 
   const handlePhotoSelection = (event: ChangeEvent<HTMLInputElement>) => {
-    const { accepted, rejected } = partitionListingPhotos(Array.from(event.target.files ?? []));
+    const { accepted, rejected } = partitionListingPhotos(
+      Array.from(event.target.files ?? []),
+      photos.length,
+    );
     setRejectedPhotos(rejected);
 
     const selectedPhotos = accepted.map((file) => {

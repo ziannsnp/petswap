@@ -43,9 +43,9 @@ values ('b0000000-0000-4000-8000-000000000001',
 insert into public.listings (id, owner_id, title, location, description, capacity, accepted_pet_types, status, published_at)
 values
   ('c0000000-0000-4000-8000-000000000001', 'a0000000-0000-4000-8000-000000000001',
-   'Contract Listing A', 'Test City', 'Fixture listing for contract tests.', 2, array['dog', 'cat'], 'published', now()),
+   'Contract Listing A', 'Test City', 'Fixture listing for contract tests.', 2, array['dog', 'cat']::public.pet_species[], 'published', now()),
   ('c0000000-0000-4000-8000-000000000002', 'a0000000-0000-4000-8000-000000000001',
-   'Contract Listing B', 'Test City', 'Second fixture listing.', 1, array['dog'], 'published', now());
+   'Contract Listing B', 'Test City', 'Second fixture listing.', 1, array['dog']::public.pet_species[], 'published', now());
 
 -- Anchor: a confirmed stay on listing A for 1-5 Oct (end-exclusive).
 insert into public.bookings (listing_id, pet_id, requester_id, status, start_date, end_date)

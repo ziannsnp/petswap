@@ -13,6 +13,12 @@ npm run build
 
 The same workflow also verifies that Markdown links under docs resolve. No pull request should merge into `main` while this gate is failing. Tonpai owns investigating CI/environment failures; the feature author owns failures introduced by their change.
 
+## Database contract workflow
+
+`.github/workflows/db-contract.yml` is a second workflow that boots a local Supabase stack, runs `supabase db reset`, and executes the SQL checks in `supabase/tests/` (schema contract plus the confirmed-booking overlap behaviour). It runs on pull requests that touch `supabase/migrations/**`, `supabase/seed.sql`, `supabase/config.toml`, or `supabase/tests/**`, weekly on a schedule, and on demand.
+
+It is deliberately separate from `Quality` and not a required check: it starts containers and is slower, and [testing.md](testing.md) keeps live-service checks out of the required gate. A red run still blocks merging a schema change — the person changing the schema owns fixing it. Promote it to a required check only if the team decides the extra minutes are worth it.
+
 ## Main branch protection
 
 The protected `main` branch is the only shared integration branch. GitHub requires a pull request, one approving review, current Quality checks, and resolution of review conversations before merge. New commits dismiss earlier approvals; administrators follow the same rules. Direct pushes, force pushes, and branch deletion are blocked.

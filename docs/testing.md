@@ -99,11 +99,13 @@ For schema or policy changes, run from the repository root:
 npx supabase db reset
 ```
 
-Then inspect the local database in Studio at `http://127.0.0.1:54323` and verify the actor cases listed in [environments](environments.md). The baseline SQL contract checks live in `supabase/tests/database_contract.sql`; use them as review prompts until automated authenticated database tests are added.
+Then inspect the local database in Studio at `http://127.0.0.1:54323` and verify the actor cases listed in [environments](environments.md).
 
-The booking overlap rule must be verified at both levels:
+The SQL contract checks in `supabase/tests/` now run automatically: `database_contract.sql` (schema catalogue) and `booking_rules.test.sql` (overlap-rule behaviour). Run them locally after a reset, or let [`db-contract.yml`](ci-cd.md#database-contract-workflow) run them on every change under `supabase/`. They still read as a review checklist for a migration; see [`supabase/tests/README.md`](../supabase/tests/README.md). Actor-specific RLS (a signed-in user seeing only their own rows) still needs Studio or JWT impersonation until the Playwright journey exists.
+
+The booking overlap rule is verified at both levels:
 
 - Jest covers the TypeScript end-exclusive conflict helper.
-- Postgres enforces `bookings_no_confirmed_overlap` for confirmed bookings on the same listing.
+- Postgres enforces `bookings_no_confirmed_overlap` for confirmed bookings on the same listing, and `booking_rules.test.sql` exercises it (overlap, back-to-back, non-confirmed, different listing).
 
 Playwright booking flow remains skipped until auth-backed screens and deterministic Supabase test users exist. When those arrive, unskip `web/e2e/booking-flow.spec.ts` and run it against the local Supabase stack.

@@ -39,6 +39,11 @@ export function CreateListingScreen() {
   const [errors, setErrors] = useState<ListingFormErrors>({});
   const [isSaving, setIsSaving] = useState(false);
   const createListingMutation = useCreateListing();
+  const isSubmitting = isSaving || createListingMutation.isPending;
+
+  const resetMutationError = () => {
+    if (createListingMutation.isError) createListingMutation.reset();
+  };
 
   useEffect(() => () => {
     previewUrls.current.forEach((url) => URL.revokeObjectURL(url));
@@ -49,6 +54,7 @@ export function CreateListingScreen() {
   };
 
   const handlePhotoSelection = (event: ChangeEvent<HTMLInputElement>) => {
+    resetMutationError();
     const selectedPhotos = Array.from(event.target.files ?? []).map((file) => {
       const previewUrl = URL.createObjectURL(file);
       previewUrls.current.push(previewUrl);
@@ -59,6 +65,7 @@ export function CreateListingScreen() {
   };
 
   const removePhoto = (previewUrl: string) => {
+    resetMutationError();
     URL.revokeObjectURL(previewUrl);
     previewUrls.current = previewUrls.current.filter((url) => url !== previewUrl);
     setPhotos((current) => current.filter((photo) => photo.previewUrl !== previewUrl));
@@ -113,7 +120,8 @@ export function CreateListingScreen() {
               className={inputClassName(Boolean(errors.title))}
               id="listing-title"
               value={title}
-              onChange={(event) => setTitle(event.target.value)}
+              onChange={(event) => { resetMutationError(); setTitle(event.target.value); }}
+              disabled={isSubmitting}
               placeholder="For example, Quiet home near the park"
               aria-invalid={Boolean(errors.title)}
               aria-describedby={errors.title ? 'listing-title-error' : undefined}
@@ -127,7 +135,8 @@ export function CreateListingScreen() {
               className={inputClassName(Boolean(errors.location))}
               id="listing-location"
               value={location}
-              onChange={(event) => setLocation(event.target.value)}
+              onChange={(event) => { resetMutationError(); setLocation(event.target.value); }}
+              disabled={isSubmitting}
               placeholder="For example, Chiang Mai, Hang Dong"
               aria-invalid={Boolean(errors.location)}
               aria-describedby={errors.location ? 'listing-location-error' : undefined}
@@ -142,7 +151,8 @@ export function CreateListingScreen() {
               id="listing-description"
               rows={5}
               value={description}
-              onChange={(event) => setDescription(event.target.value)}
+              onChange={(event) => { resetMutationError(); setDescription(event.target.value); }}
+              disabled={isSubmitting}
               placeholder="Describe the space and the care you can provide"
               aria-invalid={Boolean(errors.description)}
               aria-describedby={errors.description ? 'listing-description-error' : undefined}
@@ -159,7 +169,11 @@ export function CreateListingScreen() {
               min="1"
               step="1"
               value={capacity}
-              onChange={(event) => setCapacity(event.target.value === '' ? '' : Number(event.target.value))}
+              onChange={(event) => {
+                resetMutationError();
+                setCapacity(event.target.value === '' ? '' : Number(event.target.value));
+              }}
+              disabled={isSubmitting}
               aria-invalid={Boolean(errors.capacity)}
               aria-describedby={errors.capacity
                 ? 'listing-capacity-help listing-capacity-error'
@@ -183,6 +197,7 @@ export function CreateListingScreen() {
                     }`}
                     type="button"
                     key={petType.value}
+                    disabled={isSubmitting}
                     aria-pressed={isSelected}
                     onClick={() => toggleChoice(petType.value, acceptedPetTypes, setAcceptedPetTypes)}
                   >
@@ -202,7 +217,11 @@ export function CreateListingScreen() {
                     className="h-4 w-4 accent-brand-600"
                     type="checkbox"
                     checked={facilities.includes(facility)}
-                    onChange={() => toggleChoice(facility, facilities, setFacilities)}
+                    disabled={isSubmitting}
+                    onChange={() => {
+                      resetMutationError();
+                      toggleChoice(facility, facilities, setFacilities);
+                    }}
                   />
                   <span className="break-words">{facility}</span>
                 </label>
@@ -229,6 +248,7 @@ export function CreateListingScreen() {
                     <button
                       className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-white/95 text-red-700 hover:bg-red-50"
                       type="button"
+                      disabled={isSubmitting}
                       onClick={() => removePhoto(photo.previewUrl)}
                       aria-label={`Remove ${photo.file.name}`}
                       title="Remove photo"
@@ -253,6 +273,7 @@ export function CreateListingScreen() {
               type="file"
               accept="image/jpeg,image/png,image/webp,image/gif"
               multiple
+              disabled={isSubmitting}
               onChange={handlePhotoSelection}
             />
           </div>
@@ -264,10 +285,10 @@ export function CreateListingScreen() {
           )}
 
           <div className="grid grid-cols-1 gap-3 pt-1 sm:grid-cols-2">
-            <button className="btn-secondary min-h-11 disabled:cursor-not-allowed disabled:opacity-60" type="button" onClick={() => navigate('/listings')} disabled={isSaving}>Cancel</button>
-            <button className="btn-primary order-first flex min-h-11 items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-60 sm:order-none" type="submit" disabled={isSaving} aria-busy={isSaving}>
-              {isSaving && <LoaderCircle className="h-5 w-5 animate-spin motion-reduce:animate-none" aria-hidden="true" />}
-              {isSaving ? 'Saving...' : 'Save listing'}
+            <button className="btn-secondary min-h-11 disabled:cursor-not-allowed disabled:opacity-60" type="button" onClick={() => navigate('/listings')} disabled={isSubmitting}>Cancel</button>
+            <button className="btn-primary order-first flex min-h-11 items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-60 sm:order-none" type="submit" disabled={isSubmitting} aria-busy={isSubmitting}>
+              {isSubmitting && <LoaderCircle className="h-5 w-5 animate-spin motion-reduce:animate-none" aria-hidden="true" />}
+              {isSubmitting ? 'Saving...' : 'Save listing'}
             </button>
           </div>
         </form>

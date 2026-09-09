@@ -49,6 +49,47 @@ describe('createListing', () => {
     jest.clearAllMocks();
   });
 
+  it('does not start listing creation when authentication returns an error', async () => {
+    const authError = new Error('auth failed');
+    const getUser = jest.fn().mockResolvedValue({ data: { user: null }, error: authError });
+    const from = jest.fn();
+    const storageFrom = jest.fn();
+    mockedGetSupabaseClient.mockReturnValue({ auth: { getUser }, from, storage: { from: storageFrom } } as never);
+
+    await expect(createListing({
+      title: 'A quiet home',
+      location: 'Chiang Mai',
+      description: 'A calm place for pets.',
+      capacity: 2,
+      acceptedPetTypes: ['dog'],
+      facilities: [],
+      photos: [],
+    })).rejects.toThrow('auth failed');
+
+    expect(from).not.toHaveBeenCalled();
+    expect(storageFrom).not.toHaveBeenCalled();
+  });
+
+  it('does not start listing creation without an authenticated user', async () => {
+    const getUser = jest.fn().mockResolvedValue({ data: { user: null }, error: null });
+    const from = jest.fn();
+    const storageFrom = jest.fn();
+    mockedGetSupabaseClient.mockReturnValue({ auth: { getUser }, from, storage: { from: storageFrom } } as never);
+
+    await expect(createListing({
+      title: 'A quiet home',
+      location: 'Chiang Mai',
+      description: 'A calm place for pets.',
+      capacity: 2,
+      acceptedPetTypes: ['dog'],
+      facilities: [],
+      photos: [],
+    })).rejects.toThrow('You must be signed in');
+
+    expect(from).not.toHaveBeenCalled();
+    expect(storageFrom).not.toHaveBeenCalled();
+  });
+
   it('creates a draft listing and stores its photos', async () => {
     const listing = {
       id: 'listing-123',
@@ -239,6 +280,65 @@ describe('createListing', () => {
     })).rejects.toThrow('upload failed');
 
     expect(upload).toHaveBeenCalled();
+  });
+
+  it('removes only previously uploaded photos when a later photo upload fails', async () => {
+    const listing = {
+      id: 'listing-123',
+      owner_id: 'owner-123',
+      title: 'A quiet home',
+      location: 'Chiang Mai',
+      description: 'A calm place for pets.',
+      capacity: 2,
+      accepted_pet_types: ['dog'],
+      facilities: 'Fenced yard',
+      status: 'draft',
+      deleted_at: null,
+      published_at: null,
+      created_at: '2026-09-07T00:00:00.000Z',
+      updated_at: '2026-09-07T00:00:00.000Z',
+    };
+    const single = jest.fn().mockResolvedValue({ data: listing, error: null });
+    const listingSelect = jest.fn().mockReturnValue({ single });
+    const listingInsert = jest.fn().mockReturnValue({ select: listingSelect });
+    const imageInsert = jest.fn();
+    const upload = jest.fn()
+      .mockResolvedValueOnce({ data: { path: 'listing-123/first.jpg' }, error: null })
+      .mockResolvedValueOnce({ data: null, error: new Error('second upload failed') });
+    const remove = jest.fn().mockResolvedValue({ data: [], error: null });
+    const storageFrom = jest.fn().mockReturnValue({ upload, remove });
+    const from = jest.fn((table: string) => {
+      if (table === 'listings') return { insert: listingInsert };
+      if (table === 'listing_images') return { insert: imageInsert };
+      throw new Error(`Unexpected table: ${table}`);
+    });
+    const getUser = jest.fn().mockResolvedValue({
+      data: { user: { id: 'owner-123' } },
+      error: null,
+    });
+
+    mockedGetSupabaseClient.mockReturnValue({
+      auth: { getUser },
+      from,
+      storage: { from: storageFrom },
+    } as never);
+
+    const firstPhoto = new File(['first'], 'first.jpg', { type: 'image/jpeg' });
+    const secondPhoto = new File(['second'], 'second.jpg', { type: 'image/jpeg' });
+    await expect(createListing({
+      title: 'A quiet home',
+      location: 'Chiang Mai',
+      description: 'A calm place for pets.',
+      capacity: 2,
+      acceptedPetTypes: ['dog'],
+      facilities: ['Fenced yard'],
+      photos: [firstPhoto, secondPhoto],
+    })).rejects.toThrow('second upload failed');
+
+    expect(remove).toHaveBeenCalledWith([upload.mock.calls[0][0]]);
+    expect(remove.mock.calls[0][0]).not.toContain(upload.mock.calls[1]?.[0]);
+    expect(imageInsert).not.toHaveBeenCalled();
+    expect(listingInsert).toHaveBeenCalledWith(expect.objectContaining({ status: 'draft' }));
   });
 
   it('reports a photo cleanup failure while leaving the listing as a draft', async () => {

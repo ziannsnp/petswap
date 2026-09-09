@@ -88,6 +88,8 @@ Rebuild and seed the local database:
 npx supabase db reset
 ```
 
+The seed creates local-only test accounts (`alex@petswap.test`, `blair@petswap.test`, `casey@petswap.test`, password `petswap-local-dev`) plus deterministic pets, listings, and bookings in every status. See [`supabase/README.md`](../supabase/README.md).
+
 Inspect local Studio:
 
 ```text
@@ -121,7 +123,7 @@ For database review, inspect:
 - Listing owners can confirm, decline, or complete incoming bookings through valid transitions.
 - Confirmed bookings cannot overlap for the same listing, and back-to-back dates are allowed.
 
-The SQL smoke checks in `supabase/tests/database_contract.sql` are intentionally simple contract checks. Use Supabase Studio, SQL editor JWT impersonation, or API-level tests for actor-specific RLS review until end-to-end auth flows are automated.
+The SQL checks in `supabase/tests/` (`database_contract.sql` and `booking_rules.test.sql`) run these as an automated gate — locally after a reset, or in CI via [ci-cd.md](ci-cd.md#database-contract-workflow). Use Supabase Studio, SQL editor JWT impersonation, or API-level tests for actor-specific RLS review until end-to-end auth flows are automated.
 
 ## Hosted push workflow
 

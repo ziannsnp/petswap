@@ -1,5 +1,6 @@
 import { Home, Image, Plus } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { useAuth } from '@/features/auth';
 import { useMyListings } from '../hooks/useListings';
 import type { Listing } from '../lib/listingApi';
 import { ListingsNavigation } from './ListingsNavigation';
@@ -49,7 +50,8 @@ function ListingCard({ listing }: { listing: Listing }) {
 }
 
 export function ListingsScreen() {
-  const { data: listings = [], isPending, isError } = useMyListings();
+  const { user } = useAuth();
+  const { data: listings = [], isPending, isError } = useMyListings(user?.id);
   const activeListings = listings.filter((listing) => listing.status !== 'deleted');
 
   return (

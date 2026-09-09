@@ -35,22 +35,11 @@ export async function listPublishedListings(): Promise<Listing[]> {
   return (data ?? []).map(addCoverPhotoUrl);
 }
 
-export async function listMyListings(): Promise<Listing[]> {
-  const supabase = getSupabaseClient();
-  const { data: userData, error: userError } = await supabase.auth.getUser();
-
-  if (userError) {
-    throw userError;
-  }
-
-  if (!userData.user) {
-    return [];
-  }
-
-  const { data, error } = await supabase
+export async function listMyListings(ownerId: string): Promise<Listing[]> {
+  const { data, error } = await getSupabaseClient()
     .from('listings')
     .select('*, listing_images(*)')
-    .eq('owner_id', userData.user.id)
+    .eq('owner_id', ownerId)
     .order('created_at', { ascending: false });
 
   if (error) {

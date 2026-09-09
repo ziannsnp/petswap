@@ -4,9 +4,9 @@ import { ArrowLeft, ImagePlus, LoaderCircle, X } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { validateListingForm } from '../lib/listingForm';
 import type { ListingFormErrors } from '../lib/listingForm';
+import { PET_TYPE_OPTIONS, type PetSpecies } from '../lib/listingOptions';
 import { ListingsNavigation } from './ListingsNavigation';
 
-const PET_TYPES = ['Dog', 'Cat', 'Rabbit', 'Bird'];
 const FACILITIES = [
   'Fenced yard',
   'Air conditioning',
@@ -27,6 +27,10 @@ function inputClassName(hasError: boolean) {
   return `input-field ${hasError ? 'border-red-500 focus:ring-red-300' : ''}`;
 }
 
+function toggleChoice<T extends string>(value: T, selected: T[], update: (next: T[]) => void) {
+  update(selected.includes(value) ? selected.filter((item) => item !== value) : [...selected, value]);
+}
+
 export function CreateListingScreen() {
   const navigate = useNavigate();
   const previewUrls = useRef<string[]>([]);
@@ -34,7 +38,7 @@ export function CreateListingScreen() {
   const [location, setLocation] = useState('');
   const [description, setDescription] = useState('');
   const [capacity, setCapacity] = useState<number | ''>(1);
-  const [acceptedPetTypes, setAcceptedPetTypes] = useState<string[]>(['Dog']);
+  const [acceptedPetTypes, setAcceptedPetTypes] = useState<PetSpecies[]>(['dog']);
   const [facilities, setFacilities] = useState<string[]>([]);
   const [photos, setPhotos] = useState<SelectedPhoto[]>([]);
   const [errors, setErrors] = useState<ListingFormErrors>({});
@@ -44,10 +48,6 @@ export function CreateListingScreen() {
   useEffect(() => () => {
     previewUrls.current.forEach((url) => URL.revokeObjectURL(url));
   }, []);
-
-  const toggleChoice = (value: string, selected: string[], update: (next: string[]) => void) => {
-    update(selected.includes(value) ? selected.filter((item) => item !== value) : [...selected, value]);
-  };
 
   const handlePhotoSelection = (event: ChangeEvent<HTMLInputElement>) => {
     const selectedPhotos = Array.from(event.target.files ?? []).map((file) => {
@@ -158,8 +158,8 @@ export function CreateListingScreen() {
           <fieldset>
             <legend className={labelClassName}>Accepted pet types</legend>
             <div className="flex flex-wrap gap-2">
-              {PET_TYPES.map((petType) => {
-                const isSelected = acceptedPetTypes.includes(petType);
+              {PET_TYPE_OPTIONS.map(({ value, label }) => {
+                const isSelected = acceptedPetTypes.includes(value);
                 return (
                   <button
                     className={`min-h-10 rounded-lg border px-4 py-2 text-sm transition-colors ${
@@ -168,11 +168,11 @@ export function CreateListingScreen() {
                         : 'border-gray-200 bg-white text-gray-700 hover:border-brand-500 hover:bg-brand-50'
                     }`}
                     type="button"
-                    key={petType}
+                    key={value}
                     aria-pressed={isSelected}
-                    onClick={() => toggleChoice(petType, acceptedPetTypes, setAcceptedPetTypes)}
+                    onClick={() => toggleChoice(value, acceptedPetTypes, setAcceptedPetTypes)}
                   >
-                    {petType}
+                    {label}
                   </button>
                 );
               })}

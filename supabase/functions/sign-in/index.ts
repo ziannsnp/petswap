@@ -4,6 +4,21 @@ const productionOrigin = 'https://petswap-web.zianporrutai.workers.dev';
 const previewOriginPattern = /^https:\/\/[a-z0-9-]+-petswap-web\.zianporrutai\.workers\.dev$/;
 const localOrigins = new Set(['http://localhost:5173', 'http://127.0.0.1:5173']);
 const usernamePattern = /^[a-z0-9_]{3,30}$/;
+const supabaseUrl = Deno.env.get('SUPABASE_URL');
+const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
+const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+const adminClient =
+  supabaseUrl && serviceRoleKey
+    ? createClient(supabaseUrl, serviceRoleKey, {
+        auth: { autoRefreshToken: false, persistSession: false },
+      })
+    : null;
+const authClient =
+  supabaseUrl && anonKey
+    ? createClient(supabaseUrl, anonKey, {
+        auth: { autoRefreshToken: false, persistSession: false },
+      })
+    : null;
 
 type ErrorCode = 'INVALID_CREDENTIALS' | 'EMAIL_NOT_CONFIRMED' | 'RATE_LIMITED' | 'UNKNOWN';
 
@@ -65,17 +80,9 @@ Deno.serve(async (request) => {
     return errorResponse('INVALID_CREDENTIALS', 400, origin);
   }
 
-  const supabaseUrl = Deno.env.get('SUPABASE_URL');
-  const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
-  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-
-  if (!supabaseUrl || !anonKey || !serviceRoleKey) {
+  if (!adminClient || !authClient) {
     return errorResponse('UNKNOWN', 500, origin);
   }
-
-  const adminClient = createClient(supabaseUrl, serviceRoleKey, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
 
   const { data: profile, error: profileError } = await adminClient
     .from('profiles')
@@ -93,12 +100,12 @@ Deno.serve(async (request) => {
     if (error) {
       return errorResponse('UNKNOWN', 500, origin);
     }
+    if (!data.user) {
+      return errorResponse('INVALID_CREDENTIALS', 401, origin);
+    }
     email = data.user.email ?? email;
   }
 
-  const authClient = createClient(supabaseUrl, anonKey, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
   const { data, error } = await authClient.auth.signInWithPassword({ email, password });
 
   if (error) {

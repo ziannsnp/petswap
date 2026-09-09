@@ -35,6 +35,8 @@ export interface SignInResult {
 export type SignInErrorCode =
   | 'INVALID_CREDENTIALS'
   | 'INVALID_IDENTIFIER'
+  | 'PASSWORD_REQUIRED'
   | 'EMAIL_NOT_CONFIRMED'
   | 'RATE_LIMITED'
+  | 'NETWORK'
   | 'UNKNOWN';

@@ -1,7 +1,15 @@
+create or replace function public.is_valid_username(candidate_username text)
+returns boolean
+language sql
+immutable
+as $$
+  select candidate_username = lower(candidate_username)
+    and candidate_username ~ '^[a-z0-9_]{3,30}$';
+$$;
+
 alter table public.profiles
   add constraint profiles_username_format_check check (
-    username = lower(username)
-    and username ~ '^[a-z0-9_]{3,30}$'
+    public.is_valid_username(username)
   );
 
 create or replace function public.is_username_available(candidate_username text)
@@ -12,8 +20,7 @@ security definer
 set search_path = ''
 as $$
   select
-    candidate_username = lower(candidate_username)
-    and candidate_username ~ '^[a-z0-9_]{3,30}$'
+    public.is_valid_username(candidate_username)
     and not exists (
       select 1
       from public.profiles

@@ -1,6 +1,7 @@
 import { getSupabaseClient } from '@/shared/lib/supabase';
 import { CURRENT_CONSENT_VERSION } from '@/features/consent';
 import {
+  FunctionsFetchError,
   isAuthRetryableFetchError,
   type AuthError,
   type Session,
@@ -14,6 +15,7 @@ import type {
   SignUpInput,
   SignUpResult,
 } from '../types';
+import { isValidPassword } from './password';
 import { isValidUsername, normalizeUsername, USERNAME_REQUIREMENTS_MESSAGE } from './username';
 
 const SIGN_UP_ERROR_MESSAGES: Record<SignUpErrorCode, string> = {
@@ -30,8 +32,10 @@ const SIGN_UP_ERROR_MESSAGES: Record<SignUpErrorCode, string> = {
 const SIGN_IN_ERROR_MESSAGES: Record<SignInErrorCode, string> = {
   INVALID_CREDENTIALS: 'Username/email or password is incorrect.',
   INVALID_IDENTIFIER: 'Enter a valid email address or username.',
+  PASSWORD_REQUIRED: 'Enter your password.',
   EMAIL_NOT_CONFIRMED: 'Confirm your email address before signing in.',
   RATE_LIMITED: 'Too many attempts. Please try again later.',
+  NETWORK: 'Unable to connect. Check your internet connection and try again.',
   UNKNOWN: "We couldn't sign you in. Please try again.",
 };
 
@@ -85,6 +89,10 @@ export function translateSignUpError(error: AuthError): SignUpError {
 }
 
 export function translateSignInError(error: AuthError): SignInError {
+  if (isAuthRetryableFetchError(error)) {
+    return new SignInError('NETWORK');
+  }
+
   switch (error.code) {
     case 'invalid_credentials':
       return new SignInError('INVALID_CREDENTIALS');
@@ -98,6 +106,10 @@ export function translateSignInError(error: AuthError): SignInError {
 }
 
 async function translateFunctionError(error: unknown): Promise<SignInError> {
+  if (error instanceof FunctionsFetchError) {
+    return new SignInError('NETWORK');
+  }
+
   const context = (error as { context?: unknown } | null)?.context;
 
   if (context instanceof Response) {
@@ -120,6 +132,10 @@ export async function signUp(input: SignUpInput): Promise<SignUpResult> {
 
   if (!isValidUsername(username)) {
     throw new SignUpError('INVALID_USERNAME');
+  }
+
+  if (!isValidPassword(input.password)) {
+    throw new SignUpError('WEAK_PASSWORD');
   }
 
   const supabase = getSupabaseClient();
@@ -149,6 +165,14 @@ export async function signUp(input: SignUpInput): Promise<SignUpResult> {
   });
 
   if (error) {
+    if (error.code === 'unexpected_failure') {
+      const { data: usernameAvailable } = await supabase.rpc('is_username_available', {
+        candidate_username: username,
+      });
+      if (!usernameAvailable) {
+        throw new SignUpError('USERNAME_ALREADY_USED');
+      }
+    }
     throw translateSignUpError(error);
   }
 
@@ -165,8 +189,12 @@ export async function signUp(input: SignUpInput): Promise<SignUpResult> {
 export async function signIn(input: SignInInput): Promise<SignInResult> {
   const identifier = input.identifier.trim();
 
-  if (!identifier || !input.password) {
+  if (!identifier) {
     throw new SignInError('INVALID_IDENTIFIER');
+  }
+
+  if (!input.password) {
+    throw new SignInError('PASSWORD_REQUIRED');
   }
 
   if (identifier.includes('@')) {

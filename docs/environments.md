@@ -76,17 +76,13 @@ Use only the local anon/publishable key. Service-role keys are for trusted serve
 
 The `sign-in` Edge Function resolves usernames without exposing Auth email addresses. Supabase provides `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` to the function runtime; do not copy the service-role value into `web/.env.local`. Serve it locally with:
 
-In the hosted Supabase Dashboard, configure Auth password security with a minimum length of 8 and require lowercase letters, uppercase letters, digits, and symbols. The browser additionally limits passwords to printable ASCII without spaces. Browser validation is user feedback only; enforce every policy supported by hosted Auth in the Supabase Dashboard.
-
 ```bash
 npx supabase functions serve sign-in --no-verify-jwt
 ```
 
-After its migration and function are reviewed, deploy it with:
+Do not deploy the `sign-in` Edge Function to the shared hosted project yourself. Hosted releases belong to the team's CI/CD process; see [CI/CD](ci-cd.md). The checked-in workflow currently deploys database migrations only. Edge Function deployment still needs to be added to that workflow before function releases are automated.
 
-```bash
-npx supabase functions deploy sign-in --no-verify-jwt
-```
+In the hosted Supabase Dashboard, configure Auth password security with a minimum length of 8 and require lowercase letters, uppercase letters, digits, and symbols. The browser additionally limits passwords to printable ASCII without spaces. Browser validation is user feedback only; enforce every policy supported by hosted Auth in the Supabase Dashboard.
 
 ## Daily commands
 

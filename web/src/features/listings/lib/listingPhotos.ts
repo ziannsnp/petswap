@@ -23,9 +23,17 @@ export const LISTING_PHOTO_MIME_TYPES = [
 /** The parts of `File` the rules depend on, so callers can be tested without one. */
 export type SelectableFile = Pick<File, 'name' | 'type' | 'size'>;
 
+/**
+ * A `file` reason describes the file itself, so it stays true for as long as that file is
+ * offered. A `capacity` reason describes how full the listing was at the time, so it stops
+ * being true the moment a photo is removed.
+ */
+export type ListingPhotoRejectionKind = 'file' | 'capacity';
+
 export interface RejectedListingPhoto {
   fileName: string;
   reason: string;
+  kind: ListingPhotoRejectionKind;
 }
 
 export interface PartitionedListingPhotos<T extends SelectableFile> {
@@ -37,7 +45,7 @@ function describeLimit(): string {
   return `${LISTING_PHOTO_MAX_BYTES / 1_048_576} MB`;
 }
 
-function rejectionReason(file: SelectableFile): string | null {
+function fileReason(file: SelectableFile): string | null {
   if (!(LISTING_PHOTO_MIME_TYPES as readonly string[]).includes(file.type)) {
     return 'Unsupported file type. Choose a JPG, PNG, WebP, or GIF file.';
   }
@@ -63,9 +71,9 @@ export function partitionListingPhotos<T extends SelectableFile>(
   const rejected: RejectedListingPhoto[] = [];
 
   for (const file of files) {
-    const reason = rejectionReason(file);
+    const reason = fileReason(file);
     if (reason) {
-      rejected.push({ fileName: file.name, reason });
+      rejected.push({ fileName: file.name, reason, kind: 'file' });
       continue;
     }
 
@@ -73,6 +81,7 @@ export function partitionListingPhotos<T extends SelectableFile>(
       rejected.push({
         fileName: file.name,
         reason: `A listing can have at most ${LISTING_PHOTO_MAX_COUNT} photos.`,
+        kind: 'capacity',
       });
       continue;
     }

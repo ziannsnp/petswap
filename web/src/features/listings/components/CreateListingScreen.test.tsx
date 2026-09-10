@@ -160,6 +160,62 @@ describe('CreateListingScreen', () => {
     expect(screen.getAllByRole('img')).toHaveLength(LISTING_PHOTO_MAX_COUNT);
   });
 
+  it('clears the cap message once a photo is removed', async () => {
+    const user = userEvent.setup();
+    renderScreen();
+
+    // 1. select ten photos
+    await user.upload(
+      screen.getByLabelText(/add listing photos/i),
+      Array.from({ length: LISTING_PHOTO_MAX_COUNT }, (_, index) =>
+        fileOfSize(`photo-${index}.jpg`, 'image/jpeg', 1024)),
+    );
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+
+    // 2. select an eleventh
+    await user.upload(
+      screen.getByLabelText(/add more/i),
+      fileOfSize('eleventh.jpg', 'image/jpeg', 1024),
+    );
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'eleventh.jpg: A listing can have at most 10 photos.',
+    );
+
+    // 3. remove one of the photos the form already holds
+    await user.click(screen.getByRole('button', { name: 'Remove photo-0.jpg' }));
+
+    // 4. the cap message is gone now that there is room again
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getAllByRole('img')).toHaveLength(LISTING_PHOTO_MAX_COUNT - 1);
+  });
+
+  it('keeps a reason about the file after a removal but drops the capacity one', async () => {
+    const user = userEvent.setup();
+    renderScreen();
+
+    // One selection that produces both kinds: the PDF is rejected on its own merits, and
+    // extra.jpg only because ten photos were already accepted ahead of it.
+    fireEvent.change(screen.getByLabelText(/add listing photos/i), {
+      target: {
+        files: [
+          ...Array.from({ length: LISTING_PHOTO_MAX_COUNT }, (_, index) =>
+            fileOfSize(`photo-${index}.jpg`, 'image/jpeg', 1024)),
+          fileOfSize('notes.pdf', 'application/pdf', 512),
+          fileOfSize('extra.jpg', 'image/jpeg', 1024),
+        ],
+      },
+    });
+
+    expect(screen.getByRole('alert')).toHaveTextContent('notes.pdf: Unsupported file type.');
+    expect(screen.getByRole('alert')).toHaveTextContent('extra.jpg: A listing can have at most 10 photos.');
+
+    await user.click(screen.getByRole('button', { name: 'Remove photo-0.jpg' }));
+
+    // notes.pdf is still a PDF, so that reason stays; the listing is no longer full.
+    expect(screen.getByRole('alert')).toHaveTextContent('notes.pdf: Unsupported file type.');
+    expect(screen.queryByText(/at most 10 photos/)).not.toBeInTheDocument();
+  });
+
   it('labels pet types for people while tracking the pet_species value', async () => {
     const user = userEvent.setup();
     renderScreen();

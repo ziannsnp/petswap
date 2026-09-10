@@ -36,6 +36,7 @@ describe('partitionListingPhotos', () => {
         {
           fileName: 'notes.pdf',
           reason: 'Unsupported file type. Choose a JPG, PNG, WebP, or GIF file.',
+          kind: 'file',
         },
       ],
     });
@@ -46,7 +47,9 @@ describe('partitionListingPhotos', () => {
 
     expect(partitionListingPhotos([oversized])).toEqual({
       accepted: [],
-      rejected: [{ fileName: 'huge.png', reason: 'Larger than the 10 MB limit.' }],
+      rejected: [
+        { fileName: 'huge.png', reason: 'Larger than the 10 MB limit.', kind: 'file' },
+      ],
     });
   });
 });
@@ -61,8 +64,8 @@ describe('partitionListingPhotos photo cap', () => {
 
     expect(accepted).toHaveLength(LISTING_PHOTO_MAX_COUNT);
     expect(rejected).toEqual([
-      { fileName: 'photo-10.jpg', reason: 'A listing can have at most 10 photos.' },
-      { fileName: 'photo-11.jpg', reason: 'A listing can have at most 10 photos.' },
+      { fileName: 'photo-10.jpg', reason: 'A listing can have at most 10 photos.', kind: 'capacity' },
+      { fileName: 'photo-11.jpg', reason: 'A listing can have at most 10 photos.', kind: 'capacity' },
     ]);
   });
 
@@ -74,7 +77,7 @@ describe('partitionListingPhotos photo cap', () => {
 
     expect(accepted.map((file) => file.name)).toEqual(['ninth.jpg', 'tenth.jpg']);
     expect(rejected).toEqual([
-      { fileName: 'eleventh.jpg', reason: 'A listing can have at most 10 photos.' },
+      { fileName: 'eleventh.jpg', reason: 'A listing can have at most 10 photos.', kind: 'capacity' },
     ]);
   });
 
@@ -85,7 +88,20 @@ describe('partitionListingPhotos photo cap', () => {
       {
         fileName: 'notes.pdf',
         reason: 'Unsupported file type. Choose a JPG, PNG, WebP, or GIF file.',
+        kind: 'file',
       },
+    ]);
+  });
+
+  it('labels a full listing as capacity and a bad file as file', () => {
+    const { rejected } = partitionListingPhotos(
+      [photo('notes.pdf', 'application/pdf', 512), photo('extra.jpg', 'image/jpeg', 1024)],
+      LISTING_PHOTO_MAX_COUNT,
+    );
+
+    expect(rejected.map((r) => [r.fileName, r.kind])).toEqual([
+      ['notes.pdf', 'file'],
+      ['extra.jpg', 'capacity'],
     ]);
   });
 });

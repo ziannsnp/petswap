@@ -69,6 +69,9 @@ export function CreateListingScreen() {
     URL.revokeObjectURL(previewUrl);
     previewUrls.current = previewUrls.current.filter((url) => url !== previewUrl);
     setPhotos((current) => current.filter((photo) => photo.previewUrl !== previewUrl));
+    // A capacity reason stops being true the moment a photo is removed. Reasons about the
+    // files themselves are still accurate, so they stay on screen.
+    setRejectedPhotos((current) => current.filter((rejected) => rejected.kind !== 'capacity'));
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {

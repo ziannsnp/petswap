@@ -13,6 +13,7 @@ import { isValidPassword, PASSWORD_REQUIREMENTS_MESSAGE } from '../lib/password'
 import type { SignUpErrorCode } from '../types';
 
 const CONSENT_REQUIRED_MESSAGE = 'You must accept the Terms of Service and Privacy Policy.';
+const PASSWORD_MISMATCH_MESSAGE = 'Both passwords must match.';
 const INCOMPLETE_MESSAGE = 'Complete all required fields.';
 const GENERIC_FAILURE_MESSAGE = "We couldn't create your account. Please try again.";
 
@@ -73,7 +74,7 @@ function collectFieldErrors(values: RegistrationValues): FieldErrors {
   if (!values.passwordConfirmation) {
     errors.passwordConfirmation = 'Re-enter your password.';
   } else if (values.passwordConfirmation !== values.password) {
-    errors.passwordConfirmation = 'Both passwords must match.';
+    errors.passwordConfirmation = PASSWORD_MISMATCH_MESSAGE;
   }
 
   if (!displayName) {
@@ -147,22 +148,27 @@ export function RegisterScreen() {
     setConfirmationSent(false);
     setValidationSummary(null);
     setFieldErrors((current) => {
-      // The mismatch is a relation between the two password boxes but is recorded on
-      // the confirmation, so editing either one has to retract it.
-      const related: FieldName[] =
-        field === 'password' || field === 'passwordConfirmation'
-          ? ['password', 'passwordConfirmation']
-          : [field];
-
-      if (!related.some((name) => name in current)) {
-        return current;
-      }
-
       const next = { ...current };
-      for (const name of related) {
-        delete next[name];
+      let changed = false;
+
+      if (field in next) {
+        delete next[field];
+        changed = true;
       }
-      return next;
+
+      // The mismatch is the one complaint that depends on both boxes, so editing
+      // either resolves it. A strength complaint on `password` is not a relation and
+      // has to survive edits to the confirmation — otherwise typing there would
+      // retract a rule the password still breaks.
+      if (
+        (field === 'password' || field === 'passwordConfirmation') &&
+        next.passwordConfirmation === PASSWORD_MISMATCH_MESSAGE
+      ) {
+        delete next.passwordConfirmation;
+        changed = true;
+      }
+
+      return changed ? next : current;
     });
   }
 

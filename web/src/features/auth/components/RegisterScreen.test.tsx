@@ -327,6 +327,27 @@ describe('RegisterScreen', () => {
     expect(screen.getByLabelText(/email/i)).toHaveAttribute('aria-invalid', 'true');
   });
 
+  it('keeps the password strength error while the user edits the confirmation', async () => {
+    const user = userEvent.setup();
+    mockedUseSignUp.mockReturnValue(mutationResult());
+    renderForm();
+
+    await user.type(screen.getByLabelText(/email/i), 'pet@example.com');
+    await user.type(screen.getByLabelText(/username/i), 'pat_sitter');
+    await user.type(screen.getByLabelText(/^password$/i), 'abcdef');
+    await user.type(screen.getByLabelText(/confirm password/i), 'abcdef');
+    await user.type(screen.getByLabelText(/display name/i), 'Pat');
+    await user.click(screen.getByRole('checkbox'));
+    await user.click(screen.getByRole('button', { name: /create account/i }));
+
+    expect(screen.getByLabelText(/^password$/i)).toHaveAttribute('aria-invalid', 'true');
+
+    // The password is still too weak; only the mismatch depends on this box.
+    await user.type(screen.getByLabelText(/confirm password/i), 'g');
+
+    expect(screen.getByLabelText(/^password$/i)).toHaveAttribute('aria-invalid', 'true');
+  });
+
   it('retracts the password mismatch when either password box is edited', async () => {
     const user = userEvent.setup();
     mockedUseSignUp.mockReturnValue(mutationResult());

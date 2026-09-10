@@ -111,17 +111,17 @@ values
   ('30000000-0000-4000-8000-000000000003', '10000000-0000-4000-8000-000000000002',
    'Countryside cottage', 'Bangkok',
    'Large open space and a big fenced field for dogs to run.',
-   3, array['dog', 'rabbit'], 'Fenced field, indoor pen, daily walks',
+  3, array['dog', 'rabbit']::public.pet_species[], 'Fenced field, indoor pen, daily walks',
    'published', now(), null),
   ('30000000-0000-4000-8000-000000000004', '10000000-0000-4000-8000-000000000001',
    'Beach house (draft)', 'Phuket',
    'Not published yet - used to check that drafts stay private.',
-   2, array['dog'], null,
+  2, array['dog']::public.pet_species[], null,
    'draft', null, null),
   ('30000000-0000-4000-8000-000000000005', '10000000-0000-4000-8000-000000000002',
    'Retired listing', 'Bangkok',
    'Soft-deleted row - used to check that deleted listings never appear.',
-   1, array['cat'], null,
+  1, array['cat']::public.pet_species[], null,
    'deleted', null, now())
 on conflict (id) do nothing;
 

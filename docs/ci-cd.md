@@ -19,6 +19,10 @@ The same workflow also verifies that Markdown links under docs resolve. No pull 
 
 It is deliberately separate from `Quality` and not a required check: it starts containers and is slower, and [testing.md](testing.md) keeps live-service checks out of the required gate. A red run still blocks merging a schema change — the person changing the schema owns fixing it. Promote it to a required check only if the team decides the extra minutes are worth it.
 
+## E2E smoke workflow
+
+`.github/workflows/e2e-smoke.yml` runs the Playwright smoke suite (`web/e2e/smoke.spec.ts`) on desktop and mobile Chromium for every `web/**` change and on demand. It builds a browser and starts the dev server, so it is a separate, non-required workflow rather than part of `Quality`. A red run means the app shell or router regressed and the change author owns the fix. The full Playwright journey (`booking-flow.spec.ts`) stays skipped until its screens exist; see [testing.md](testing.md).
+
 ## Main branch protection
 
 The protected `main` branch is the only shared integration branch. GitHub requires a pull request, one approving review, current Quality checks, and resolution of review conversations before merge. New commits dismiss earlier approvals; administrators follow the same rules. Direct pushes, force pushes, and branch deletion are blocked.

@@ -2,7 +2,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { PropsWithChildren } from 'react';
-import { getSupabaseClient } from '@/shared/lib/supabase';
+import { getSupabaseClient, isSupabaseConfigured } from '@/shared/lib/supabase';
 import { getCurrentSession, signOut } from '../lib/authApi';
 import { AuthProvider } from '../components/AuthProvider';
 import { useAuth } from './useAuth';
@@ -14,11 +14,13 @@ jest.mock('../lib/authApi', () => ({
 
 jest.mock('@/shared/lib/supabase', () => ({
   getSupabaseClient: jest.fn(),
+  isSupabaseConfigured: jest.fn(() => true),
 }));
 
 const mockedGetCurrentSession = jest.mocked(getCurrentSession);
 const mockedSignOut = jest.mocked(signOut);
 const mockedGetSupabaseClient = jest.mocked(getSupabaseClient);
+const mockedIsSupabaseConfigured = jest.mocked(isSupabaseConfigured);
 
 function createWrapper(queryClient: QueryClient) {
   return function AuthWrapper({ children }: PropsWithChildren) {
@@ -233,5 +235,21 @@ describe('useAuth and AuthProvider', () => {
 
     unmount();
     expect(unsubscribeMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('handles unconfigured Supabase environment gracefully without throwing', () => {
+    mockedIsSupabaseConfigured.mockReturnValue(false);
+
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { result } = renderHook(() => useAuth(), { wrapper: createWrapper(queryClient) });
+
+    expect(result.current.isLoading).toBe(false);
+    expect(result.current.isAuthenticated).toBe(false);
+    expect(result.current.user).toBeNull();
+    expect(result.current.session).toBeNull();
+    expect(result.current.error).toBeNull();
+
+    expect(mockedGetSupabaseClient).not.toHaveBeenCalled();
+    expect(mockedGetCurrentSession).not.toHaveBeenCalled();
   });
 });

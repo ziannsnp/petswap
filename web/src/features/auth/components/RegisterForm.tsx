@@ -3,11 +3,18 @@ import { PawPrint } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useSignUp } from '../hooks/useSignUp';
 import { SignUpError } from '../lib/authApi';
+import {
+  isValidUsername,
+  normalizeUsername,
+  USERNAME_REQUIREMENTS_MESSAGE,
+} from '../lib/username';
+import { isValidPassword, PASSWORD_REQUIREMENTS_MESSAGE } from '../lib/password';
 
 export function RegisterForm() {
   const navigate = useNavigate();
   const signUpMutation = useSignUp();
   const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [acceptedTerms, setAcceptedTerms] = useState(false);
@@ -19,8 +26,18 @@ export function RegisterForm() {
     setValidationError(null);
     setConfirmationSent(false);
 
-    if (!email.trim() || !password || !displayName.trim()) {
+    if (!email.trim() || !username.trim() || !password || !displayName.trim()) {
       setValidationError('Complete all required fields.');
+      return;
+    }
+
+    if (!isValidUsername(username)) {
+      setValidationError(USERNAME_REQUIREMENTS_MESSAGE);
+      return;
+    }
+
+    if (!isValidPassword(password)) {
+      setValidationError(PASSWORD_REQUIREMENTS_MESSAGE);
       return;
     }
 
@@ -30,7 +47,12 @@ export function RegisterForm() {
     }
 
     try {
-      const { session } = await signUpMutation.mutateAsync({ email, password, displayName });
+      const { session } = await signUpMutation.mutateAsync({
+        email,
+        username: normalizeUsername(username),
+        password,
+        displayName,
+      });
 
       if (session) {
         void navigate('/profile', { replace: true });
@@ -80,6 +102,22 @@ export function RegisterForm() {
           </div>
 
           <div>
+            <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-1">
+              Username
+            </label>
+            <input
+              id="username"
+              type="text"
+              value={username}
+              onChange={(event) => setUsername(event.target.value)}
+              placeholder="your_username"
+              className="input-field"
+              autoComplete="username"
+              required
+            />
+          </div>
+
+          <div>
             <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
               Password
             </label>
@@ -91,8 +129,13 @@ export function RegisterForm() {
               placeholder="••••••••"
               className="input-field"
               autoComplete="new-password"
+              aria-describedby="password-requirements"
+              minLength={8}
               required
             />
+            <p id="password-requirements" className="mt-1 text-xs text-gray-500">
+              At least 8 characters with lowercase, uppercase, number, and special characters.
+            </p>
           </div>
 
           <div>

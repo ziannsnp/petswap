@@ -74,6 +74,33 @@ cp web/.env.example web/.env.local
 
 Use only the local anon/publishable key. Service-role keys are for trusted server processes only and must not appear in browser env vars, committed docs, screenshots, or client code.
 
+The `sign-in` Edge Function resolves usernames without exposing Auth email addresses. Supabase provides `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` to the function runtime; do not copy the service-role value into `web/.env.local`. Serve it locally with:
+
+```bash
+cp supabase/functions/.env.example supabase/functions/.env.local
+npx supabase functions serve sign-in --no-verify-jwt --env-file supabase/functions/.env.local
+```
+
+The function's CORS configuration belongs to the Edge Function environment, not
+`web/.env.local` or `VITE_*` variables:
+
+- `SIGN_IN_ALLOWED_ORIGINS`: comma-separated exact origins without trailing slashes.
+  Include production and any localhost origins that this environment should accept.
+- `SIGN_IN_PREVIEW_HOSTNAME_SUFFIX`: optional hostname suffix, including the leading
+  hyphen (for example, `-petswap-web.zianporrutai.workers.dev`). Only HTTPS preview
+  origins with an alphanumeric/hyphen prefix and the default port are accepted.
+  Leave it empty to disable previews.
+
+Configure these values in the hosted Edge Function environment before releasing this
+change. The example preserves the existing production, preview, and localhost access;
+omit localhost entries where local browser access is unnecessary. Without either
+setting, browser origins are denied. Requests without an Origin header remain accepted
+and receive no `Access-Control-Allow-Origin` header.
+
+Do not deploy the `sign-in` Edge Function to the shared hosted project yourself. Hosted releases belong to the team's CI/CD process; see [CI/CD](ci-cd.md). The checked-in workflow currently deploys database migrations only. Edge Function deployment still needs to be added to that workflow before function releases are automated.
+
+In the hosted Supabase Dashboard, configure Auth password security with a minimum length of 8 and require lowercase letters, uppercase letters, digits, and symbols. The browser additionally limits passwords to printable ASCII without spaces. Browser validation is user feedback only; enforce every policy supported by hosted Auth in the Supabase Dashboard.
+
 ## Daily commands
 
 Create a migration:

@@ -223,6 +223,10 @@ export type Database = {
     };
     Views: Record<string, never>;
     Functions: {
+      is_username_available: {
+        Args: { candidate_username: string };
+        Returns: boolean;
+      };
       current_user_owns_listing: {
         Args: { target_listing_id: string };
         Returns: boolean;

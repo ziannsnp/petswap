@@ -1,5 +1,5 @@
 import { createBrowserRouter } from 'react-router-dom';
-import { AuthScreen, ProtectedRoute, RegisterForm } from '@/features/auth';
+import { AuthScreen, ProtectedRoute, RegisterScreen } from '@/features/auth';
 import { BookingsScreen } from '@/features/bookings';
 import { CreateListingScreen, ListingsScreen } from '@/features/listings';
 import { PrivacyNoticeScreen, TermsOfServiceScreen } from '@/features/consent';
@@ -12,7 +12,7 @@ export const router = createBrowserRouter([
   // Public routes
   { path: '/', Component: SearchScreen },
   { path: '/login', Component: AuthScreen },
-  { path: '/register', Component: RegisterForm },
+  { path: '/register', Component: RegisterScreen },
   { path: '/privacy', Component: PrivacyNoticeScreen },
   { path: '/terms', Component: TermsOfServiceScreen },
 

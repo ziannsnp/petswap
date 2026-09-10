@@ -33,7 +33,7 @@ unprotected.
 | End-to-end flow | Playwright | Cover login → booking request → confirmation → status verification once Supabase test data is available. |
 | Manual UI checks | Markdown evidence | Squad B records listing/search cases; QA records regressions using the template. |
 
-[`RegisterForm.test.tsx`](../web/src/features/auth/components/RegisterForm.test.tsx) and
+[`RegisterScreen.test.tsx`](../web/src/features/auth/components/RegisterScreen.test.tsx) and
 [`ProtectedRoute.test.tsx`](../web/src/features/auth/components/ProtectedRoute.test.tsx) are the
 starter convention for the component layer: mock the hook the component directly imports
 (`useSignUp`, `useAuth`) rather than the Supabase client underneath it, and assert on

@@ -107,12 +107,13 @@ function summarize(values: RegistrationValues, errors: FieldErrors): string | nu
     errors.username ??
     errors.password ??
     errors.passwordConfirmation ??
+    errors.displayName ??
     errors.acceptedTerms ??
     null
   );
 }
 
-export function RegisterForm() {
+export function RegisterScreen() {
   const navigate = useNavigate();
   const signUpMutation = useSignUp();
   const [email, setEmail] = useState('');
@@ -122,20 +123,45 @@ export function RegisterForm() {
   const [displayName, setDisplayName] = useState('');
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [passwordVisible, setPasswordVisible] = useState(false);
+  const [confirmationVisible, setConfirmationVisible] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [validationSummary, setValidationSummary] = useState<string | null>(null);
   const [confirmationSent, setConfirmationSent] = useState(false);
 
   // Editing a field retracts the complaint about it; leaving it visible while the
-  // user is fixing it reads as though the fix did not register.
+  // user is fixing it reads as though the fix did not register. The mutation has to
+  // be reset too: its error is re-derived on every render, so clearing only local
+  // state would leave a server rejection stuck to the field for good.
   function clearFieldError(field: FieldName) {
+    // Only retract the server's rejection when the user edits the field it named.
+    // Clearing it on any keystroke would hide a complaint they have not addressed.
+    const rejectedCode =
+      signUpMutation.error instanceof SignUpError ? signUpMutation.error.code : undefined;
+    const rejectedField = rejectedCode ? SERVER_ERROR_FIELD[rejectedCode] : undefined;
+    if (signUpMutation.isError && (rejectedField === undefined || rejectedField === field)) {
+      signUpMutation.reset();
+    }
+
+    // A finished registration is no longer finished once the user edits the form;
+    // returning to the editable state is what makes the submit button come back.
+    setConfirmationSent(false);
     setValidationSummary(null);
     setFieldErrors((current) => {
-      if (!(field in current)) {
+      // The mismatch is a relation between the two password boxes but is recorded on
+      // the confirmation, so editing either one has to retract it.
+      const related: FieldName[] =
+        field === 'password' || field === 'passwordConfirmation'
+          ? ['password', 'passwordConfirmation']
+          : [field];
+
+      if (!related.some((name) => name in current)) {
         return current;
       }
+
       const next = { ...current };
-      delete next[field];
+      for (const name of related) {
+        delete next[name];
+      }
       return next;
     });
   }
@@ -158,7 +184,9 @@ export function RegisterForm() {
     setFieldErrors(errors);
     setValidationSummary(summary);
 
-    if (summary) {
+    // Gate on the errors themselves, not on the summary text: a field whose message
+    // never reaches the summary must still block submission.
+    if (Object.keys(errors).length > 0) {
       return;
     }
 
@@ -197,12 +225,13 @@ export function RegisterForm() {
 
   const summaryMessage = validationSummary ?? requestError;
 
-  function describedBy(field: FieldName, ...extra: string[]): string | undefined {
-    const ids = [...extra];
+  // The hint and the error swap places in the DOM, so only ever name the one that is
+  // actually rendered — aria-describedby pointing at a removed id describes nothing.
+  function describedBy(field: FieldName, hintId?: string): string | undefined {
     if (visibleErrors[field]) {
-      ids.unshift(`${field}-error`);
+      return `${field}-error`;
     }
-    return ids.length > 0 ? ids.join(' ') : undefined;
+    return hintId;
   }
 
   function inputClass(field: FieldName): string {
@@ -325,7 +354,7 @@ export function RegisterForm() {
             <div className="relative">
               <input
                 id="passwordConfirmation"
-                type={passwordVisible ? 'text' : 'password'}
+                type={confirmationVisible ? 'text' : 'password'}
                 value={passwordConfirmation}
                 onChange={(event) => {
                   setPasswordConfirmation(event.target.value);
@@ -340,11 +369,13 @@ export function RegisterForm() {
               />
               <button
                 type="button"
-                onClick={() => setPasswordVisible((visible) => !visible)}
+                onClick={() => setConfirmationVisible((visible) => !visible)}
                 className="absolute inset-y-0 right-0 flex items-center px-3 text-gray-500 hover:text-gray-700"
-                aria-label={passwordVisible ? 'Hide password confirmation' : 'Show password confirmation'}
+                aria-label={
+                  confirmationVisible ? 'Hide password confirmation' : 'Show password confirmation'
+                }
               >
-                {passwordVisible ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                {confirmationVisible ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
               </button>
             </div>
             {visibleErrors.passwordConfirmation && (
@@ -396,11 +427,21 @@ export function RegisterForm() {
               />
               <label htmlFor="consent" className="text-sm text-gray-600">
                 I agree to the{' '}
-                <Link to="/terms" className="text-brand-600 underline">
+                <Link
+                  to="/terms"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-brand-600 underline"
+                >
                   Terms of Service
                 </Link>{' '}
                 and{' '}
-                <Link to="/privacy" className="text-brand-600 underline">
+                <Link
+                  to="/privacy"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-brand-600 underline"
+                >
                   Privacy Policy
                 </Link>
                 .
@@ -419,20 +460,34 @@ export function RegisterForm() {
             </p>
           )}
 
-          {confirmationSent && (
-            <p role="status" className="form-status">
-              Account created. Check your email to confirm your account before signing in.
-            </p>
+          {confirmationSent ? (
+            <>
+              <p role="status" className="form-status">
+                Account created. Check your email to confirm your account before signing in.
+              </p>
+              {/* Submitting again would only fail, so the finished form offers the next step
+                  instead of a disabled button and no way forward. */}
+              <Link to="/login" className="btn-primary block w-full text-center">
+                Go to sign in
+              </Link>
+            </>
+          ) : (
+            <button
+              type="submit"
+              className="w-full btn-primary disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={signUpMutation.isPending}
+            >
+              {signUpMutation.isPending ? 'Creating account...' : 'Create account'}
+            </button>
           )}
-
-          <button
-            type="submit"
-            className="w-full btn-primary disabled:cursor-not-allowed disabled:opacity-60"
-            disabled={signUpMutation.isPending || confirmationSent}
-          >
-            {signUpMutation.isPending ? 'Creating account...' : 'Create account'}
-          </button>
         </form>
+
+        <p className="mt-6 text-center text-sm text-gray-600">
+          Already have an account?{' '}
+          <Link to="/login" className="font-medium text-brand-600 hover:underline">
+            Sign in
+          </Link>
+        </p>
       </div>
     </div>
   );

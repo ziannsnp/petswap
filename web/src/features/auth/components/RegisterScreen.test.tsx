@@ -2,7 +2,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
-import { RegisterForm } from './RegisterForm';
+import { RegisterScreen } from './RegisterScreen';
 import { useSignUp } from '../hooks/useSignUp';
 import { SignUpError } from '../lib/authApi';
 import type { SignUpErrorCode } from '../types';
@@ -33,7 +33,7 @@ const mockedUseSignUp = jest.mocked(useSignUp);
 function renderForm() {
   return render(
     <MemoryRouter>
-      <RegisterForm />
+      <RegisterScreen />
     </MemoryRouter>,
   );
 }
@@ -41,6 +41,7 @@ function renderForm() {
 function mutationResult(overrides: Partial<ReturnType<typeof useSignUp>> = {}) {
   return {
     mutateAsync: jest.fn(),
+    reset: jest.fn(),
     isPending: false,
     isError: false,
     error: null,
@@ -48,7 +49,7 @@ function mutationResult(overrides: Partial<ReturnType<typeof useSignUp>> = {}) {
   } as unknown as ReturnType<typeof useSignUp>;
 }
 
-describe('RegisterForm', () => {
+describe('RegisterScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
@@ -256,7 +257,9 @@ describe('RegisterForm', () => {
 
   it.each<[SignUpErrorCode, RegExp]>([
     ['EMAIL_ALREADY_USED', /email/i],
+    ['INVALID_EMAIL', /email/i],
     ['USERNAME_ALREADY_USED', /username/i],
+    ['INVALID_USERNAME', /username/i],
     ['WEAK_PASSWORD', /^password$/i],
   ])('attaches a %s rejection to the field that caused it', (code, label) => {
     mockedUseSignUp.mockReturnValue(
@@ -279,6 +282,87 @@ describe('RegisterForm', () => {
     expect(screen.getByLabelText(/email/i)).not.toHaveAttribute('aria-invalid');
     expect(screen.getByLabelText(/username/i)).not.toHaveAttribute('aria-invalid');
     expect(screen.getByRole('alert')).toHaveTextContent('RATE_LIMITED');
+  });
+
+  // A stateful mock: asserting only that reset() was called would pass against an
+  // implementation that calls it and ignores the result, so the field has to be
+  // observed actually recovering.
+  function rejectingMutation(code: SignUpErrorCode) {
+    let isError = true;
+    const reset = jest.fn(() => {
+      isError = false;
+    });
+    mockedUseSignUp.mockImplementation(() =>
+      isError
+        ? mutationResult({ isError: true, error: new SignUpError(code), reset })
+        : mutationResult({ isError: false, error: null, reset }),
+    );
+    return reset;
+  }
+
+  it('retracts a server rejection once the user edits the field it named', async () => {
+    const user = userEvent.setup();
+    rejectingMutation('USERNAME_ALREADY_USED');
+    renderForm();
+
+    expect(screen.getByLabelText(/username/i)).toHaveAttribute('aria-invalid', 'true');
+
+    await user.type(screen.getByLabelText(/username/i), 'a_different_name');
+
+    expect(screen.getByLabelText(/username/i)).not.toHaveAttribute('aria-invalid');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('keeps a server rejection while the user edits some other field', async () => {
+    const user = userEvent.setup();
+    rejectingMutation('EMAIL_ALREADY_USED');
+    renderForm();
+
+    expect(screen.getByLabelText(/email/i)).toHaveAttribute('aria-invalid', 'true');
+
+    await user.type(screen.getByLabelText(/display name/i), 'Pat');
+
+    // The email is still taken; hiding the complaint would send the user back into
+    // the same rejection believing they had fixed something.
+    expect(screen.getByLabelText(/email/i)).toHaveAttribute('aria-invalid', 'true');
+  });
+
+  it('retracts the password mismatch when either password box is edited', async () => {
+    const user = userEvent.setup();
+    mockedUseSignUp.mockReturnValue(mutationResult());
+    renderForm();
+
+    await user.type(screen.getByLabelText(/email/i), 'pet@example.com');
+    await user.type(screen.getByLabelText(/username/i), 'pat_sitter');
+    await user.type(screen.getByLabelText(/^password$/i), 'Password1!');
+    await user.type(screen.getByLabelText(/confirm password/i), 'Password2!');
+    await user.type(screen.getByLabelText(/display name/i), 'Pat');
+    await user.click(screen.getByRole('checkbox'));
+    await user.click(screen.getByRole('button', { name: /create account/i }));
+
+    expect(screen.getByLabelText(/confirm password/i)).toHaveAttribute('aria-invalid', 'true');
+
+    // Fixing it from the password side is just as natural as from the confirm side.
+    await user.type(screen.getByLabelText(/^password$/i), '{Backspace}2!');
+
+    expect(screen.getByLabelText(/confirm password/i)).not.toHaveAttribute('aria-invalid');
+  });
+
+  it('toggles each password field independently', async () => {
+    const user = userEvent.setup();
+    mockedUseSignUp.mockReturnValue(mutationResult());
+    renderForm();
+
+    const passwordInput = screen.getByLabelText(/^password$/i);
+    const confirmInput = screen.getByLabelText(/confirm password/i);
+
+    expect(passwordInput).toHaveAttribute('type', 'password');
+    expect(confirmInput).toHaveAttribute('type', 'password');
+
+    await user.click(screen.getByRole('button', { name: /^show password$/i }));
+
+    expect(passwordInput).toHaveAttribute('type', 'text');
+    expect(confirmInput).toHaveAttribute('type', 'password');
   });
 
   it('renders a generic fallback message when the failure is not a SignUpError', () => {

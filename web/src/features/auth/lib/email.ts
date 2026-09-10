@@ -1,6 +1,7 @@
-// Sibling of username.ts and password.ts: one credential rule per module, kept
-// free of React and Supabase so the registration form and the auth adapters can
-// share it and Jest can cover it without a browser.
+// Sibling of username.ts and password.ts: one credential rule per module, kept free
+// of React and Supabase so Jest can cover it without a browser. Only the registration
+// form uses it today; signUp() in authApi.ts validates the username and password but
+// leaves the email address to Supabase.
 
 // Deliberately narrower than RFC 5322: a single @, no spaces, and a dotted domain
 // with a 2+ character TLD. The authoritative check is Supabase rejecting the

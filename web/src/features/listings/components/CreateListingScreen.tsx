@@ -94,7 +94,7 @@ export function CreateListingScreen() {
         facilities,
         photos: photos.map((photo) => photo.file),
       });
-      void navigate('/listings');
+      void navigate('/listings', { state: { listingSaved: true } });
     } catch {
       return;
     } finally {
@@ -127,15 +127,6 @@ export function CreateListingScreen() {
               aria-invalid={Boolean(errors.title)}
               aria-describedby={errors.title ? 'listing-title-error' : undefined}
             />
-            {rejectedPhotos.length > 0 && (
-              <ul className="mt-2 space-y-1" role="alert">
-                {rejectedPhotos.map((rejected, index) => (
-                  <li className="text-xs text-red-700" key={`${rejected.fileName}-${index}`}>
-                    {rejected.fileName}: {rejected.reason}
-                  </li>
-                ))}
-              </ul>
-            )}
             {errors.title && <p className="mt-1 text-xs text-red-700" id="listing-title-error">{errors.title}</p>}
           </div>
 
@@ -286,6 +277,15 @@ export function CreateListingScreen() {
               disabled={isSubmitting}
               onChange={handlePhotoSelection}
             />
+            {rejectedPhotos.length > 0 && (
+              <ul className="mt-2 space-y-1" role="alert">
+                {rejectedPhotos.map((rejected, index) => (
+                  <li className="text-xs text-red-700" key={`${rejected.fileName}-${index}`}>
+                    {rejected.fileName}: {rejected.reason}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
 
           {createListingMutation.isError && (

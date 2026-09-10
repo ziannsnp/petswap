@@ -147,7 +147,7 @@ describe('createListing', () => {
       description: ' A calm place for pets. ',
       capacity: 2,
       acceptedPetTypes: ['dog'],
-      facilities: ['Fenced yard', 'Daily photo updates'],
+      facilities: ['  ', 'Fenced yard', ' Daily photo updates '],
       photos: [photo],
     })).resolves.toMatchObject({
       id: 'listing-123',

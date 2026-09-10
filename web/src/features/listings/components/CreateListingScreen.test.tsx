@@ -88,9 +88,12 @@ describe('CreateListingScreen', () => {
     });
 
     expect(screen.getByRole('img', { name: 'yard.jpg' })).toBeInTheDocument();
-    expect(screen.getByRole('alert')).toHaveTextContent(
+    const rejectionAlert = screen.getByRole('alert');
+    expect(rejectionAlert).toHaveTextContent(
       'notes.pdf: Unsupported file type. Choose a JPG, PNG, WebP, or GIF file.',
     );
+    expect(screen.getByText('Photos').parentElement).toContainElement(rejectionAlert);
+    expect(screen.getByLabelText(/listing title/i).parentElement).not.toContainElement(rejectionAlert);
   });
 
   it('reports required fields only after a save attempt, then clears each as it is corrected', async () => {

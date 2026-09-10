@@ -1,5 +1,5 @@
 import { Home, Image, Plus } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useMyListings } from '../hooks/useListings';
 import { petSpeciesLabel } from '../lib/listingOptions';
 import type { Listing } from '../lib/listingApi';
@@ -50,8 +50,10 @@ function ListingCard({ listing }: { listing: Listing }) {
 }
 
 export function ListingsScreen() {
+  const location = useLocation();
   const { data: listings = [], isPending, isError } = useMyListings();
   const activeListings = listings.filter((listing) => listing.status !== 'deleted');
+  const listingSaved = location.state?.listingSaved === true;
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900">
@@ -68,6 +70,12 @@ export function ListingsScreen() {
             <span className="sr-only sm:hidden">Create listing</span>
           </Link>
         </div>
+
+        {listingSaved && (
+          <p className="mb-6 border-l-4 border-green-600 bg-green-50 px-4 py-3 text-sm text-green-700" role="status">
+            Draft listing saved successfully. You can preview it from My listings.
+          </p>
+        )}
 
         {isPending && (
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2" aria-label="Loading listings" aria-busy="true">

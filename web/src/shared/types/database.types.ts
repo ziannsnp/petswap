@@ -244,5 +244,3 @@ export type Database = {
     CompositeTypes: Record<string, never>;
   };
 };
-
-export type PetSpecies = Database['public']['Enums']['pet_species'];

@@ -1,6 +1,7 @@
 import { getSupabaseClient } from '@/shared/lib/supabase';
-import type { Database, PetSpecies } from '@/shared/types/database.types';
-import { FACILITY_SEPARATOR } from './listingOptions';
+import type { Database } from '@/shared/types/database.types';
+import { serializeFacilities } from './listingOptions';
+import type { PetSpecies } from './listingOptions';
 
 export interface CreateListingValues {
   title: string;
@@ -45,7 +46,7 @@ export async function createListing(values: CreateListingValues): Promise<Listin
       description: values.description.trim(),
       capacity: values.capacity,
       accepted_pet_types: values.acceptedPetTypes,
-      facilities: values.facilities.length > 0 ? values.facilities.join(FACILITY_SEPARATOR) : null,
+      facilities: serializeFacilities(values.facilities),
       status: 'draft',
       published_at: null,
     })

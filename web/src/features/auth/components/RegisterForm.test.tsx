@@ -68,12 +68,51 @@ describe('RegisterForm', () => {
     renderForm();
 
     await user.type(screen.getByLabelText(/email/i), 'pet@example.com');
-    await user.type(screen.getByLabelText(/^password$/i), 'password123');
+    await user.type(screen.getByLabelText(/username/i), 'pat_sitter');
+    await user.type(screen.getByLabelText(/^password$/i), 'Password1!');
     await user.type(screen.getByLabelText(/display name/i), 'Pat');
     await user.click(screen.getByRole('button', { name: /create account/i }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'You must accept the Terms of Service and Privacy Policy.',
+    );
+    expect(mutateAsync).not.toHaveBeenCalled();
+  });
+
+  it('blocks submission when the username format is invalid', async () => {
+    const user = userEvent.setup();
+    const mutateAsync = jest.fn();
+    mockedUseSignUp.mockReturnValue(mutationResult({ mutateAsync }));
+    renderForm();
+
+    await user.type(screen.getByLabelText(/email/i), 'pet@example.com');
+    await user.type(screen.getByLabelText(/username/i), 'pat-sitter');
+    await user.type(screen.getByLabelText(/^password$/i), 'Password1!');
+    await user.type(screen.getByLabelText(/display name/i), 'Pat');
+    await user.click(screen.getByRole('checkbox'));
+    await user.click(screen.getByRole('button', { name: /create account/i }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Username must be 3–30 characters and contain only letters, numbers, and underscores.',
+    );
+    expect(mutateAsync).not.toHaveBeenCalled();
+  });
+
+  it('blocks submission when the password does not meet the strength rule', async () => {
+    const user = userEvent.setup();
+    const mutateAsync = jest.fn();
+    mockedUseSignUp.mockReturnValue(mutationResult({ mutateAsync }));
+    renderForm();
+
+    await user.type(screen.getByLabelText(/email/i), 'pet@example.com');
+    await user.type(screen.getByLabelText(/username/i), 'pat_sitter');
+    await user.type(screen.getByLabelText(/^password$/i), 'abcdef');
+    await user.type(screen.getByLabelText(/display name/i), 'Pat');
+    await user.click(screen.getByRole('checkbox'));
+    await user.click(screen.getByRole('button', { name: /create account/i }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Password must be at least 8 characters and include lowercase, uppercase, number, and special characters.',
     );
     expect(mutateAsync).not.toHaveBeenCalled();
   });
@@ -85,14 +124,16 @@ describe('RegisterForm', () => {
     renderForm();
 
     await user.type(screen.getByLabelText(/email/i), 'pet@example.com');
-    await user.type(screen.getByLabelText(/^password$/i), 'password123');
+    await user.type(screen.getByLabelText(/username/i), '  Pat_Sitter  ');
+    await user.type(screen.getByLabelText(/^password$/i), 'Password1!');
     await user.type(screen.getByLabelText(/display name/i), 'Pat');
     await user.click(screen.getByRole('checkbox'));
     await user.click(screen.getByRole('button', { name: /create account/i }));
 
     expect(mutateAsync).toHaveBeenCalledWith({
       email: 'pet@example.com',
-      password: 'password123',
+      username: 'pat_sitter',
+      password: 'Password1!',
       displayName: 'Pat',
     });
     expect(await screen.findByRole('status')).toHaveTextContent(
@@ -110,7 +151,8 @@ describe('RegisterForm', () => {
     renderForm();
 
     await user.type(screen.getByLabelText(/email/i), 'pet@example.com');
-    await user.type(screen.getByLabelText(/^password$/i), 'password123');
+    await user.type(screen.getByLabelText(/username/i), 'pat_sitter');
+    await user.type(screen.getByLabelText(/^password$/i), 'Password1!');
     await user.type(screen.getByLabelText(/display name/i), 'Pat');
     await user.click(screen.getByRole('checkbox'));
     await user.click(screen.getByRole('button', { name: /create account/i }));

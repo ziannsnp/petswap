@@ -1,6 +1,7 @@
 import { Home, Image, Plus } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useMyListings } from '../hooks/useListings';
+import { petSpeciesLabel } from '../lib/listingOptions';
 import type { Listing } from '../lib/listingApi';
 import { ListingsNavigation } from './ListingsNavigation';
 
@@ -39,7 +40,7 @@ function ListingCard({ listing }: { listing: Listing }) {
         <p className="mt-1 text-sm text-gray-500">{listing.location}</p>
         <div className="mt-3 flex flex-wrap gap-2" aria-label="Listing details">
           {listing.accepted_pet_types.map((petType) => (
-            <span className="badge-brand" key={petType}>{petType}</span>
+            <span className="badge-brand" key={petType}>{petSpeciesLabel(petType)}</span>
           ))}
           <span className="badge-brand">Up to {listing.capacity} pets</span>
         </div>

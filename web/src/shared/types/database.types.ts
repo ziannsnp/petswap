@@ -13,6 +13,8 @@ export type Database = {
           location: string | null;
           created_at: string;
           updated_at: string;
+          consent_version: string | null;
+          consent_given_at: string | null;
         };
         Insert: {
           id: string;
@@ -23,6 +25,8 @@ export type Database = {
           location?: string | null;
           created_at?: string;
           updated_at?: string;
+          consent_version?: string | null;
+          consent_given_at?: string | null;
         };
         Update: {
           id?: string;
@@ -33,6 +37,8 @@ export type Database = {
           location?: string | null;
           created_at?: string;
           updated_at?: string;
+          consent_version?: string | null;
+          consent_given_at?: string | null;
         };
         Relationships: [];
       };
@@ -92,7 +98,7 @@ export type Database = {
           location: string;
           description: string;
           capacity: number;
-          accepted_pet_types: string[];
+          accepted_pet_types: Database['public']['Enums']['pet_species'][];
           facilities: string | null;
           status: Database['public']['Enums']['listing_status'];
           deleted_at: string | null;
@@ -107,7 +113,7 @@ export type Database = {
           location: string;
           description: string;
           capacity: number;
-          accepted_pet_types?: string[];
+          accepted_pet_types?: Database['public']['Enums']['pet_species'][];
           facilities?: string | null;
           status?: Database['public']['Enums']['listing_status'];
           deleted_at?: string | null;
@@ -217,6 +223,10 @@ export type Database = {
     };
     Views: Record<string, never>;
     Functions: {
+      is_username_available: {
+        Args: { candidate_username: string };
+        Returns: boolean;
+      };
       current_user_owns_listing: {
         Args: { target_listing_id: string };
         Returns: boolean;

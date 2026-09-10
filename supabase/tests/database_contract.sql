@@ -21,10 +21,12 @@
 \pset format aligned
 \echo '== PetSwap database contract =='
 
+begin;
+
 create temporary table _contract (
   check_name text primary key,
   passed boolean
-);
+) on commit drop;
 
 insert into _contract (check_name, passed) values
   (
@@ -129,8 +131,39 @@ insert into _contract (check_name, passed) values
       select 1 from storage.buckets
       where id = 'listing-photos' and public
     )
+  ),
+  (
+    'listings accept only pet_species values as accepted pet types',
+    exists (
+      select 1 from information_schema.columns
+      where table_schema = 'public'
+        and table_name = 'listings'
+        and column_name = 'accepted_pet_types'
+        and udt_name = '_pet_species'
+    )
   );
 
+insert into _contract (check_name, passed)
+select
+  'usernames are lowercase and format constrained' as check_name,
+  exists (
+    select 1
+    from pg_constraint
+    where conname = 'profiles_username_format_check'
+      and conrelid = 'public.profiles'::regclass
+  ) as passed;
+
+insert into _contract (check_name, passed)
+select
+  'username availability does not expose email addresses' as check_name,
+  count(*) > 0 and bool_and(
+    p.prorettype = 'boolean'::regtype
+    and pg_get_function_result(p.oid) = 'boolean'
+  ) as passed
+from pg_proc p
+join pg_namespace n on n.oid = p.pronamespace
+where n.nspname = 'public'
+  and p.proname = 'is_username_available';
 select check_name, passed
 from _contract
 order by passed nulls first, check_name;
@@ -151,3 +184,5 @@ begin
   raise notice 'database contract: all % checks passed', (select count(*) from _contract);
 end;
 $$;
+
+commit;

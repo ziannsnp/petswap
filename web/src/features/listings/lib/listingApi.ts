@@ -87,12 +87,26 @@ export async function createListing(values: CreateListingValues): Promise<Listin
 
     return addCoverPhotoUrl({ ...listing, listing_images: insertedImages });
   } catch (error) {
+    const cleanupErrors: string[] = [];
     try {
       await removeUploadedPhotos(storagePaths);
     } catch (cleanupError) {
+      cleanupErrors.push(`photo cleanup failed: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`);
+    }
+
+    try {
+      const { error: listingCleanupError } = await supabase
+        .from('listings')
+        .delete()
+        .eq('id', listing.id);
+      if (listingCleanupError) throw listingCleanupError;
+    } catch (listingCleanupError) {
+      cleanupErrors.push(`listing cleanup failed: ${listingCleanupError instanceof Error ? listingCleanupError.message : String(listingCleanupError)}`);
+    }
+
+    if (cleanupErrors.length > 0) {
       const originalMessage = error instanceof Error ? error.message : String(error);
-      const cleanupMessage = cleanupError instanceof Error ? cleanupError.message : String(cleanupError);
-      throw new Error(`Listing creation failed: ${originalMessage}; photo cleanup failed: ${cleanupMessage}`);
+      throw new Error(`Listing creation failed: ${originalMessage}; ${cleanupErrors.join('; ')}`);
     }
     throw error;
   }
@@ -125,6 +139,19 @@ export async function listPublishedListings(): Promise<Listing[]> {
   }
 
   return (data ?? []).map(addCoverPhotoUrl);
+}
+
+export async function getListing(listingId: string): Promise<Listing> {
+  const { data, error } = await getSupabaseClient()
+    .from('listings')
+    .select('*, listing_images(*)')
+    .eq('id', listingId)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) throw new Error('Listing not found.');
+
+  return addCoverPhotoUrl({ ...data, listing_images: data.listing_images ?? [] });
 }
 
 export async function listMyListings(): Promise<Listing[]> {

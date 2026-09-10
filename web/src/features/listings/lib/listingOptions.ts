@@ -26,7 +26,7 @@ export function petSpeciesLabel(species: PetSpecies): string {
 }
 
 export const PET_TYPE_OPTIONS: readonly PetTypeOption[] = (
-  ['dog', 'cat', 'rabbit', 'bird'] as const
+  ['dog', 'cat', 'rabbit', 'hamster', 'guinea_pig', 'fish', 'reptile', 'exotic_mammal', 'bird', 'other'] as const
 ).map((value) => ({ value, label: PET_SPECIES_LABELS[value] }));
 
 export const FACILITY_OPTIONS: readonly string[] = [

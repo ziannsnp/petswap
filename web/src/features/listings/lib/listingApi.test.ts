@@ -201,8 +201,9 @@ describe('createListing', () => {
     const upload = jest.fn().mockResolvedValue({ data: { path: 'listing-123/photo.jpg' }, error: null });
     const remove = jest.fn().mockResolvedValue({ data: [], error: null });
     const storageFrom = jest.fn().mockReturnValue({ upload, remove });
+    const listingDeleteEq = jest.fn().mockResolvedValue({ data: null, error: null });
     const from = jest.fn((table: string) => {
-      if (table === 'listings') return { insert: listingInsert };
+      if (table === 'listings') return { insert: listingInsert, delete: jest.fn().mockReturnValue({ eq: listingDeleteEq }) };
       if (table === 'listing_images') return { insert: imageInsert };
       throw new Error(`Unexpected table: ${table}`);
     });
@@ -229,6 +230,7 @@ describe('createListing', () => {
     })).rejects.toThrow('metadata failed');
 
     expect(remove).toHaveBeenCalledWith([expect.stringMatching(/^listing-123\/[0-9a-f-]+\.jpg$/)]);
+    expect(listingDeleteEq).toHaveBeenCalledWith('id', 'listing-123');
   });
 
   it('removes the listing when a photo upload fails', async () => {

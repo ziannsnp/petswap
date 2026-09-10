@@ -15,7 +15,7 @@ function ListingCard({ listing }: { listing: Listing }) {
   const status = STATUS_STYLES[listing.status];
 
   return (
-    <article className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
+    <Link className="block overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm hover:border-brand-500" to={`/listings/${listing.id}`}>
       <div className="aspect-video bg-gray-100">
         {listing.cover_photo_url ? (
           <img
@@ -45,7 +45,7 @@ function ListingCard({ listing }: { listing: Listing }) {
           <span className="badge-brand">Up to {listing.capacity} pets</span>
         </div>
       </div>
-    </article>
+    </Link>
   );
 }
 

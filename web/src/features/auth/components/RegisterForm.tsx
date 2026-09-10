@@ -16,7 +16,13 @@ const CONSENT_REQUIRED_MESSAGE = 'You must accept the Terms of Service and Priva
 const INCOMPLETE_MESSAGE = 'Complete all required fields.';
 const GENERIC_FAILURE_MESSAGE = "We couldn't create your account. Please try again.";
 
-type FieldName = 'email' | 'username' | 'password' | 'displayName' | 'acceptedTerms';
+type FieldName =
+  | 'email'
+  | 'username'
+  | 'password'
+  | 'passwordConfirmation'
+  | 'displayName'
+  | 'acceptedTerms';
 type FieldErrors = Partial<Record<FieldName, string>>;
 
 // A rejection the server alone can detect still belongs beside the field that caused
@@ -33,6 +39,7 @@ interface RegistrationValues {
   email: string;
   username: string;
   password: string;
+  passwordConfirmation: string;
   displayName: string;
   acceptedTerms: boolean;
 }
@@ -61,6 +68,14 @@ function collectFieldErrors(values: RegistrationValues): FieldErrors {
     errors.password = PASSWORD_REQUIREMENTS_MESSAGE;
   }
 
+  // Checked after the strength rule so a weak password is reported once, against the
+  // field that has to change, rather than twice as a mismatch the user cannot act on.
+  if (!values.passwordConfirmation) {
+    errors.passwordConfirmation = 'Re-enter your password.';
+  } else if (values.passwordConfirmation !== values.password) {
+    errors.passwordConfirmation = 'Both passwords must match.';
+  }
+
   if (!displayName) {
     errors.displayName = 'Enter a display name.';
   }
@@ -77,13 +92,24 @@ function collectFieldErrors(values: RegistrationValues): FieldErrors {
 // filled it reports the first that is actually malformed.
 function summarize(values: RegistrationValues, errors: FieldErrors): string | null {
   const isIncomplete =
-    !values.email.trim() || !values.username.trim() || !values.password || !values.displayName.trim();
+    !values.email.trim() ||
+    !values.username.trim() ||
+    !values.password ||
+    !values.passwordConfirmation ||
+    !values.displayName.trim();
 
   if (isIncomplete) {
     return INCOMPLETE_MESSAGE;
   }
 
-  return errors.email ?? errors.username ?? errors.password ?? errors.acceptedTerms ?? null;
+  return (
+    errors.email ??
+    errors.username ??
+    errors.password ??
+    errors.passwordConfirmation ??
+    errors.acceptedTerms ??
+    null
+  );
 }
 
 export function RegisterForm() {
@@ -92,6 +118,7 @@ export function RegisterForm() {
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [passwordConfirmation, setPasswordConfirmation] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [passwordVisible, setPasswordVisible] = useState(false);
@@ -117,7 +144,14 @@ export function RegisterForm() {
     event.preventDefault();
     setConfirmationSent(false);
 
-    const values: RegistrationValues = { email, username, password, displayName, acceptedTerms };
+    const values: RegistrationValues = {
+      email,
+      username,
+      password,
+      passwordConfirmation,
+      displayName,
+      acceptedTerms,
+    };
     const errors = collectFieldErrors(values);
     const summary = summarize(values, errors);
 
@@ -280,6 +314,42 @@ export function RegisterForm() {
             ) : (
               <p id="password-requirements" className="form-hint">
                 At least 8 characters with lowercase, uppercase, number, and special characters.
+              </p>
+            )}
+          </div>
+
+          <div>
+            <label htmlFor="passwordConfirmation" className="form-label">
+              Confirm password
+            </label>
+            <div className="relative">
+              <input
+                id="passwordConfirmation"
+                type={passwordVisible ? 'text' : 'password'}
+                value={passwordConfirmation}
+                onChange={(event) => {
+                  setPasswordConfirmation(event.target.value);
+                  clearFieldError('passwordConfirmation');
+                }}
+                placeholder="••••••••"
+                className={`${inputClass('passwordConfirmation')} pr-11`}
+                autoComplete="new-password"
+                aria-invalid={visibleErrors.passwordConfirmation ? true : undefined}
+                aria-describedby={describedBy('passwordConfirmation')}
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setPasswordVisible((visible) => !visible)}
+                className="absolute inset-y-0 right-0 flex items-center px-3 text-gray-500 hover:text-gray-700"
+                aria-label={passwordVisible ? 'Hide password confirmation' : 'Show password confirmation'}
+              >
+                {passwordVisible ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+              </button>
+            </div>
+            {visibleErrors.passwordConfirmation && (
+              <p id="passwordConfirmation-error" className="form-error">
+                {visibleErrors.passwordConfirmation}
               </p>
             )}
           </div>

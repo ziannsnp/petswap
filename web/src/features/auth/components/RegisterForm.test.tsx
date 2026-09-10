@@ -74,6 +74,7 @@ describe('RegisterForm', () => {
     await user.type(screen.getByLabelText(/email/i), 'pet@example.com');
     await user.type(screen.getByLabelText(/username/i), 'pat_sitter');
     await user.type(screen.getByLabelText(/^password$/i), 'Password1!');
+    await user.type(screen.getByLabelText(/confirm password/i), 'Password1!');
     await user.type(screen.getByLabelText(/display name/i), 'Pat');
     await user.click(screen.getByRole('button', { name: /create account/i }));
 
@@ -92,6 +93,7 @@ describe('RegisterForm', () => {
     await user.type(screen.getByLabelText(/email/i), 'pet@example.com');
     await user.type(screen.getByLabelText(/username/i), 'pat-sitter');
     await user.type(screen.getByLabelText(/^password$/i), 'Password1!');
+    await user.type(screen.getByLabelText(/confirm password/i), 'Password1!');
     await user.type(screen.getByLabelText(/display name/i), 'Pat');
     await user.click(screen.getByRole('checkbox'));
     await user.click(screen.getByRole('button', { name: /create account/i }));
@@ -111,6 +113,7 @@ describe('RegisterForm', () => {
     await user.type(screen.getByLabelText(/email/i), 'pet@example');
     await user.type(screen.getByLabelText(/username/i), 'pat_sitter');
     await user.type(screen.getByLabelText(/^password$/i), 'Password1!');
+    await user.type(screen.getByLabelText(/confirm password/i), 'Password1!');
     await user.type(screen.getByLabelText(/display name/i), 'Pat');
     await user.click(screen.getByRole('checkbox'));
     await user.click(screen.getByRole('button', { name: /create account/i }));
@@ -129,6 +132,7 @@ describe('RegisterForm', () => {
     await user.type(screen.getByLabelText(/email/i), 'pet@example');
     await user.type(screen.getByLabelText(/username/i), 'pat_sitter');
     await user.type(screen.getByLabelText(/^password$/i), 'Password1!');
+    await user.type(screen.getByLabelText(/confirm password/i), 'Password1!');
     await user.type(screen.getByLabelText(/display name/i), 'Pat');
     await user.click(screen.getByRole('checkbox'));
     await user.click(screen.getByRole('button', { name: /create account/i }));
@@ -165,6 +169,7 @@ describe('RegisterForm', () => {
     await user.type(screen.getByLabelText(/email/i), 'pet@example.com');
     await user.type(screen.getByLabelText(/username/i), 'pat_sitter');
     await user.type(screen.getByLabelText(/^password$/i), 'abcdef');
+    await user.type(screen.getByLabelText(/confirm password/i), 'abcdef');
     await user.type(screen.getByLabelText(/display name/i), 'Pat');
     await user.click(screen.getByRole('checkbox'));
     await user.click(screen.getByRole('button', { name: /create account/i }));
@@ -172,6 +177,25 @@ describe('RegisterForm', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Password must be at least 8 characters and include lowercase, uppercase, number, and special characters.',
     );
+    expect(mutateAsync).not.toHaveBeenCalled();
+  });
+
+  it('blocks submission when the two passwords do not match', async () => {
+    const user = userEvent.setup();
+    const mutateAsync = jest.fn();
+    mockedUseSignUp.mockReturnValue(mutationResult({ mutateAsync }));
+    renderForm();
+
+    await user.type(screen.getByLabelText(/email/i), 'pet@example.com');
+    await user.type(screen.getByLabelText(/username/i), 'pat_sitter');
+    await user.type(screen.getByLabelText(/^password$/i), 'Password1!');
+    await user.type(screen.getByLabelText(/confirm password/i), 'Password2!');
+    await user.type(screen.getByLabelText(/display name/i), 'Pat');
+    await user.click(screen.getByRole('checkbox'));
+    await user.click(screen.getByRole('button', { name: /create account/i }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Both passwords must match.');
+    expect(screen.getByLabelText(/confirm password/i)).toHaveAttribute('aria-invalid', 'true');
     expect(mutateAsync).not.toHaveBeenCalled();
   });
 
@@ -184,6 +208,7 @@ describe('RegisterForm', () => {
     await user.type(screen.getByLabelText(/email/i), 'pet@example.com');
     await user.type(screen.getByLabelText(/username/i), '  Pat_Sitter  ');
     await user.type(screen.getByLabelText(/^password$/i), 'Password1!');
+    await user.type(screen.getByLabelText(/confirm password/i), 'Password1!');
     await user.type(screen.getByLabelText(/display name/i), 'Pat');
     await user.click(screen.getByRole('checkbox'));
     await user.click(screen.getByRole('button', { name: /create account/i }));
@@ -211,6 +236,7 @@ describe('RegisterForm', () => {
     await user.type(screen.getByLabelText(/email/i), 'pet@example.com');
     await user.type(screen.getByLabelText(/username/i), 'pat_sitter');
     await user.type(screen.getByLabelText(/^password$/i), 'Password1!');
+    await user.type(screen.getByLabelText(/confirm password/i), 'Password1!');
     await user.type(screen.getByLabelText(/display name/i), 'Pat');
     await user.click(screen.getByRole('checkbox'));
     await user.click(screen.getByRole('button', { name: /create account/i }));

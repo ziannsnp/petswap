@@ -1,5 +1,8 @@
 export { AuthScreen } from './components/AuthScreen';
 export { ProtectedRoute } from './components/ProtectedRoute';
+export { AuthProvider } from './components/AuthProvider';
+export { AuthContext } from './context/authContext';
+export type { AuthContextValue } from './context/authContext';
 export { useAuth, authKeys } from './hooks/useAuth';
 export { useSignUp } from './hooks/useSignUp';
 export {

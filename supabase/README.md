@@ -11,13 +11,17 @@ npx supabase start
 npx supabase db reset
 ```
 
-`db reset` rebuilds Postgres from `supabase/migrations/` and then runs `supabase/seed.sql`. The seed is safe for local/demo use and does not create auth identities or secrets.
+`db reset` rebuilds Postgres from `supabase/migrations/` and then runs `supabase/seed.sql`. The seed is for the local stack only. It creates three throwaway test accounts (`alex@petswap.test`, `blair@petswap.test`, `casey@petswap.test`, password `petswap-local-dev` for all) plus deterministic pets, listings, and bookings covering every booking status. Nothing in it is a real credential or hosted data; never run it against the shared project.
 
 Inspect the local project in Studio:
 
 ```text
 http://127.0.0.1:54323
 ```
+
+## Contract tests
+
+`supabase/tests/` holds SQL checks that the schema keeps its promises (RLS on, booking policies present, confirmed bookings cannot overlap). Run them after a reset; see [`supabase/tests/README.md`](tests/README.md). They also run in CI via [`.github/workflows/db-contract.yml`](../.github/workflows/db-contract.yml).
 
 ## Migrations
 

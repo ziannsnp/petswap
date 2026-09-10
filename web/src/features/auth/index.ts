@@ -1,4 +1,5 @@
 export { AuthScreen } from './components/AuthScreen';
+export { RegisterScreen } from './components/RegisterScreen';
 export { ProtectedRoute } from './components/ProtectedRoute';
 export { AuthProvider } from './components/AuthProvider';
 export { AuthContext } from './context/authContext';
@@ -14,31 +15,14 @@ export {
   SignInError,
   SignUpError,
 } from './lib/authApi';
+// The credential rules FR-1.1 specifies, one module per field.
 export {
-  USERNAME_MIN_LENGTH,
-  USERNAME_MAX_LENGTH,
-  PASSWORD_MIN_LENGTH,
-  PASSWORD_MAX_LENGTH,
   USERNAME_REQUIREMENTS_MESSAGE,
-  PASSWORD_REQUIREMENTS_MESSAGE,
-  normalizeUsername,
-  validateUsername,
   isValidUsername,
-  validatePassword,
-  isValidPassword,
-  validatePasswordConfirmation,
-  validateEmail,
-  isValidEmail,
-  validateDisplayName,
-  validateRegistration,
-  validateLogin,
-} from './lib/credentialValidation';
-export type {
-  RegistrationValidationFields,
-  RegistrationValidationErrors,
-  LoginValidationFields,
-  LoginValidationErrors,
-} from './lib/credentialValidation';
+  normalizeUsername,
+} from './lib/username';
+export { PASSWORD_REQUIREMENTS_MESSAGE, isValidPassword } from './lib/password';
+export { EMAIL_REQUIREMENTS_MESSAGE, isValidEmail, normalizeEmail } from './lib/email';
 export type {
   SignInErrorCode,
   SignInInput,

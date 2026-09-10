@@ -30,3 +30,18 @@ test('the privacy notice and terms are reachable and cross-link', async ({ page 
   await expect(page).toHaveURL(new RegExp(`${routes.privacy}$`));
   await expect(page.getByRole('heading', { name: /privacy notice/i })).toBeVisible();
 });
+
+test('the sign-in entry point offers registration', async ({ page }) => {
+  await page.goto(routes.login);
+  await expect(page.getByRole('link', { name: /create an account/i })).toBeVisible();
+
+  await page.getByRole('link', { name: /create an account/i }).click();
+  await expect(page).toHaveURL(new RegExp(`${routes.register}$`));
+});
+
+test('the registration form renders without a Supabase connection', async ({ page }) => {
+  await page.goto(routes.register);
+  await expect(page.getByRole('heading', { name: /create your account/i })).toBeVisible();
+  await expect(page.getByLabel(/^password$/i)).toBeVisible();
+  await expect(page.getByLabel(/confirm password/i)).toBeVisible();
+});

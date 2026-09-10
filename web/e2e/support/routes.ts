@@ -3,6 +3,7 @@
 export const routes = {
   search: '/',
   login: '/login',
+  register: '/register',
   privacy: '/privacy',
   terms: '/terms',
   profile: '/profile',

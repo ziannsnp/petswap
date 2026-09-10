@@ -15,6 +15,8 @@ export type Database = {
           location: string | null;
           created_at: string;
           updated_at: string;
+          consent_version: string | null;
+          consent_given_at: string | null;
         };
         Insert: {
           id: string;
@@ -25,6 +27,8 @@ export type Database = {
           location?: string | null;
           created_at?: string;
           updated_at?: string;
+          consent_version?: string | null;
+          consent_given_at?: string | null;
         };
         Update: {
           id?: string;
@@ -35,6 +39,8 @@ export type Database = {
           location?: string | null;
           created_at?: string;
           updated_at?: string;
+          consent_version?: string | null;
+          consent_given_at?: string | null;
         };
         Relationships: [];
       };
@@ -94,7 +100,7 @@ export type Database = {
           location: string;
           description: string;
           capacity: number;
-          accepted_pet_types: PetSpecies[];
+          accepted_pet_types: Database['public']['Enums']['pet_species'][];
           facilities: string | null;
           status: Database['public']['Enums']['listing_status'];
           deleted_at: string | null;
@@ -109,7 +115,7 @@ export type Database = {
           location: string;
           description: string;
           capacity: number;
-          accepted_pet_types?: PetSpecies[];
+          accepted_pet_types?: Database['public']['Enums']['pet_species'][];
           facilities?: string | null;
           status?: Database['public']['Enums']['listing_status'];
           deleted_at?: string | null;

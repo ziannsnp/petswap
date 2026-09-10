@@ -4,17 +4,13 @@ import { ArrowLeft, ImagePlus, LoaderCircle, X } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { validateListingForm } from '../lib/listingForm';
 import type { ListingFormErrors } from '../lib/listingForm';
-import { useCreateListing } from '../hooks/useCreateListing';
-import { FACILITY_OPTIONS } from '../lib/listingOptions';
+import { FACILITY_OPTIONS, PET_TYPE_OPTIONS } from '../lib/listingOptions';
+import type { PetSpecies } from '../lib/listingOptions';
+import { partitionListingPhotos } from '../lib/listingPhotos';
+import type { RejectedListingPhoto } from '../lib/listingPhotos';
 import { ListingsNavigation } from './ListingsNavigation';
 import type { PetSpecies } from '../../../shared/types/database.types';
 
-const PET_TYPE_OPTIONS: { value: PetSpecies; label: string }[] = [
-  { value: 'dog', label: 'Dog' },
-  { value: 'cat', label: 'Cat' },
-  { value: 'rabbit', label: 'Rabbit' },
-  { value: 'bird', label: 'Bird' },
-];
 const labelClassName = 'mb-2 block text-sm font-medium text-gray-700';
 
 interface SelectedPhoto {
@@ -24,6 +20,10 @@ interface SelectedPhoto {
 
 function inputClassName(hasError: boolean) {
   return `input-field ${hasError ? 'border-red-500 focus:ring-red-300' : ''}`;
+}
+
+function toggleChoice<T extends string>(value: T, selected: T[], update: (next: T[]) => void) {
+  update(selected.includes(value) ? selected.filter((item) => item !== value) : [...selected, value]);
 }
 
 export function CreateListingScreen() {
@@ -36,7 +36,8 @@ export function CreateListingScreen() {
   const [acceptedPetTypes, setAcceptedPetTypes] = useState<PetSpecies[]>(['dog']);
   const [facilities, setFacilities] = useState<string[]>([]);
   const [photos, setPhotos] = useState<SelectedPhoto[]>([]);
-  const [errors, setErrors] = useState<ListingFormErrors>({});
+  const [rejectedPhotos, setRejectedPhotos] = useState<RejectedListingPhoto[]>([]);
+  const [hasSubmitted, setHasSubmitted] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const createListingMutation = useCreateListing();
   const isSubmitting = isSaving || createListingMutation.isPending;
@@ -45,17 +46,23 @@ export function CreateListingScreen() {
     if (createListingMutation.isError) createListingMutation.reset();
   };
 
+  const values = { title, location, description, capacity };
+  // Errors stay derived so correcting a field clears its message as the owner types,
+  // while nothing is reported until they have tried to save at least once.
+  const errors: ListingFormErrors = hasSubmitted ? validateListingForm(values) : {};
+
   useEffect(() => () => {
     previewUrls.current.forEach((url) => URL.revokeObjectURL(url));
   }, []);
 
-  const toggleChoice = <T extends string,>(value: T, selected: T[], update: (next: T[]) => void) => {
-    update(selected.includes(value) ? selected.filter((item) => item !== value) : [...selected, value]);
-  };
-
   const handlePhotoSelection = (event: ChangeEvent<HTMLInputElement>) => {
-    resetMutationError();
-    const selectedPhotos = Array.from(event.target.files ?? []).map((file) => {
+    const { accepted, rejected } = partitionListingPhotos(
+      Array.from(event.target.files ?? []),
+      photos.length,
+    );
+    setRejectedPhotos(rejected);
+
+    const selectedPhotos = accepted.map((file) => {
       const previewUrl = URL.createObjectURL(file);
       previewUrls.current.push(previewUrl);
       return { file, previewUrl };
@@ -69,18 +76,17 @@ export function CreateListingScreen() {
     URL.revokeObjectURL(previewUrl);
     previewUrls.current = previewUrls.current.filter((url) => url !== previewUrl);
     setPhotos((current) => current.filter((photo) => photo.previewUrl !== previewUrl));
+    // A capacity reason stops being true the moment a photo is removed. Reasons about the
+    // files themselves are still accurate, so they stay on screen.
+    setRejectedPhotos((current) => current.filter((rejected) => rejected.kind !== 'capacity'));
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const nextErrors = validateListingForm({ title, location, description, capacity });
-    setErrors(nextErrors);
+    setShowSuccess(false);
+    setHasSubmitted(true);
 
-    if (Object.keys(nextErrors).length > 0) return;
-    if (capacity === '') {
-      setErrors({ capacity: 'Capacity must be at least 1.' });
-      return;
-    }
+    if (Object.keys(validateListingForm(values)).length > 0) return;
 
     setIsSaving(true);
     try {
@@ -186,8 +192,8 @@ export function CreateListingScreen() {
           <fieldset>
             <legend className={labelClassName}>Accepted pet types</legend>
             <div className="flex flex-wrap gap-2">
-              {PET_TYPE_OPTIONS.map((petType) => {
-                const isSelected = acceptedPetTypes.includes(petType.value);
+              {PET_TYPE_OPTIONS.map(({ value, label }) => {
+                const isSelected = acceptedPetTypes.includes(value);
                 return (
                   <button
                     className={`min-h-10 rounded-lg border px-4 py-2 text-sm transition-colors ${
@@ -196,12 +202,11 @@ export function CreateListingScreen() {
                         : 'border-gray-200 bg-white text-gray-700 hover:border-brand-500 hover:bg-brand-50'
                     }`}
                     type="button"
-                    key={petType.value}
-                    disabled={isSubmitting}
+                    key={value}
                     aria-pressed={isSelected}
-                    onClick={() => toggleChoice(petType.value, acceptedPetTypes, setAcceptedPetTypes)}
+                    onClick={() => toggleChoice(value, acceptedPetTypes, setAcceptedPetTypes)}
                   >
-                    {petType.label}
+                    {label}
                   </button>
                 );
               })}
@@ -276,6 +281,15 @@ export function CreateListingScreen() {
               disabled={isSubmitting}
               onChange={handlePhotoSelection}
             />
+            {rejectedPhotos.length > 0 && (
+              <ul className="mt-2 space-y-1" role="alert">
+                {rejectedPhotos.map((rejected, index) => (
+                  <li className="text-xs text-red-700" key={`${rejected.fileName}-${index}`}>
+                    {rejected.fileName}: {rejected.reason}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
 
           {createListingMutation.isError && (

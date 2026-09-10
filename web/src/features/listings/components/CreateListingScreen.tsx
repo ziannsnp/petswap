@@ -5,16 +5,11 @@ import { Link, useNavigate } from 'react-router-dom';
 import { validateListingForm } from '../lib/listingForm';
 import type { ListingFormErrors } from '../lib/listingForm';
 import { useCreateListing } from '../hooks/useCreateListing';
-import { FACILITY_OPTIONS } from '../lib/listingOptions';
+import { FACILITY_OPTIONS, PET_TYPE_OPTIONS } from '../lib/listingOptions';
+import { partitionListingPhotos } from '../lib/listingPhotos';
+import type { RejectedListingPhoto } from '../lib/listingPhotos';
 import { ListingsNavigation } from './ListingsNavigation';
-import type { PetSpecies } from '../../../shared/types/database.types';
-
-const PET_TYPE_OPTIONS: { value: PetSpecies; label: string }[] = [
-  { value: 'dog', label: 'Dog' },
-  { value: 'cat', label: 'Cat' },
-  { value: 'rabbit', label: 'Rabbit' },
-  { value: 'bird', label: 'Bird' },
-];
+import type { PetSpecies } from '../lib/listingOptions';
 const labelClassName = 'mb-2 block text-sm font-medium text-gray-700';
 
 interface SelectedPhoto {
@@ -36,10 +31,13 @@ export function CreateListingScreen() {
   const [acceptedPetTypes, setAcceptedPetTypes] = useState<PetSpecies[]>(['dog']);
   const [facilities, setFacilities] = useState<string[]>([]);
   const [photos, setPhotos] = useState<SelectedPhoto[]>([]);
-  const [errors, setErrors] = useState<ListingFormErrors>({});
+  const [rejectedPhotos, setRejectedPhotos] = useState<RejectedListingPhoto[]>([]);
+  const [hasSubmitted, setHasSubmitted] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const createListingMutation = useCreateListing();
   const isSubmitting = isSaving || createListingMutation.isPending;
+  const values = { title, location, description, capacity };
+  const errors: ListingFormErrors = hasSubmitted ? validateListingForm(values) : {};
 
   const resetMutationError = () => {
     if (createListingMutation.isError) createListingMutation.reset();
@@ -55,7 +53,12 @@ export function CreateListingScreen() {
 
   const handlePhotoSelection = (event: ChangeEvent<HTMLInputElement>) => {
     resetMutationError();
-    const selectedPhotos = Array.from(event.target.files ?? []).map((file) => {
+    const { accepted, rejected } = partitionListingPhotos(
+      Array.from(event.target.files ?? []),
+      photos.length,
+    );
+    setRejectedPhotos(rejected);
+    const selectedPhotos = accepted.map((file) => {
       const previewUrl = URL.createObjectURL(file);
       previewUrls.current.push(previewUrl);
       return { file, previewUrl };
@@ -69,18 +72,16 @@ export function CreateListingScreen() {
     URL.revokeObjectURL(previewUrl);
     previewUrls.current = previewUrls.current.filter((url) => url !== previewUrl);
     setPhotos((current) => current.filter((photo) => photo.previewUrl !== previewUrl));
+    setRejectedPhotos((current) => current.filter((rejected) => rejected.kind !== 'capacity'));
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    setHasSubmitted(true);
     const nextErrors = validateListingForm({ title, location, description, capacity });
-    setErrors(nextErrors);
 
     if (Object.keys(nextErrors).length > 0) return;
-    if (capacity === '') {
-      setErrors({ capacity: 'Capacity must be at least 1.' });
-      return;
-    }
+    if (capacity === '') return;
 
     setIsSaving(true);
     try {
@@ -126,6 +127,15 @@ export function CreateListingScreen() {
               aria-invalid={Boolean(errors.title)}
               aria-describedby={errors.title ? 'listing-title-error' : undefined}
             />
+            {rejectedPhotos.length > 0 && (
+              <ul className="mt-2 space-y-1" role="alert">
+                {rejectedPhotos.map((rejected, index) => (
+                  <li className="text-xs text-red-700" key={`${rejected.fileName}-${index}`}>
+                    {rejected.fileName}: {rejected.reason}
+                  </li>
+                ))}
+              </ul>
+            )}
             {errors.title && <p className="mt-1 text-xs text-red-700" id="listing-title-error">{errors.title}</p>}
           </div>
 

@@ -1,4 +1,5 @@
 export { AuthScreen } from './components/AuthScreen';
+export { RegisterForm } from './components/RegisterForm';
 export { ProtectedRoute } from './components/ProtectedRoute';
 export { useAuth, authKeys } from './hooks/useAuth';
 export { useSignUp } from './hooks/useSignUp';

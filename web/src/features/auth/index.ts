@@ -12,10 +12,7 @@ export {
   SignInError,
   SignUpError,
 } from './lib/authApi';
-// The credential rules FR-1.1 actually specifies. `credentialValidation.ts` is
-// deliberately not re-exported: its rules contradict these (it accepts periods and
-// uppercase in usernames, and a password with no uppercase or symbol), so publishing
-// both would put two answers to the same question in one public interface.
+// The credential rules FR-1.1 specifies, one module per field.
 export {
   USERNAME_REQUIREMENTS_MESSAGE,
   isValidUsername,

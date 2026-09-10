@@ -143,9 +143,9 @@ export function RegisterScreen() {
       signUpMutation.reset();
     }
 
-    // A finished registration is no longer finished once the user edits the form;
-    // returning to the editable state is what makes the submit button come back.
-    setConfirmationSent(false);
+    // Editing retracts complaints only. The account already exists on the server, so
+    // the confirmation stays until the user leaves for sign-in; clearing it here left
+    // them on a blank form with no sign that the registration had succeeded.
     setValidationSummary(null);
     setFieldErrors((current) => {
       const next = { ...current };

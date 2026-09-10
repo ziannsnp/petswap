@@ -25,4 +25,8 @@ test('the privacy notice and terms are reachable and cross-link', async ({ page 
   await page.getByRole('link', { name: /terms of service/i }).click();
   await expect(page).toHaveURL(new RegExp(`${routes.terms}$`));
   await expect(page.getByRole('heading', { name: /terms of service/i })).toBeVisible();
+
+  await page.getByRole('link', { name: /privacy notice/i }).click();
+  await expect(page).toHaveURL(new RegExp(`${routes.privacy}$`));
+  await expect(page.getByRole('heading', { name: /privacy notice/i })).toBeVisible();
 });

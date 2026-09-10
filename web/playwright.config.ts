@@ -23,7 +23,9 @@ export default defineConfig({
     : [['list']],
   use: {
     baseURL,
-    trace: 'on-first-retry',
+    // retries stay at 0, so 'on-first-retry' would never fire — keep a trace
+    // whenever a test fails instead.
+    trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
   },
   projects: [

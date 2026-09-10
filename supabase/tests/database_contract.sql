@@ -129,6 +129,16 @@ insert into _contract (check_name, passed) values
       select 1 from storage.buckets
       where id = 'listing-photos' and public
     )
+  ),
+  (
+    'listings accept only pet_species values as accepted pet types',
+    exists (
+      select 1 from information_schema.columns
+      where table_schema = 'public'
+        and table_name = 'listings'
+        and column_name = 'accepted_pet_types'
+        and udt_name = '_pet_species'
+    )
   );
 
 select check_name, passed

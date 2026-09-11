@@ -176,7 +176,6 @@ insert into _contract (check_name, passed) values
     'anonymous and authenticated users may request safe listing host details',
     has_function_privilege('anon', 'public.get_listing_host(uuid)', 'EXECUTE')
       and has_function_privilege('authenticated', 'public.get_listing_host(uuid)', 'EXECUTE')
-    )
   );
 
 insert into _contract (check_name, passed)

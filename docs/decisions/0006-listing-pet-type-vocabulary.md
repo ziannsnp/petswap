@@ -27,8 +27,10 @@ source of truth for the vocabulary, and both listings and pets refer to it.
 Capitalised strings are display labels only. The interface maps enum values to labels at
 render time and never sends a label to the database.
 
-`listings.facilities` is deliberately unchanged. FR-3.1 specifies plain-text facilities,
-no requirement filters on them, and `seed.sql` already stores them as free text.
+`listings.facilities` remains a nullable text column because no requirement filters on it.
+The approved prototype defines six optional facility checkboxes; the web app serializes the
+selected display labels as newline-delimited text and reconstructs the checklist for display.
+This preserves the simple schema without turning the form into unrestricted free-text input.
 
 ## Consequences
 

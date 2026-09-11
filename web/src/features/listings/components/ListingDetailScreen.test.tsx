@@ -17,7 +17,7 @@ const listing = {
   description: 'A calm place for pets.',
   capacity: 2,
   accepted_pet_types: ['dog', 'cat'],
-  facilities: 'Heated floor\nCustom climbing wall',
+  facilities: 'Lawn\nEnclosed fence',
   status: 'published',
   deleted_at: null,
   published_at: '2026-09-10T00:00:01.000Z',
@@ -71,13 +71,14 @@ describe('ListingDetailScreen', () => {
     viewerId = undefined;
   });
 
-  it('shows public visitors the host, arbitrary facilities, and every photo', () => {
+  it('shows public visitors the host, selected facilities, and every photo', () => {
     renderScreen();
 
     expect(screen.getByRole('link', { name: /back to listings/i })).toHaveAttribute('href', '/');
     expect(screen.queryByText('Published')).not.toBeInTheDocument();
     expect(screen.getByRole('complementary', { name: 'Host profile' })).toHaveTextContent('Nina Host');
-    expect(screen.getByText(/Heated floor/)).toHaveTextContent('Custom climbing wall');
+    expect(screen.getByRole('list')).toHaveTextContent('Lawn');
+    expect(screen.getByRole('list')).toHaveTextContent('Enclosed fence');
     expect(screen.getAllByRole('img')).toHaveLength(2);
     expect(screen.getByRole('img', { name: 'Quiet home photo 1' })).toHaveAttribute(
       'src',

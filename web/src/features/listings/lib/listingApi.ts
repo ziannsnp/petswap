@@ -1,7 +1,7 @@
 import { getSupabaseClient } from '@/shared/lib/supabase';
 import type { Database } from '@/shared/types/database.types';
 import { serializeFacilities } from './listingOptions';
-import type { PetSpecies } from './listingOptions';
+import type { Facility, PetSpecies } from './listingOptions';
 import { LISTING_PHOTO_MAX_COUNT } from './listingPhotos';
 
 export type ListingPublicationMode = 'draft' | 'published';
@@ -12,7 +12,7 @@ export interface CreateListingValues {
   description: string;
   capacity: number;
   acceptedPetTypes: PetSpecies[];
-  facilities: string;
+  facilities: Facility[];
   photos: File[];
   publicationMode: ListingPublicationMode;
 }

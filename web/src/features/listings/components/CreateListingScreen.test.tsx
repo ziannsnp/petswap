@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { LISTING_PHOTO_MAX_BYTES, LISTING_PHOTO_MAX_COUNT } from '../lib/listingPhotos';
-import { PET_TYPE_OPTIONS } from '../lib/listingOptions';
+import { FACILITY_OPTIONS, PET_TYPE_OPTIONS } from '../lib/listingOptions';
 import { validListingFormValues } from '../testing/listingFixtures';
 import { CreateListingScreen } from './CreateListingScreen';
 
@@ -129,14 +129,26 @@ describe('CreateListingScreen', () => {
     expect(screen.getByText('Location is required.')).toBeInTheDocument();
   });
 
-  it('accepts arbitrary plain text for facilities', async () => {
+  it('offers six optional facility checkboxes that can be selected independently', async () => {
     const user = userEvent.setup();
     renderScreen();
 
-    const facilities = screen.getByLabelText('Facilities');
-    await user.type(facilities, 'Heated floor and a custom climbing wall');
+    for (const facility of FACILITY_OPTIONS) {
+      expect(screen.getByRole('checkbox', { name: facility })).not.toBeChecked();
+    }
 
-    expect(facilities).toHaveValue('Heated floor and a custom climbing wall');
+    const lawn = screen.getByRole('checkbox', { name: 'Lawn' });
+    const dailyUpdates = screen.getByRole('checkbox', { name: 'Daily photo updates' });
+    await user.click(lawn);
+    await user.click(dailyUpdates);
+
+    expect(lawn).toBeChecked();
+    expect(dailyUpdates).toBeChecked();
+
+    await user.click(lawn);
+
+    expect(lawn).not.toBeChecked();
+    expect(dailyUpdates).toBeChecked();
   });
 
   it('releases the object URL of a removed photo and leaves the others alone', async () => {
@@ -274,7 +286,8 @@ describe('CreateListingScreen', () => {
     const user = userEvent.setup();
     renderScreen();
     await completeRequiredFields(user);
-    await user.type(screen.getByLabelText('Facilities'), 'Fenced yard\nClose to a vet');
+    await user.click(screen.getByRole('checkbox', { name: 'Lawn' }));
+    await user.click(screen.getByRole('checkbox', { name: 'Daily photo updates' }));
 
     await user.click(screen.getByRole('button', { name: /publish listing/i }));
 
@@ -285,7 +298,7 @@ describe('CreateListingScreen', () => {
         description: validListingFormValues.description,
         capacity: validListingFormValues.capacity,
         acceptedPetTypes: ['dog'],
-        facilities: 'Fenced yard\nClose to a vet',
+        facilities: ['Lawn', 'Daily photo updates'],
         photos: [],
         publicationMode: 'published',
       }));

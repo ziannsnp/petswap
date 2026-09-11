@@ -5,11 +5,11 @@ import { Link, useNavigate } from 'react-router-dom';
 import { validateListingForm } from '../lib/listingForm';
 import type { ListingFormErrors } from '../lib/listingForm';
 import { useCreateListing } from '../hooks/useCreateListing';
-import { PET_TYPE_OPTIONS } from '../lib/listingOptions';
+import { FACILITY_OPTIONS, PET_TYPE_OPTIONS } from '../lib/listingOptions';
 import { partitionListingPhotos } from '../lib/listingPhotos';
 import type { RejectedListingPhoto } from '../lib/listingPhotos';
 import { ListingsNavigation } from './ListingsNavigation';
-import type { PetSpecies } from '../lib/listingOptions';
+import type { Facility, PetSpecies } from '../lib/listingOptions';
 
 const labelClassName = 'mb-2 block text-sm font-medium text-gray-700';
 
@@ -35,7 +35,7 @@ export function CreateListingScreen() {
   const [capacity, setCapacity] = useState<number | ''>(1);
   const [acceptedPetTypes, setAcceptedPetTypes] = useState<PetSpecies[]>(['dog']);
   const [petTypeToAdd, setPetTypeToAdd] = useState<PetSpecies>('cat');
-  const [facilities, setFacilities] = useState('');
+  const [facilities, setFacilities] = useState<Facility[]>([]);
   const [photos, setPhotos] = useState<SelectedPhoto[]>([]);
   const [rejectedPhotos, setRejectedPhotos] = useState<RejectedListingPhoto[]>([]);
   const [hasSubmitted, setHasSubmitted] = useState(false);
@@ -251,18 +251,28 @@ export function CreateListingScreen() {
             {errors.acceptedPetTypes && <p className="mt-1 text-xs text-red-700">{errors.acceptedPetTypes}</p>}
           </fieldset>
 
-          <div>
-            <label className={labelClassName} htmlFor="listing-facilities">Facilities</label>
-            <textarea
-              className="input-field"
-              id="listing-facilities"
-              rows={3}
-              value={facilities}
-              onChange={(event) => { resetMutationError(); setFacilities(event.target.value); }}
-              disabled={isSubmitting}
-              placeholder="Describe any facilities, equipment, or nearby services"
-            />
-          </div>
+          <fieldset>
+            <legend className={labelClassName}>Facilities <span className="font-normal text-gray-500">(optional)</span></legend>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {FACILITY_OPTIONS.map((facility) => (
+                <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-600" key={facility}>
+                  <input
+                    className="h-4 w-4 rounded accent-brand-600"
+                    type="checkbox"
+                    checked={facilities.includes(facility)}
+                    disabled={isSubmitting}
+                    onChange={() => {
+                      resetMutationError();
+                      setFacilities((current) => current.includes(facility)
+                        ? current.filter((item) => item !== facility)
+                        : [...current, facility]);
+                    }}
+                  />
+                  <span className="break-words">{facility}</span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
 
           <div>
             <span className={labelClassName}>Photos</span>

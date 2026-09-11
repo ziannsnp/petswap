@@ -15,7 +15,7 @@ export function makeListingRow(overrides: Partial<ListingQueryRow> = {}): Listin
     description: 'A calm, fenced home with plenty of indoor space.',
     capacity: 2,
     accepted_pet_types: ['dog', 'cat'],
-    facilities: 'Fenced yard',
+    facilities: 'Enclosed fence',
     status: 'published',
     deleted_at: null,
     published_at: '2026-09-01T00:00:00.000Z',

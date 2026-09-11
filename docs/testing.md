@@ -116,7 +116,7 @@ Playwright is wired up: [`web/playwright.config.ts`](../web/playwright.config.ts
 
 After `npx supabase db reset`, configure `web/.env.local` with the local API URL and anon key printed by `supabase start`, run `npm run dev` from `web/`, and sign in as `alex@petswap.test` with password `petswap-local-dev`.
 
-1. Open **My listings**, create a listing, enter at least one accepted pet type, arbitrary facility text, and up to ten supported photos.
+1. Open **My listings**, create a listing, enter at least one accepted pet type, select any combination of the six optional facility checkboxes, and add up to ten supported photos.
 2. Choose **Save draft**. Confirm the success message says the draft is private, the card is marked Draft, and its detail page shows every photo plus the host profile.
 3. Create another listing and choose **Publish listing**. Confirm it is marked Published and its direct detail URL works in a private browser window while the draft URL does not.
 4. In Supabase Studio Storage, confirm `listing-photos` is private. In the browser Network panel, photo requests should use signed URLs rather than a public object URL.

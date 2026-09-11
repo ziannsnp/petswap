@@ -1,8 +1,8 @@
-import { ArrowLeft, Image } from 'lucide-react';
+import { ArrowLeft, Check, Image } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '@/features/auth';
 import { useListing } from '../hooks/useListings';
-import { petSpeciesLabel } from '../lib/listingOptions';
+import { petSpeciesLabel, parseFacilities } from '../lib/listingOptions';
 import { ListingsNavigation } from './ListingsNavigation';
 import { STATUS_STYLES } from './listingStatus';
 
@@ -64,10 +64,17 @@ export function ListingDetailScreen() {
                     ))}
                     <span className="badge-brand">Up to {listing.capacity} pets</span>
                   </div>
-                  {listing.facilities && (
+                  {parseFacilities(listing.facilities).length > 0 && (
                     <div className="mt-6">
                       <h2 className="text-sm font-semibold text-gray-900">Facilities</h2>
-                      <p className="mt-2 whitespace-pre-wrap text-sm text-gray-600">{listing.facilities}</p>
+                      <ul className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        {parseFacilities(listing.facilities).map((facility) => (
+                          <li className="flex items-center gap-2 text-sm text-gray-600" key={facility}>
+                            <Check className="h-4 w-4 shrink-0 text-brand-600" aria-hidden="true" />
+                            {facility}
+                          </li>
+                        ))}
+                      </ul>
                     </div>
                   )}
                 </div>

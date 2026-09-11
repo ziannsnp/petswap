@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { listMyListings, listPublishedListings } from '../lib/listingApi';
+import { getListing, listMyListings, listPublishedListings } from '../lib/listingApi';
 
 export function usePublishedListings() {
   return useQuery({
@@ -12,5 +12,12 @@ export function useMyListings() {
   return useQuery({
     queryKey: ['listings', 'mine'],
     queryFn: listMyListings,
+  });
+}
+
+export function useListing(listingId: string) {
+  return useQuery({
+    queryKey: ['listings', 'detail', listingId],
+    queryFn: () => getListing(listingId),
   });
 }

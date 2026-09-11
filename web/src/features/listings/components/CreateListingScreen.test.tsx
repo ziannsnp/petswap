@@ -1,11 +1,23 @@
 /** @jest-environment jsdom */
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { LISTING_PHOTO_MAX_BYTES, LISTING_PHOTO_MAX_COUNT } from '../lib/listingPhotos';
 import { PET_TYPE_OPTIONS } from '../lib/listingOptions';
 import { validListingFormValues } from '../testing/listingFixtures';
 import { CreateListingScreen } from './CreateListingScreen';
+
+const mockMutateAsync = jest.fn();
+const mockReset = jest.fn();
+
+jest.mock('../hooks/useCreateListing', () => ({
+  useCreateListing: () => ({
+    mutateAsync: mockMutateAsync,
+    reset: mockReset,
+    isPending: false,
+    isError: false,
+  }),
+}));
 
 function fileOfSize(name: string, type: string, size: number): File {
   const file = new File(['photo'], name, { type });
@@ -33,6 +45,7 @@ beforeAll(() => {
 beforeEach(() => {
   jest.clearAllMocks();
   jest.useRealTimers();
+  mockMutateAsync.mockResolvedValue(undefined);
 });
 
 async function completeRequiredFields(user: ReturnType<typeof userEvent.setup>) {
@@ -90,9 +103,12 @@ describe('CreateListingScreen', () => {
     });
 
     expect(screen.getByRole('img', { name: 'yard.jpg' })).toBeInTheDocument();
-    expect(screen.getByRole('alert')).toHaveTextContent(
+    const rejectionAlert = screen.getByRole('alert');
+    expect(rejectionAlert).toHaveTextContent(
       'notes.pdf: Unsupported file type. Choose a JPG, PNG, WebP, or GIF file.',
     );
+    expect(screen.getByText('Photos').parentElement).toContainElement(rejectionAlert);
+    expect(screen.getByLabelText(/listing title/i).parentElement).not.toContainElement(rejectionAlert);
   });
 
   it('reports required fields only after a save attempt, then clears each as it is corrected', async () => {
@@ -259,20 +275,23 @@ describe('CreateListingScreen', () => {
     expect(screen.getByText('Choose at least one accepted pet type.')).toBeInTheDocument();
   });
 
-  it('disables actions while a valid UI-only submission is pending and then reports success', async () => {
-    jest.useFakeTimers();
-    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+  it('submits valid listing details to the create-listing mutation', async () => {
+    const user = userEvent.setup();
     renderScreen();
     await completeRequiredFields(user);
 
     await user.click(screen.getByRole('button', { name: /save listing/i }));
-    expect(screen.getByRole('button', { name: /saving/i })).toBeDisabled();
-    expect(screen.getByRole('button', { name: /cancel/i })).toBeDisabled();
 
-    await act(async () => {
-      jest.advanceTimersByTime(700);
+    await waitFor(() => {
+      expect(mockMutateAsync).toHaveBeenCalledWith(expect.objectContaining({
+        title: validListingFormValues.title,
+        location: validListingFormValues.location,
+        description: validListingFormValues.description,
+        capacity: validListingFormValues.capacity,
+        acceptedPetTypes: ['dog'],
+        facilities: [],
+        photos: [],
+      }));
     });
-
-    expect(screen.getByRole('status')).toHaveTextContent('Listing details checked successfully.');
   });
 });

@@ -41,6 +41,7 @@
     "globals": "^16.1.0",
     "jest": "^30.0.0",
     "jest-environment-jsdom": "^30.5.1",
+    "supabase": "^2.117.0",
     "tailwindcss": "^4.3.3",
     "ts-jest": "^29.4.0",
     "typescript": "~5.8.3",

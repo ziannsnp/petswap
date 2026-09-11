@@ -1,10 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
-import { listMyListings, listPublishedListings } from '../lib/listingApi';
+import { getListing, listMyListings, listPublishedListings } from '../lib/listingApi';
 
 export const listingKeys = {
   all: ['listings'] as const,
   published: () => [...listingKeys.all, 'published'] as const,
-  mine: (ownerId: string | undefined) => [...listingKeys.all, 'mine', ownerId ?? 'anonymous'] as const,
+  mine: () => [...listingKeys.all, 'mine'] as const,
 };
 
 export function usePublishedListings() {
@@ -14,10 +14,16 @@ export function usePublishedListings() {
   });
 }
 
-export function useMyListings(ownerId: string | undefined) {
+export function useMyListings() {
   return useQuery({
-    queryKey: listingKeys.mine(ownerId),
-    queryFn: () => ownerId ? listMyListings(ownerId) : Promise.resolve([]),
-    enabled: Boolean(ownerId),
+    queryKey: listingKeys.mine(),
+    queryFn: listMyListings,
+  });
+}
+
+export function useListing(listingId: string) {
+  return useQuery({
+    queryKey: ['listings', 'detail', listingId],
+    queryFn: () => getListing(listingId),
   });
 }

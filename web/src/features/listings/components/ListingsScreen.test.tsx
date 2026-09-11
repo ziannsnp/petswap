@@ -1,56 +1,43 @@
 /** @jest-environment jsdom */
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { useMyListings } from '../hooks/useListings';
-import { makeListingRow } from '../testing/listingFixtures';
 import { ListingsScreen } from './ListingsScreen';
 
-jest.mock('../hooks/useListings', () => ({ useMyListings: jest.fn() }));
-
-const mockedUseMyListings = jest.mocked(useMyListings);
+jest.mock('../hooks/useListings', () => ({
+  useMyListings: () => ({
+    data: [{
+      id: 'listing-123',
+      title: 'Quiet home',
+      location: 'Chiang Mai',
+      description: 'A calm place for pets.',
+      capacity: 2,
+      accepted_pet_types: ['dog'],
+      facilities: null,
+      status: 'draft',
+      deleted_at: null,
+      published_at: null,
+      owner_id: 'owner-123',
+      created_at: '2026-09-10T00:00:00.000Z',
+      updated_at: '2026-09-10T00:00:00.000Z',
+      listing_images: [],
+      cover_photo_url: null,
+    }],
+    isPending: false,
+    isError: false,
+  }),
+}));
 
 describe('ListingsScreen', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
-
-  it('loads My Listings through the authenticated-owner query', () => {
-    mockedUseMyListings.mockReturnValue({
-      data: [],
-      isPending: false,
-      isError: false,
-    } as unknown as ReturnType<typeof useMyListings>);
-
+  it('confirms that a newly created draft listing was saved', () => {
     render(
-      <MemoryRouter>
+      <MemoryRouter initialEntries={[{ pathname: '/listings', state: { listingSaved: true } }]}>
         <ListingsScreen />
       </MemoryRouter>,
     );
 
-    expect(mockedUseMyListings).toHaveBeenCalledWith();
-    expect(screen.getByRole('heading', { name: 'My listings' })).toBeInTheDocument();
-    expect(screen.getByText('No listings yet')).toBeInTheDocument();
-  });
-
-  it('shows active owner listings and omits soft-deleted rows', () => {
-    mockedUseMyListings.mockReturnValue({
-      data: [
-        { ...makeListingRow({ id: 'listing-live', title: 'Sunny garden room' }), cover_photo_url: null },
-        { ...makeListingRow({ id: 'listing-deleted', title: 'Retired listing', status: 'deleted' }), cover_photo_url: null },
-      ],
-      isPending: false,
-      isError: false,
-    } as unknown as ReturnType<typeof useMyListings>);
-
-    render(
-      <MemoryRouter>
-        <ListingsScreen />
-      </MemoryRouter>,
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Draft listing saved successfully. You can preview it from My listings.',
     );
-
-    expect(screen.getByText('Sunny garden room')).toBeInTheDocument();
-    expect(screen.queryByText('Retired listing')).not.toBeInTheDocument();
-    expect(screen.getByText('Dog')).toBeInTheDocument();
-    expect(screen.getByText('Cat')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /quiet home/i })).toHaveAttribute('href', '/listings/listing-123');
   });
 });

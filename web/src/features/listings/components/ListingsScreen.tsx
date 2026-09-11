@@ -5,7 +5,7 @@ import { petSpeciesLabel } from '../lib/listingOptions';
 import type { Listing } from '../lib/listingApi';
 import { ListingsNavigation } from './ListingsNavigation';
 
-const STATUS_STYLES: Record<Listing['status'], { label: string; className: string }> = {
+export const STATUS_STYLES: Record<Listing['status'], { label: string; className: string }> = {
   draft: { label: 'Draft', className: 'bg-yellow-50 text-yellow-700' },
   published: { label: 'Published', className: 'bg-green-50 text-green-700' },
   deleted: { label: 'Deleted', className: 'bg-red-50 text-red-700' },

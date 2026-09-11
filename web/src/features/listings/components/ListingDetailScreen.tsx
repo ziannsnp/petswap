@@ -3,10 +3,12 @@ import { Link, useParams } from 'react-router-dom';
 import { useListing } from '../hooks/useListings';
 import { petSpeciesLabel, parseFacilities } from '../lib/listingOptions';
 import { ListingsNavigation } from './ListingsNavigation';
+import { STATUS_STYLES } from './ListingsScreen';
 
 export function ListingDetailScreen() {
   const { listingId = '' } = useParams();
   const { data: listing, isPending, isError } = useListing(listingId);
+  const status = listing ? STATUS_STYLES[listing.status] : null;
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900">
@@ -39,7 +41,7 @@ export function ListingDetailScreen() {
               <div>
                 <div className="flex items-start justify-between gap-3">
                   <h1 className="text-2xl font-bold">{listing.title}</h1>
-                  <span className="badge-brand">{listing.status === 'draft' ? 'Draft' : 'Published'}</span>
+                  <span className={`badge-brand ${status?.className ?? ''}`}>{status?.label}</span>
                 </div>
                 <p className="mt-2 text-sm text-gray-500">{listing.location}</p>
                 <p className="mt-6 whitespace-pre-wrap text-gray-700">{listing.description}</p>

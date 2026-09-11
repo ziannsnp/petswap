@@ -4,17 +4,11 @@ import { ArrowLeft, ImagePlus, LoaderCircle, X } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { validateListingForm } from '../lib/listingForm';
 import type { ListingFormErrors } from '../lib/listingForm';
-import { PET_TYPE_OPTIONS, type PetSpecies } from '../lib/listingOptions';
+import { FACILITY_OPTIONS, PET_TYPE_OPTIONS } from '../lib/listingOptions';
+import type { PetSpecies } from '../lib/listingOptions';
+import { partitionListingPhotos } from '../lib/listingPhotos';
+import type { RejectedListingPhoto } from '../lib/listingPhotos';
 import { ListingsNavigation } from './ListingsNavigation';
-
-const FACILITIES = [
-  'Fenced yard',
-  'Air conditioning',
-  'Security cameras',
-  'Indoor play area',
-  'Daily photo updates',
-  'Near a vet clinic',
-];
 
 const labelClassName = 'mb-2 block text-sm font-medium text-gray-700';
 
@@ -41,16 +35,28 @@ export function CreateListingScreen() {
   const [acceptedPetTypes, setAcceptedPetTypes] = useState<PetSpecies[]>(['dog']);
   const [facilities, setFacilities] = useState<string[]>([]);
   const [photos, setPhotos] = useState<SelectedPhoto[]>([]);
-  const [errors, setErrors] = useState<ListingFormErrors>({});
+  const [rejectedPhotos, setRejectedPhotos] = useState<RejectedListingPhoto[]>([]);
+  const [hasSubmitted, setHasSubmitted] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+
+  const values = { title, location, description, capacity };
+  // Errors stay derived so correcting a field clears its message as the owner types,
+  // while nothing is reported until they have tried to save at least once.
+  const errors: ListingFormErrors = hasSubmitted ? validateListingForm(values) : {};
 
   useEffect(() => () => {
     previewUrls.current.forEach((url) => URL.revokeObjectURL(url));
   }, []);
 
   const handlePhotoSelection = (event: ChangeEvent<HTMLInputElement>) => {
-    const selectedPhotos = Array.from(event.target.files ?? []).map((file) => {
+    const { accepted, rejected } = partitionListingPhotos(
+      Array.from(event.target.files ?? []),
+      photos.length,
+    );
+    setRejectedPhotos(rejected);
+
+    const selectedPhotos = accepted.map((file) => {
       const previewUrl = URL.createObjectURL(file);
       previewUrls.current.push(previewUrl);
       return { file, previewUrl };
@@ -63,15 +69,17 @@ export function CreateListingScreen() {
     URL.revokeObjectURL(previewUrl);
     previewUrls.current = previewUrls.current.filter((url) => url !== previewUrl);
     setPhotos((current) => current.filter((photo) => photo.previewUrl !== previewUrl));
+    // A capacity reason stops being true the moment a photo is removed. Reasons about the
+    // files themselves are still accurate, so they stay on screen.
+    setRejectedPhotos((current) => current.filter((rejected) => rejected.kind !== 'capacity'));
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setShowSuccess(false);
-    const nextErrors = validateListingForm({ title, location, description, capacity });
-    setErrors(nextErrors);
+    setHasSubmitted(true);
 
-    if (Object.keys(nextErrors).length > 0) return;
+    if (Object.keys(validateListingForm(values)).length > 0) return;
 
     setIsSaving(true);
     // TODO(T-2.1.5): Replace this UI-only delay with the create-listing mutation.
@@ -182,7 +190,7 @@ export function CreateListingScreen() {
           <fieldset>
             <legend className={labelClassName}>Facilities</legend>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {FACILITIES.map((facility) => (
+              {FACILITY_OPTIONS.map((facility) => (
                 <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-600" key={facility}>
                   <input
                     className="h-4 w-4 accent-brand-600"
@@ -241,6 +249,15 @@ export function CreateListingScreen() {
               multiple
               onChange={handlePhotoSelection}
             />
+            {rejectedPhotos.length > 0 && (
+              <ul className="mt-2 space-y-1" role="alert">
+                {rejectedPhotos.map((rejected, index) => (
+                  <li className="text-xs text-red-700" key={`${rejected.fileName}-${index}`}>
+                    {rejected.fileName}: {rejected.reason}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
 
           {showSuccess && (

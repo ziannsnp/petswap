@@ -113,7 +113,7 @@ export type Database = {
           location: string;
           description: string;
           capacity: number;
-          accepted_pet_types?: Database['public']['Enums']['pet_species'][];
+          accepted_pet_types: Database['public']['Enums']['pet_species'][];
           facilities?: string | null;
           status?: Database['public']['Enums']['listing_status'];
           deleted_at?: string | null;
@@ -226,6 +226,15 @@ export type Database = {
       is_username_available: {
         Args: { candidate_username: string };
         Returns: boolean;
+      };
+      get_listing_host: {
+        Args: { target_listing_id: string };
+        Returns: {
+          id: string;
+          display_name: string;
+          photo_url: string | null;
+          location: string | null;
+        }[];
       };
       current_user_owns_listing: {
         Args: { target_listing_id: string };

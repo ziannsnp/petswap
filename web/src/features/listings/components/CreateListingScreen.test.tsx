@@ -9,13 +9,14 @@ import { CreateListingScreen } from './CreateListingScreen';
 
 const mockMutateAsync = jest.fn();
 const mockReset = jest.fn();
+let mockMutationIsError = false;
 
 jest.mock('../hooks/useCreateListing', () => ({
   useCreateListing: () => ({
     mutateAsync: mockMutateAsync,
     reset: mockReset,
     isPending: false,
-    isError: false,
+    isError: mockMutationIsError,
   }),
 }));
 
@@ -45,6 +46,7 @@ beforeAll(() => {
 beforeEach(() => {
   jest.clearAllMocks();
   jest.useRealTimers();
+  mockMutationIsError = false;
   mockMutateAsync.mockResolvedValue(undefined);
 });
 
@@ -117,7 +119,7 @@ describe('CreateListingScreen', () => {
 
     expect(screen.queryByText('Listing title is required.')).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: /save listing/i }));
+    await user.click(screen.getByRole('button', { name: /publish listing/i }));
     expect(screen.getByText('Listing title is required.')).toBeInTheDocument();
     expect(screen.getByText('Location is required.')).toBeInTheDocument();
 
@@ -127,22 +129,14 @@ describe('CreateListingScreen', () => {
     expect(screen.getByText('Location is required.')).toBeInTheDocument();
   });
 
-  it('selects and deselects a facility independently of the others', async () => {
+  it('accepts arbitrary plain text for facilities', async () => {
     const user = userEvent.setup();
     renderScreen();
 
-    const fencedYard = screen.getByRole('checkbox', { name: 'Fenced yard' });
-    const airConditioning = screen.getByRole('checkbox', { name: 'Air conditioning' });
-    expect(fencedYard).not.toBeChecked();
+    const facilities = screen.getByLabelText('Facilities');
+    await user.type(facilities, 'Heated floor and a custom climbing wall');
 
-    await user.click(fencedYard);
-    await user.click(airConditioning);
-    expect(fencedYard).toBeChecked();
-    expect(airConditioning).toBeChecked();
-
-    await user.click(fencedYard);
-    expect(fencedYard).not.toBeChecked();
-    expect(airConditioning).toBeChecked();
+    expect(facilities).toHaveValue('Heated floor and a custom climbing wall');
   });
 
   it('releases the object URL of a removed photo and leaves the others alone', async () => {
@@ -265,22 +259,24 @@ describe('CreateListingScreen', () => {
     expect(screen.getByRole('button', { name: 'Remove Guinea pig' })).toBeInTheDocument();
   });
 
-  it('reports when every accepted pet type has been removed before saving', async () => {
+  it('requires at least one accepted pet type before saving', async () => {
     const user = userEvent.setup();
     renderScreen();
 
     await user.click(screen.getByRole('button', { name: 'Remove Dog' }));
-    await user.click(screen.getByRole('button', { name: /save listing/i }));
+    await user.click(screen.getByRole('button', { name: /publish listing/i }));
 
     expect(screen.getByText('Choose at least one accepted pet type.')).toBeInTheDocument();
+    expect(mockMutateAsync).not.toHaveBeenCalled();
   });
 
   it('submits valid listing details to the create-listing mutation', async () => {
     const user = userEvent.setup();
     renderScreen();
     await completeRequiredFields(user);
+    await user.type(screen.getByLabelText('Facilities'), 'Fenced yard\nClose to a vet');
 
-    await user.click(screen.getByRole('button', { name: /save listing/i }));
+    await user.click(screen.getByRole('button', { name: /publish listing/i }));
 
     await waitFor(() => {
       expect(mockMutateAsync).toHaveBeenCalledWith(expect.objectContaining({
@@ -289,9 +285,45 @@ describe('CreateListingScreen', () => {
         description: validListingFormValues.description,
         capacity: validListingFormValues.capacity,
         acceptedPetTypes: ['dog'],
-        facilities: [],
+        facilities: 'Fenced yard\nClose to a vet',
         photos: [],
+        publicationMode: 'published',
       }));
     });
+  });
+
+  it('saves the same valid form as a private draft when requested', async () => {
+    const user = userEvent.setup();
+    renderScreen();
+    await completeRequiredFields(user);
+
+    await user.click(screen.getByRole('button', { name: /save draft/i }));
+
+    await waitFor(() => {
+      expect(mockMutateAsync).toHaveBeenCalledWith(expect.objectContaining({
+        title: validListingFormValues.title,
+        publicationMode: 'draft',
+      }));
+    });
+  });
+
+  it('keeps the completed form and reports an upload failure', async () => {
+    mockMutateAsync.mockImplementationOnce(async () => {
+      mockMutationIsError = true;
+      throw new Error('upload failed');
+    });
+    const user = userEvent.setup();
+    renderScreen();
+    await completeRequiredFields(user);
+    const photo = fileOfSize('yard.jpg', 'image/jpeg', 2048);
+    await user.upload(screen.getByLabelText(/add listing photos/i), photo);
+
+    await user.click(screen.getByRole('button', { name: /publish listing/i }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'We could not save your listing. Check your connection and try again.',
+    );
+    expect(screen.getByLabelText(/listing title/i)).toHaveValue(validListingFormValues.title);
+    expect(screen.getByRole('img', { name: 'yard.jpg' })).toBeInTheDocument();
   });
 });

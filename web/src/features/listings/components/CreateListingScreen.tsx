@@ -5,7 +5,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { validateListingForm } from '../lib/listingForm';
 import type { ListingFormErrors } from '../lib/listingForm';
 import { useCreateListing } from '../hooks/useCreateListing';
-import { FACILITY_OPTIONS, PET_TYPE_OPTIONS } from '../lib/listingOptions';
+import { PET_TYPE_OPTIONS } from '../lib/listingOptions';
 import { partitionListingPhotos } from '../lib/listingPhotos';
 import type { RejectedListingPhoto } from '../lib/listingPhotos';
 import { ListingsNavigation } from './ListingsNavigation';
@@ -35,13 +35,13 @@ export function CreateListingScreen() {
   const [capacity, setCapacity] = useState<number | ''>(1);
   const [acceptedPetTypes, setAcceptedPetTypes] = useState<PetSpecies[]>(['dog']);
   const [petTypeToAdd, setPetTypeToAdd] = useState<PetSpecies>('cat');
-  const [facilities, setFacilities] = useState<string[]>([]);
+  const [facilities, setFacilities] = useState('');
   const [photos, setPhotos] = useState<SelectedPhoto[]>([]);
   const [rejectedPhotos, setRejectedPhotos] = useState<RejectedListingPhoto[]>([]);
   const [hasSubmitted, setHasSubmitted] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
+  const [submissionIntent, setSubmissionIntent] = useState<'draft' | 'published' | null>(null);
   const createListingMutation = useCreateListing();
-  const isSubmitting = isSaving || createListingMutation.isPending;
+  const isSubmitting = submissionIntent !== null || createListingMutation.isPending;
   const values = { title, location, description, capacity, acceptedPetTypes };
   const errors: ListingFormErrors = hasSubmitted ? validateListingForm(values) : {};
 
@@ -52,10 +52,6 @@ export function CreateListingScreen() {
   useEffect(() => () => {
     previewUrls.current.forEach((url) => URL.revokeObjectURL(url));
   }, []);
-
-  const toggleChoice = <T extends string,>(value: T, selected: T[], update: (next: T[]) => void) => {
-    update(selected.includes(value) ? selected.filter((item) => item !== value) : [...selected, value]);
-  };
 
   const handlePhotoSelection = (event: ChangeEvent<HTMLInputElement>) => {
     resetMutationError();
@@ -83,13 +79,15 @@ export function CreateListingScreen() {
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    const submitter = (event.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null;
+    const publicationMode = submitter?.value === 'draft' ? 'draft' : 'published';
     setHasSubmitted(true);
     const nextErrors = validateListingForm(values);
 
     if (Object.keys(nextErrors).length > 0) return;
     if (capacity === '') return;
 
-    setIsSaving(true);
+    setSubmissionIntent(publicationMode);
     try {
       await createListingMutation.mutateAsync({
         title,
@@ -99,12 +97,13 @@ export function CreateListingScreen() {
         acceptedPetTypes,
         facilities,
         photos: photos.map((photo) => photo.file),
+        publicationMode,
       });
-      void navigate('/listings', { state: { listingSaved: true } });
+      void navigate('/listings', { state: { listingSaved: publicationMode } });
     } catch {
       return;
     } finally {
-      setIsSaving(false);
+      setSubmissionIntent(null);
     }
   };
 
@@ -191,7 +190,7 @@ export function CreateListingScreen() {
           </div>
 
           <fieldset>
-            <legend className={labelClassName}>Accepted pet types</legend>
+            <legend className={labelClassName}>Accepted pet types <span className="text-red-700" aria-hidden="true">*</span></legend>
             <div className="flex flex-col gap-3 sm:flex-row">
               <select
                 className="input-field sm:max-w-xs"
@@ -252,26 +251,18 @@ export function CreateListingScreen() {
             {errors.acceptedPetTypes && <p className="mt-1 text-xs text-red-700">{errors.acceptedPetTypes}</p>}
           </fieldset>
 
-          <fieldset>
-            <legend className={labelClassName}>Facilities</legend>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {FACILITY_OPTIONS.map((facility) => (
-                <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-600" key={facility}>
-                  <input
-                    className="h-4 w-4 accent-brand-600"
-                    type="checkbox"
-                    checked={facilities.includes(facility)}
-                    disabled={isSubmitting}
-                    onChange={() => {
-                      resetMutationError();
-                      toggleChoice(facility, facilities, setFacilities);
-                    }}
-                  />
-                  <span className="break-words">{facility}</span>
-                </label>
-              ))}
-            </div>
-          </fieldset>
+          <div>
+            <label className={labelClassName} htmlFor="listing-facilities">Facilities</label>
+            <textarea
+              className="input-field"
+              id="listing-facilities"
+              rows={3}
+              value={facilities}
+              onChange={(event) => { resetMutationError(); setFacilities(event.target.value); }}
+              disabled={isSubmitting}
+              placeholder="Describe any facilities, equipment, or nearby services"
+            />
+          </div>
 
           <div>
             <span className={labelClassName}>Photos</span>
@@ -337,11 +328,15 @@ export function CreateListingScreen() {
             </p>
           )}
 
-          <div className="grid grid-cols-1 gap-3 pt-1 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 pt-1 sm:grid-cols-3">
             <button className="btn-secondary min-h-11 disabled:cursor-not-allowed disabled:opacity-60" type="button" onClick={() => navigate('/listings')} disabled={isSubmitting}>Cancel</button>
-            <button className="btn-primary order-first flex min-h-11 items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-60 sm:order-none" type="submit" disabled={isSubmitting} aria-busy={isSubmitting}>
-              {isSubmitting && <LoaderCircle className="h-5 w-5 animate-spin motion-reduce:animate-none" aria-hidden="true" />}
-              {isSubmitting ? 'Saving...' : 'Save listing'}
+            <button className="btn-secondary flex min-h-11 items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-60" type="submit" name="publicationMode" value="draft" disabled={isSubmitting} aria-busy={submissionIntent === 'draft'}>
+              {submissionIntent === 'draft' && <LoaderCircle className="h-5 w-5 animate-spin motion-reduce:animate-none" aria-hidden="true" />}
+              {submissionIntent === 'draft' ? 'Saving draft...' : 'Save draft'}
+            </button>
+            <button className="btn-primary order-first flex min-h-11 items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-60 sm:order-none" type="submit" name="publicationMode" value="published" disabled={isSubmitting} aria-busy={submissionIntent === 'published'}>
+              {submissionIntent === 'published' && <LoaderCircle className="h-5 w-5 animate-spin motion-reduce:animate-none" aria-hidden="true" />}
+              {submissionIntent === 'published' ? 'Publishing...' : 'Publish listing'}
             </button>
           </div>
         </form>

@@ -135,10 +135,10 @@ insert into _contract (check_name, passed) values
     )
   ),
   (
-    'the public listing-photos storage bucket exists and is public',
+    'the listing-photos storage bucket exists and is private',
     exists (
       select 1 from storage.buckets
-      where id = 'listing-photos' and public
+      where id = 'listing-photos' and not public
     )
   ),
   (
@@ -149,6 +149,33 @@ insert into _contract (check_name, passed) values
         and table_name = 'listings'
         and column_name = 'accepted_pet_types'
         and udt_name = '_pet_species'
+    )
+  ),
+  (
+    'listings require at least one accepted pet type',
+    exists (
+      select 1
+      from information_schema.columns
+      where table_schema = 'public'
+        and table_name = 'listings'
+        and column_name = 'accepted_pet_types'
+        and is_nullable = 'NO'
+        and column_default is null
+    ) and exists (
+      select 1 from pg_constraint
+      where conname = 'listings_accepted_pet_types_not_empty_check'
+        and conrelid = 'public.listings'::regclass
+        and contype = 'c'
+    )
+  ),
+  (
+    'listing host details are exposed through the safe projection function',
+    to_regprocedure('public.get_listing_host(uuid)') is not null
+  ),
+  (
+    'anonymous and authenticated users may request safe listing host details',
+    has_function_privilege('anon', 'public.get_listing_host(uuid)', 'EXECUTE')
+      and has_function_privilege('authenticated', 'public.get_listing_host(uuid)', 'EXECUTE')
     )
   );
 

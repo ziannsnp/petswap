@@ -30,7 +30,7 @@ Users can add or edit their own pets' feeding instructions, medical notes, behav
 
 ### FR-3.1 Listing management
 
-Users can create, view, edit, and delete listings where they can care for pets. A listing includes title, location, description, capacity, accepted pet types, photos, and plain-text facilities. Title, location, description, and capacity are required; published listings are publicly viewable.
+Users can create, view, edit, and delete listings where they can care for pets. A listing includes title, location, description, capacity, accepted pet types, photos, and arbitrary plain-text facilities. Title, location, description, capacity, and at least one accepted pet type are required. A listing may have at most ten photos. Owners choose an explicit **Save draft** or **Publish** action: drafts and their photos are private, while published listings are publicly viewable through access-controlled signed photo URLs.
 
 ### FR-3.2 Listing details
 

@@ -6,8 +6,9 @@ automated form of the database review points in
 
 | File | What it checks | Writes data? |
 | --- | --- | --- |
-| `database_contract.sql` | Catalogue checks: RLS is on, booking policies exist, the confirmed-overlap and consent-pair constraints exist, the booking status enum and guard triggers are present, the storage bucket is public. | No |
+| `database_contract.sql` | Catalogue checks: RLS is on, booking policies exist, the confirmed-overlap and consent-pair constraints exist, the listing accepted-pet contract and safe host function exist, the booking status enum and guard triggers are present, and the listing-photo bucket is private. | No |
 | `booking_rules.test.sql` | Behaviour of the confirmed-overlap rule: overlap rejected, back-to-back allowed, non-confirmed and different-listing bookings allowed, zero-length window rejected. Runs in one transaction that is rolled back. | No (rolled back) |
+| `listing_rules.test.sql` | Behaviour of the required accepted-pet rule: an empty accepted-pet array is rejected by the named constraint. Runs in one transaction that is rolled back. | No (rolled back) |
 
 ## Run locally
 
@@ -17,6 +18,8 @@ psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" \
   -v ON_ERROR_STOP=1 -f supabase/tests/database_contract.sql
 psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" \
   -v ON_ERROR_STOP=1 -f supabase/tests/booking_rules.test.sql
+psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" \
+  -v ON_ERROR_STOP=1 -f supabase/tests/listing_rules.test.sql
 ```
 
 No local `psql`? Run it inside the database container instead:
@@ -31,7 +34,7 @@ Any failed check raises an error and exits non-zero.
 ## CI
 
 [`.github/workflows/db-contract.yml`](../../.github/workflows/db-contract.yml) runs
-both files on every change under `supabase/`, weekly, and on demand. It is not
+all files on every change under `supabase/`, weekly, and on demand. It is not
 part of the required Quality gate (it boots containers); still treat a red run as
 a blocker for a schema change.
 

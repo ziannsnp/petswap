@@ -1,7 +1,6 @@
 import type { Database } from '@/shared/types/database.types';
 
 export type PetSpecies = Database['public']['Enums']['pet_species'];
-export const FACILITY_SEPARATOR = '\n';
 
 export interface PetTypeOption {
   value: PetSpecies;
@@ -35,21 +34,7 @@ export const PET_TYPE_OPTIONS: readonly PetTypeOption[] = (
   ['dog', 'cat', 'rabbit', 'hamster', 'guinea_pig', 'fish', 'reptile', 'exotic_mammal', 'bird', 'other'] as const
 ).map((value) => ({ value, label: PET_SPECIES_LABELS[value] }));
 
-export const FACILITY_OPTIONS: readonly string[] = [
-  'Fenced yard',
-  'Air conditioning',
-  'Security cameras',
-  'Indoor play area',
-  'Daily photo updates',
-  'Near a vet clinic',
-];
-
-export function serializeFacilities(facilities: readonly string[]): string | null {
-  const cleaned = facilities.map((facility) => facility.trim()).filter(Boolean);
-  return cleaned.length > 0 ? cleaned.join('\n') : null;
-}
-
-export function parseFacilities(stored: string | null): string[] {
-  if (!stored) return [];
-  return stored.split('\n').map((facility) => facility.trim()).filter(Boolean);
+export function serializeFacilities(facilities: string): string | null {
+  const cleaned = facilities.trim();
+  return cleaned.length > 0 ? cleaned : null;
 }

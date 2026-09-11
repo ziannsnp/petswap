@@ -1,4 +1,38 @@
-import { FACILITY_OPTIONS, parseFacilities, serializeFacilities } from './listingOptions';
+import {
+  FACILITY_OPTIONS,
+  isPetSpecies,
+  parseFacilities,
+  petSpeciesLabel,
+  PET_TYPE_OPTIONS,
+  serializeFacilities,
+} from './listingOptions';
+
+describe('PET_TYPE_OPTIONS', () => {
+  it('offers every pet_species value with display labels', () => {
+    const expectedSpecies = [
+      'dog',
+      'cat',
+      'rabbit',
+      'hamster',
+      'guinea_pig',
+      'fish',
+      'reptile',
+      'exotic_mammal',
+      'bird',
+      'other',
+    ];
+
+    expect(PET_TYPE_OPTIONS.map(({ value }) => value)).toEqual(expectedSpecies);
+    expect(PET_TYPE_OPTIONS.every(({ label }) => label.length > 0)).toBe(true);
+  });
+
+  it('checks and formats pet species values from the database enum', () => {
+    expect(isPetSpecies('dog')).toBe(true);
+    expect(isPetSpecies('guinea_pig')).toBe(true);
+    expect(petSpeciesLabel('guinea_pig')).toBe('Guinea pig');
+    expect(isPetSpecies('dragon')).toBe(false);
+  });
+});
 
 describe('facilities round trip', () => {
   it('restores exactly what was selected', () => {

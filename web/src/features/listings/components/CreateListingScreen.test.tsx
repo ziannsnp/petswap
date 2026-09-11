@@ -1,8 +1,10 @@
 /** @jest-environment jsdom */
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { LISTING_PHOTO_MAX_BYTES, LISTING_PHOTO_MAX_COUNT } from '../lib/listingPhotos';
+import { PET_TYPE_OPTIONS } from '../lib/listingOptions';
+import { validListingFormValues } from '../testing/listingFixtures';
 import { CreateListingScreen } from './CreateListingScreen';
 
 function fileOfSize(name: string, type: string, size: number): File {
@@ -30,7 +32,16 @@ beforeAll(() => {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  jest.useRealTimers();
 });
+
+async function completeRequiredFields(user: ReturnType<typeof userEvent.setup>) {
+  await user.type(screen.getByLabelText(/listing title/i), validListingFormValues.title);
+  await user.type(screen.getByLabelText(/location/i), validListingFormValues.location);
+  await user.type(screen.getByLabelText(/description/i), validListingFormValues.description);
+  await user.clear(screen.getByLabelText(/capacity/i));
+  await user.type(screen.getByLabelText(/capacity/i), String(validListingFormValues.capacity));
+}
 
 describe('CreateListingScreen', () => {
   it('accepts a supported photo and shows its preview', async () => {
@@ -216,15 +227,52 @@ describe('CreateListingScreen', () => {
     expect(screen.queryByText(/at most 10 photos/)).not.toBeInTheDocument();
   });
 
-  it('labels pet types for people while tracking the pet_species value', async () => {
+  it('offers every supported pet species in a dropdown and starts with Dog selected', () => {
+    renderScreen();
+
+    const petTypeSelect = screen.getByRole('combobox', { name: 'Accepted pet type' });
+    expect(petTypeSelect).toHaveDisplayValue('Cat');
+
+    for (const { label } of PET_TYPE_OPTIONS) {
+      expect(screen.getByRole('option', { name: label })).toBeInTheDocument();
+    }
+    expect(screen.getByRole('button', { name: 'Remove Dog' })).toBeInTheDocument();
+  });
+
+  it('adds accepted pet types from the supported dropdown choices', async () => {
     const user = userEvent.setup();
     renderScreen();
 
-    expect(screen.getByRole('button', { name: 'Dog' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('button', { name: 'Cat' })).toHaveAttribute('aria-pressed', 'false');
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Accepted pet type' }), 'guinea_pig');
+    await user.click(screen.getByRole('button', { name: /add type/i }));
 
-    await user.click(screen.getByRole('button', { name: 'Cat' }));
+    expect(screen.getByRole('button', { name: 'Remove Guinea pig' })).toBeInTheDocument();
+  });
 
-    expect(screen.getByRole('button', { name: 'Cat' })).toHaveAttribute('aria-pressed', 'true');
+  it('reports when every accepted pet type has been removed before saving', async () => {
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.click(screen.getByRole('button', { name: 'Remove Dog' }));
+    await user.click(screen.getByRole('button', { name: /save listing/i }));
+
+    expect(screen.getByText('Choose at least one accepted pet type.')).toBeInTheDocument();
+  });
+
+  it('disables actions while a valid UI-only submission is pending and then reports success', async () => {
+    jest.useFakeTimers();
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    renderScreen();
+    await completeRequiredFields(user);
+
+    await user.click(screen.getByRole('button', { name: /save listing/i }));
+    expect(screen.getByRole('button', { name: /saving/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /cancel/i })).toBeDisabled();
+
+    await act(async () => {
+      jest.advanceTimersByTime(700);
+    });
+
+    expect(screen.getByRole('status')).toHaveTextContent('Listing details checked successfully.');
   });
 });

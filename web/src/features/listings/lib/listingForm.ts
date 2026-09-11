@@ -1,8 +1,11 @@
+import { isPetSpecies, type PetSpecies } from './listingOptions';
+
 export interface ListingFormValues {
   title: string;
   location: string;
   description: string;
   capacity: number | '';
+  acceptedPetTypes: PetSpecies[];
 }
 
 export type ListingFormErrors = Partial<Record<keyof ListingFormValues, string>>;
@@ -19,6 +22,11 @@ export function validateListingForm(values: ListingFormValues): ListingFormError
     errors.capacity = 'Capacity must be a whole number.';
   } else if (values.capacity < 1) {
     errors.capacity = 'Capacity must be at least 1.';
+  }
+  if (values.acceptedPetTypes.length === 0) {
+    errors.acceptedPetTypes = 'Choose at least one accepted pet type.';
+  } else if (values.acceptedPetTypes.some((petType) => !isPetSpecies(petType))) {
+    errors.acceptedPetTypes = 'Accepted pet types must use a supported option.';
   }
 
   return errors;

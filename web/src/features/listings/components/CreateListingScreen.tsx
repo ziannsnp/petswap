@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ChangeEvent, FormEvent } from 'react';
-import { ArrowLeft, ImagePlus, LoaderCircle, X } from 'lucide-react';
+import { ArrowLeft, ImagePlus, LoaderCircle, Plus, X } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { validateListingForm } from '../lib/listingForm';
 import type { ListingFormErrors } from '../lib/listingForm';
@@ -25,6 +25,10 @@ function toggleChoice<T extends string>(value: T, selected: T[], update: (next: 
   update(selected.includes(value) ? selected.filter((item) => item !== value) : [...selected, value]);
 }
 
+function firstAvailablePetType(selected: PetSpecies[]): PetSpecies {
+  return PET_TYPE_OPTIONS.find(({ value }) => !selected.includes(value))?.value ?? PET_TYPE_OPTIONS[0].value;
+}
+
 export function CreateListingScreen() {
   const navigate = useNavigate();
   const previewUrls = useRef<string[]>([]);
@@ -33,6 +37,7 @@ export function CreateListingScreen() {
   const [description, setDescription] = useState('');
   const [capacity, setCapacity] = useState<number | ''>(1);
   const [acceptedPetTypes, setAcceptedPetTypes] = useState<PetSpecies[]>(['dog']);
+  const [petTypeToAdd, setPetTypeToAdd] = useState<PetSpecies>('cat');
   const [facilities, setFacilities] = useState<string[]>([]);
   const [photos, setPhotos] = useState<SelectedPhoto[]>([]);
   const [rejectedPhotos, setRejectedPhotos] = useState<RejectedListingPhoto[]>([]);
@@ -40,7 +45,7 @@ export function CreateListingScreen() {
   const [isSaving, setIsSaving] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
 
-  const values = { title, location, description, capacity };
+  const values = { title, location, description, capacity, acceptedPetTypes };
   // Errors stay derived so correcting a field clears its message as the owner types,
   // while nothing is reported until they have tried to save at least once.
   const errors: ListingFormErrors = hasSubmitted ? validateListingForm(values) : {};
@@ -165,26 +170,57 @@ export function CreateListingScreen() {
 
           <fieldset>
             <legend className={labelClassName}>Accepted pet types</legend>
-            <div className="flex flex-wrap gap-2">
-              {PET_TYPE_OPTIONS.map(({ value, label }) => {
-                const isSelected = acceptedPetTypes.includes(value);
-                return (
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <select
+                className="input-field sm:max-w-xs"
+                id="accepted-pet-type"
+                value={petTypeToAdd}
+                onChange={(event) => setPetTypeToAdd(event.target.value as PetSpecies)}
+                aria-label="Accepted pet type"
+              >
+                {PET_TYPE_OPTIONS.map(({ value, label }) => (
+                  <option value={value} key={value} disabled={acceptedPetTypes.includes(value)}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+              <button
+                className="btn-secondary inline-flex min-h-11 items-center justify-center gap-2"
+                type="button"
+                onClick={() => {
+                  if (acceptedPetTypes.includes(petTypeToAdd)) return;
+                  const nextPetTypes = [...acceptedPetTypes, petTypeToAdd];
+                  setAcceptedPetTypes(nextPetTypes);
+                  setPetTypeToAdd(firstAvailablePetType(nextPetTypes));
+                }}
+                disabled={acceptedPetTypes.length === PET_TYPE_OPTIONS.length || acceptedPetTypes.includes(petTypeToAdd)}
+              >
+                <Plus className="h-4 w-4" aria-hidden="true" />
+                Add type
+              </button>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {acceptedPetTypes.map((value) => {
+                const option = PET_TYPE_OPTIONS.find((item) => item.value === value);
+                return option ? (
                   <button
-                    className={`min-h-10 rounded-lg border px-4 py-2 text-sm transition-colors ${
-                      isSelected
-                        ? 'border-brand-600 bg-brand-50 font-medium text-brand-700'
-                        : 'border-gray-200 bg-white text-gray-700 hover:border-brand-500 hover:bg-brand-50'
-                    }`}
+                    className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-brand-600 bg-brand-50 px-3 py-1.5 text-sm font-medium text-brand-700"
                     type="button"
                     key={value}
-                    aria-pressed={isSelected}
-                    onClick={() => toggleChoice(value, acceptedPetTypes, setAcceptedPetTypes)}
+                    onClick={() => {
+                      const nextPetTypes = acceptedPetTypes.filter((petType) => petType !== value);
+                      setAcceptedPetTypes(nextPetTypes);
+                      setPetTypeToAdd(firstAvailablePetType(nextPetTypes));
+                    }}
+                    aria-label={`Remove ${option.label}`}
                   >
-                    {label}
+                    {option.label}
+                    <X className="h-3.5 w-3.5" aria-hidden="true" />
                   </button>
-                );
+                ) : null;
               })}
             </div>
+            {errors.acceptedPetTypes && <p className="mt-1 text-xs text-red-700">{errors.acceptedPetTypes}</p>}
           </fieldset>
 
           <fieldset>

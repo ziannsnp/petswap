@@ -30,10 +30,16 @@ export function petSpeciesLabel(species: PetSpecies): string {
   return PET_SPECIES_LABELS[species];
 }
 
-/** The create form offers the four types the prototype shows, not the whole enum. */
-export const PET_TYPE_OPTIONS: readonly PetTypeOption[] = (
-  ['dog', 'cat', 'rabbit', 'bird'] as const
-).map((value) => ({ value, label: PET_SPECIES_LABELS[value] }));
+const PET_SPECIES_VALUES = new Set<string>(Object.keys(PET_SPECIES_LABELS));
+
+export function isPetSpecies(value: string): value is PetSpecies {
+  return PET_SPECIES_VALUES.has(value);
+}
+
+/** The create form offers every database-backed pet species value. */
+export const PET_TYPE_OPTIONS: readonly PetTypeOption[] = Object.entries(
+  PET_SPECIES_LABELS,
+).map(([value, label]) => ({ value: value as PetSpecies, label }));
 
 /** The facilities the create and edit forms offer as checkboxes. */
 export const FACILITY_OPTIONS: readonly string[] = [

@@ -33,7 +33,7 @@ unprotected.
 | End-to-end flow | Playwright | Cover login → booking request → confirmation → status verification once Supabase test data is available. |
 | Manual UI checks | Markdown evidence | Squad B records listing/search cases; QA records regressions using the template. |
 
-[`RegisterForm.test.tsx`](../web/src/features/auth/components/RegisterForm.test.tsx) and
+[`RegisterScreen.test.tsx`](../web/src/features/auth/components/RegisterScreen.test.tsx) and
 [`ProtectedRoute.test.tsx`](../web/src/features/auth/components/ProtectedRoute.test.tsx) are the
 starter convention for the component layer: mock the hook the component directly imports
 (`useSignUp`, `useAuth`) rather than the Supabase client underneath it, and assert on
@@ -81,7 +81,7 @@ npm test -- --runInBand
 npm run build
 ```
 
-Run Playwright when the changed journey is testable against the configured environment. Record expected result, actual result, pass/fail, environment, and evidence in the relevant PR or [`templates/manual-test.md`](templates/manual-test.md). Durable automated tests live with the app in `web/`; this repository does not use a separate model-evals workspace.
+Run `npm run test:e2e` when the changed journey is testable against the configured environment. Record expected result, actual result, pass/fail, environment, and evidence in the relevant PR or [`templates/manual-test.md`](templates/manual-test.md); for a full pre-release pass use the [regression checklist](templates/regression-checklist.md). Durable automated tests live with the app in `web/`; this repository does not use a separate model-evals workspace.
 
 The CI gate runs lint, typecheck, Jest, and production build for every relevant pull request; see [ci-cd.md](ci-cd.md).
 
@@ -108,4 +108,6 @@ The booking overlap rule is verified at both levels:
 - Jest covers the TypeScript end-exclusive conflict helper.
 - Postgres enforces `bookings_no_confirmed_overlap` for confirmed bookings on the same listing, and `booking_rules.test.sql` exercises it (overlap, back-to-back, non-confirmed, different listing).
 
-Playwright booking flow remains skipped until auth-backed screens and deterministic Supabase test users exist. When those arrive, unskip `web/e2e/booking-flow.spec.ts` and run it against the local Supabase stack.
+Playwright is wired up: [`web/playwright.config.ts`](../web/playwright.config.ts) starts `npm run dev` and runs `web/e2e/` on desktop and mobile Chromium. `e2e/smoke.spec.ts` covers the public shell (no auth or Supabase needed) and runs on every `web/**` change via the non-required [`e2e-smoke.yml`](ci-cd.md#e2e-smoke-workflow) workflow.
+
+`web/e2e/booking-flow.spec.ts` — the login → request → confirm journey — stays skipped until its screens are on `main`; the file itself documents how to enable it. Before a demo or release, run the [regression checklist](templates/regression-checklist.md) on desktop and mobile and link the filled copy from the release-readiness PR.

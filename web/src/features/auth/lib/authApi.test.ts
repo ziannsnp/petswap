@@ -1,8 +1,14 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import type { AuthError, Session, User } from '@supabase/supabase-js';
+import {
+  AuthRetryableFetchError,
+  FunctionsFetchError,
+  type AuthError,
+  type Session,
+  type User,
+} from '@supabase/supabase-js';
 import { getSupabaseClient, type AppSupabaseClient } from '@/shared/lib/supabase';
 import { CURRENT_CONSENT_VERSION } from '@/features/consent';
-import { SignUpError, signUp } from './authApi';
+import { SignInError, SignUpError, signIn, signUp } from './authApi';
 
 jest.mock('@/shared/lib/supabase', () => ({
   getSupabaseClient: jest.fn(),
@@ -22,10 +28,17 @@ function arrangeSignUpResult(result: {
   const signUpMock = jest.fn<(credentials: SignUpRequest) => Promise<typeof result>>(
     async () => result,
   );
+  const rpcMock = jest.fn<
+    (
+      functionName: string,
+      args: { candidate_username: string },
+    ) => Promise<{ data: boolean; error: null }>
+  >(async () => ({ data: true, error: null }));
   mockedGetSupabaseClient.mockReturnValue({
+    rpc: rpcMock,
     auth: { signUp: signUpMock },
   } as unknown as AppSupabaseClient);
-  return signUpMock;
+  return { rpcMock, signUpMock };
 }
 
 describe('signUp', () => {
@@ -36,17 +49,69 @@ describe('signUp', () => {
   it('signs up with trimmed profile metadata and preserves the password', async () => {
     const user = { id: 'user-1' } as User;
     const session = { access_token: 'token' } as Session;
-    const signUpMock = arrangeSignUpResult({ data: { user, session }, error: null });
+    const { rpcMock, signUpMock } = arrangeSignUpResult({
+      data: { user, session },
+      error: null,
+    });
 
     await expect(
-      signUp({ email: '  pet@example.com ', password: ' password ', displayName: '  Pat  ' }),
+      signUp({
+        email: '  pet@example.com ',
+        username: '  Pat_Sitter  ',
+        password: 'Password1!',
+        displayName: '  Pat  ',
+      }),
     ).resolves.toEqual({ user, session });
 
     expect(signUpMock).toHaveBeenCalledWith({
       email: 'pet@example.com',
-      password: ' password ',
-      options: { data: { display_name: 'Pat', consent_version: CURRENT_CONSENT_VERSION } },
+      password: 'Password1!',
+      options: {
+        data: {
+          username: 'pat_sitter',
+          display_name: 'Pat',
+          consent_version: CURRENT_CONSENT_VERSION,
+        },
+      },
     });
+    expect(rpcMock).toHaveBeenCalledWith('is_username_available', {
+      candidate_username: 'pat_sitter',
+    });
+  });
+
+  it('rejects an invalid username before calling Supabase', async () => {
+    const result = signUp({
+      email: 'pet@example.com',
+      username: 'pat-sitter',
+      password: 'Password1!',
+      displayName: 'Pat',
+    });
+
+    await expect(result).rejects.toMatchObject({
+      name: 'SignUpError',
+      code: 'INVALID_USERNAME',
+      message:
+        'Username must be 3–30 characters and contain only letters, numbers, and underscores.',
+    });
+    expect(mockedGetSupabaseClient).not.toHaveBeenCalled();
+  });
+
+  it('rejects a username that is already taken before creating the auth user', async () => {
+    const signUpMock = jest.fn();
+    mockedGetSupabaseClient.mockReturnValue({
+      rpc: jest.fn(async () => ({ data: false, error: null })),
+      auth: { signUp: signUpMock },
+    } as unknown as AppSupabaseClient);
+
+    const result = signUp({
+      email: 'pet@example.com',
+      username: 'pat_sitter',
+      password: 'Password1!',
+      displayName: 'Pat',
+    });
+
+    await expect(result).rejects.toEqual(new SignUpError('USERNAME_ALREADY_USED'));
+    expect(signUpMock).not.toHaveBeenCalled();
   });
 
   it('accepts a successful signup without a session', async () => {
@@ -54,7 +119,12 @@ describe('signUp', () => {
     arrangeSignUpResult({ data: { user, session: null }, error: null });
 
     await expect(
-      signUp({ email: 'pet@example.com', password: 'password', displayName: 'Pat' }),
+      signUp({
+        email: 'pet@example.com',
+        username: 'pat_sitter',
+        password: 'Password1!',
+        displayName: 'Pat',
+      }),
     ).resolves.toEqual({ user, session: null });
   });
 
@@ -71,7 +141,12 @@ describe('signUp', () => {
       error: authError(backendCode),
     });
 
-    const result = signUp({ email: 'pet@example.com', password: 'password', displayName: 'Pat' });
+    const result = signUp({
+      email: 'pet@example.com',
+      username: 'pat_sitter',
+      password: 'Password1!',
+      displayName: 'Pat',
+    });
 
     await expect(result).rejects.toMatchObject({
       name: 'SignUpError',
@@ -83,8 +158,211 @@ describe('signUp', () => {
   it('returns a safe unknown error when Supabase returns no user', async () => {
     arrangeSignUpResult({ data: { user: null, session: null }, error: null });
 
-    const result = signUp({ email: 'pet@example.com', password: 'password', displayName: 'Pat' });
+    const result = signUp({
+      email: 'pet@example.com',
+      username: 'pat_sitter',
+      password: 'Password1!',
+      displayName: 'Pat',
+    });
 
     await expect(result).rejects.toEqual(new SignUpError('UNKNOWN'));
+  });
+
+  it('rejects a weak password before calling Supabase', async () => {
+    await expect(
+      signUp({
+        email: 'pet@example.com',
+        username: 'pat_sitter',
+        password: 'password',
+        displayName: 'Pat',
+      }),
+    ).rejects.toEqual(new SignUpError('WEAK_PASSWORD'));
+    expect(mockedGetSupabaseClient).not.toHaveBeenCalled();
+  });
+
+  it('translates retryable signup failures into a network error', async () => {
+    arrangeSignUpResult({
+      data: { user: null, session: null },
+      error: new AuthRetryableFetchError('fetch failed', 0),
+    });
+
+    await expect(
+      signUp({
+        email: 'pet@example.com',
+        username: 'pat_sitter',
+        password: 'Password1!',
+        displayName: 'Pat',
+      }),
+    ).rejects.toEqual(new SignUpError('NETWORK'));
+  });
+
+  it('rechecks availability after an unexpected signup failure to resolve a username race', async () => {
+    const rpcMock = jest.fn<
+      (
+        functionName: string,
+        args: { candidate_username: string },
+      ) => Promise<{ data: boolean; error: null }>
+    >()
+      .mockResolvedValueOnce({ data: true, error: null })
+      .mockResolvedValueOnce({ data: false, error: null });
+    mockedGetSupabaseClient.mockReturnValue({
+      rpc: rpcMock,
+      auth: {
+        signUp: jest.fn(async () => ({
+          data: { user: null, session: null },
+          error: authError('unexpected_failure'),
+        })),
+      },
+    } as unknown as AppSupabaseClient);
+
+    await expect(
+      signUp({
+        email: 'pet@example.com',
+        username: 'pat_sitter',
+        password: 'Password1!',
+        displayName: 'Pat',
+      }),
+    ).rejects.toEqual(new SignUpError('USERNAME_ALREADY_USED'));
+  });
+});
+
+describe('signIn', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('signs in directly with a trimmed email identifier', async () => {
+    const user = { id: 'user-1' } as User;
+    const session = { access_token: 'access', refresh_token: 'refresh' } as Session;
+    const signInWithPassword = jest.fn<
+      (credentials: { email: string; password: string }) =>
+        Promise<{ data: { user: User; session: Session }; error: null }>
+    >(async () => ({ data: { user, session }, error: null }));
+    mockedGetSupabaseClient.mockReturnValue({
+      auth: { signInWithPassword },
+    } as unknown as AppSupabaseClient);
+
+    await expect(
+      signIn({ identifier: '  pet@example.com  ', password: ' password ' }),
+    ).resolves.toEqual({ user, session });
+    expect(signInWithPassword).toHaveBeenCalledWith({
+      email: 'pet@example.com',
+      password: ' password ',
+    });
+  });
+
+  it('resolves a normalized username through the Edge Function and persists its session', async () => {
+    const user = { id: 'user-1' } as User;
+    const session = { access_token: 'access', refresh_token: 'refresh' } as Session;
+    const invoke = jest.fn<
+      (
+        functionName: string,
+        options: { body: { username: string; password: string } },
+      ) => Promise<{
+        data: { accessToken: string; refreshToken: string };
+        error: null;
+      }>
+    >(async () => ({
+      data: { accessToken: 'access', refreshToken: 'refresh' },
+      error: null,
+    }));
+    const setSession = jest.fn<
+      (tokens: { access_token: string; refresh_token: string }) =>
+        Promise<{ data: { user: User; session: Session }; error: null }>
+    >(async () => ({ data: { user, session }, error: null }));
+    mockedGetSupabaseClient.mockReturnValue({
+      functions: { invoke },
+      auth: { setSession },
+    } as unknown as AppSupabaseClient);
+
+    await expect(
+      signIn({ identifier: '  Pat_Sitter  ', password: ' password ' }),
+    ).resolves.toEqual({ user, session });
+    expect(invoke).toHaveBeenCalledWith('sign-in', {
+      body: { username: 'pat_sitter', password: ' password ' },
+    });
+    expect(setSession).toHaveBeenCalledWith({
+      access_token: 'access',
+      refresh_token: 'refresh',
+    });
+  });
+
+  it('translates invalid email credentials without exposing backend details', async () => {
+    mockedGetSupabaseClient.mockReturnValue({
+      auth: {
+        signInWithPassword: jest.fn(async () => ({
+          data: { user: null, session: null },
+          error: authError('invalid_credentials'),
+        })),
+      },
+    } as unknown as AppSupabaseClient);
+
+    const result = signIn({ identifier: 'pet@example.com', password: 'wrong' });
+
+    await expect(result).rejects.toEqual(new SignInError('INVALID_CREDENTIALS'));
+  });
+
+  it('translates retryable email sign-in failures into a network error', async () => {
+    mockedGetSupabaseClient.mockReturnValue({
+      auth: {
+        signInWithPassword: jest.fn(async () => ({
+          data: { user: null, session: null },
+          error: new AuthRetryableFetchError('fetch failed', 0),
+        })),
+      },
+    } as unknown as AppSupabaseClient);
+
+    await expect(signIn({ identifier: 'pet@example.com', password: 'Password1!' })).rejects.toEqual(
+      new SignInError('NETWORK'),
+    );
+  });
+
+  it('translates structured Edge Function errors', async () => {
+    mockedGetSupabaseClient.mockReturnValue({
+      functions: {
+        invoke: jest.fn(async () => ({
+          data: null,
+          error: {
+            context: Response.json(
+              { error: { code: 'INVALID_CREDENTIALS' } },
+              { status: 401 },
+            ),
+          },
+        })),
+      },
+    } as unknown as AppSupabaseClient);
+
+    const result = signIn({ identifier: 'pat_sitter', password: 'wrong' });
+
+    await expect(result).rejects.toEqual(new SignInError('INVALID_CREDENTIALS'));
+  });
+
+  it('translates Edge Function fetch failures into a network error', async () => {
+    mockedGetSupabaseClient.mockReturnValue({
+      functions: {
+        invoke: jest.fn(async () => ({
+          data: null,
+          error: new FunctionsFetchError(new Error('offline')),
+        })),
+      },
+    } as unknown as AppSupabaseClient);
+
+    await expect(signIn({ identifier: 'pat_sitter', password: 'Password1!' })).rejects.toEqual(
+      new SignInError('NETWORK'),
+    );
+  });
+
+  it('reports an empty password separately from an invalid identifier', async () => {
+    await expect(signIn({ identifier: 'pet@example.com', password: '' })).rejects.toEqual(
+      new SignInError('PASSWORD_REQUIRED'),
+    );
+    expect(mockedGetSupabaseClient).not.toHaveBeenCalled();
+  });
+
+  it('rejects malformed identifiers before calling Supabase', async () => {
+    const result = signIn({ identifier: 'not-valid!', password: 'password' });
+
+    await expect(result).rejects.toEqual(new SignInError('INVALID_IDENTIFIER'));
+    expect(mockedGetSupabaseClient).not.toHaveBeenCalled();
   });
 });

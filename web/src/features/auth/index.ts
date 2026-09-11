@@ -5,6 +5,7 @@ export { AuthProvider } from './components/AuthProvider';
 export { AuthContext } from './context/authContext';
 export type { AuthContextValue } from './context/authContext';
 export { useAuth, authKeys } from './hooks/useAuth';
+export { useSignIn } from './hooks/useSignIn';
 export { useSignUp } from './hooks/useSignUp';
 export {
   getCurrentSession,

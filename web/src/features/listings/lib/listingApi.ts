@@ -26,12 +26,6 @@ export type Listing = Database['public']['Tables']['listings']['Row'] & {
   cover_photo_url: string | null;
 };
 
-export type ListingHost = Database['public']['Functions']['get_listing_host']['Returns'][number];
-
-export type ListingDetail = Listing & {
-  host: ListingHost;
-};
-
 const LISTING_PHOTO_SIGNED_URL_TTL_SECONDS = 3_600;
 
 function photoStoragePath(listingId: string, file: File): string {
@@ -196,30 +190,17 @@ export async function listPublishedListings(): Promise<Listing[]> {
   })));
 }
 
-export async function getListing(listingId: string): Promise<ListingDetail> {
-  const supabase = getSupabaseClient();
-  const { data, error } = await supabase
+export async function getListing(listingId: string): Promise<Listing> {
+  const { data, error } = await getSupabaseClient()
     .from('listings')
     .select('*, listing_images(*)')
     .eq('id', listingId)
-    .neq('status', 'deleted')
-    .is('deleted_at', null)
     .maybeSingle();
 
   if (error) throw error;
   if (!data) throw new Error('Listing not found.');
 
-  const { data: host, error: hostError } = await supabase
-    .rpc('get_listing_host', { target_listing_id: listingId })
-    .maybeSingle();
-
-  if (hostError) throw hostError;
-  if (!host) throw new Error('Listing host not found.');
-
-  return {
-    ...await addSignedPhotoUrls({ ...data, listing_images: data.listing_images ?? [] }),
-    host,
-  };
+  return addSignedPhotoUrls({ ...data, listing_images: data.listing_images ?? [] });
 }
 
 export async function listMyListings(): Promise<Listing[]> {
@@ -238,8 +219,6 @@ export async function listMyListings(): Promise<Listing[]> {
     .from('listings')
     .select('*, listing_images(*)')
     .eq('owner_id', userData.user.id)
-    .neq('status', 'deleted')
-    .is('deleted_at', null)
     .order('created_at', { ascending: false });
 
   if (error) {

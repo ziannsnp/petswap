@@ -169,13 +169,24 @@ insert into _contract (check_name, passed) values
     )
   ),
   (
-    'listing host details are exposed through the safe projection function',
-    to_regprocedure('public.get_listing_host(uuid)') is not null
+    'published listing photos remain readable from the private bucket',
+    exists (
+      select 1 from pg_policies
+      where schemaname = 'storage'
+        and tablename = 'objects'
+        and policyname = 'Public can read listing photos'
+        and cmd = 'SELECT'
+    )
   ),
   (
-    'anonymous and authenticated users may request safe listing host details',
-    has_function_privilege('anon', 'public.get_listing_host(uuid)', 'EXECUTE')
-      and has_function_privilege('authenticated', 'public.get_listing_host(uuid)', 'EXECUTE')
+    'listing owners may read photos from their own private drafts',
+    exists (
+      select 1 from pg_policies
+      where schemaname = 'storage'
+        and tablename = 'objects'
+        and policyname = 'Listing owners read private listing photos'
+        and cmd = 'SELECT'
+    )
   );
 
 insert into _contract (check_name, passed)

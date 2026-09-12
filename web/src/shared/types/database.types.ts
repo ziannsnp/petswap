@@ -227,15 +227,6 @@ export type Database = {
         Args: { candidate_username: string };
         Returns: boolean;
       };
-      get_listing_host: {
-        Args: { target_listing_id: string };
-        Returns: {
-          id: string;
-          display_name: string;
-          photo_url: string | null;
-          location: string | null;
-        }[];
-      };
       current_user_owns_listing: {
         Args: { target_listing_id: string };
         Returns: boolean;

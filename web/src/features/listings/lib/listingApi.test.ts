@@ -14,9 +14,7 @@ describe('listMyListings', () => {
 
   it('filters listings by the authenticated owner', async () => {
     const order = jest.fn().mockResolvedValue({ data: [], error: null });
-    const is = jest.fn().mockReturnValue({ order });
-    const neq = jest.fn().mockReturnValue({ is });
-    const eq = jest.fn().mockReturnValue({ neq });
+    const eq = jest.fn().mockReturnValue({ order });
     const select = jest.fn().mockReturnValue({ eq });
     const from = jest.fn().mockReturnValue({ select });
     const getUser = jest.fn().mockResolvedValue({
@@ -29,8 +27,6 @@ describe('listMyListings', () => {
     await expect(listMyListings()).resolves.toEqual([]);
     expect(from).toHaveBeenCalledWith('listings');
     expect(eq).toHaveBeenCalledWith('owner_id', 'owner-123');
-    expect(neq).toHaveBeenCalledWith('status', 'deleted');
-    expect(is).toHaveBeenCalledWith('deleted_at', null);
     expect(order).toHaveBeenCalledWith('created_at', { ascending: false });
   });
 
@@ -53,7 +49,7 @@ describe('getListing', () => {
     jest.clearAllMocks();
   });
 
-  it('excludes deleted listings and returns safe host details with private photo URLs', async () => {
+  it('returns a private signed URL for the listing photo', async () => {
     const image = {
       id: 'image-1',
       listing_id: 'listing-1',
@@ -79,34 +75,23 @@ describe('getListing', () => {
       listing_images: [image],
     };
     const listingMaybeSingle = jest.fn().mockResolvedValue({ data: listing, error: null });
-    const is = jest.fn().mockReturnValue({ maybeSingle: listingMaybeSingle });
-    const neq = jest.fn().mockReturnValue({ is });
-    const eq = jest.fn().mockReturnValue({ neq });
+    const eq = jest.fn().mockReturnValue({ maybeSingle: listingMaybeSingle });
     const select = jest.fn().mockReturnValue({ eq });
     const from = jest.fn().mockReturnValue({ select });
-    const host = { id: 'owner-1', display_name: 'Nina', photo_url: null, location: 'Chiang Mai' };
-    const hostMaybeSingle = jest.fn().mockResolvedValue({ data: host, error: null });
-    const rpc = jest.fn().mockReturnValue({ maybeSingle: hostMaybeSingle });
     const createSignedUrls = jest.fn().mockResolvedValue({
       data: [{ path: image.storage_path, signedUrl: 'https://example.test/private-front.jpg' }],
       error: null,
     });
     mockedGetSupabaseClient.mockReturnValue({
       from,
-      rpc,
       storage: { from: jest.fn().mockReturnValue({ createSignedUrls }) },
     } as never);
 
     await expect(getListing('listing-1')).resolves.toMatchObject({
       id: 'listing-1',
-      host,
       cover_photo_url: 'https://example.test/private-front.jpg',
       listing_images: [{ signed_url: 'https://example.test/private-front.jpg' }],
     });
-
-    expect(neq).toHaveBeenCalledWith('status', 'deleted');
-    expect(is).toHaveBeenCalledWith('deleted_at', null);
-    expect(rpc).toHaveBeenCalledWith('get_listing_host', { target_listing_id: 'listing-1' });
   });
 });
 

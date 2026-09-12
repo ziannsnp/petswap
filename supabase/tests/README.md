@@ -6,9 +6,10 @@ automated form of the database review points in
 
 | File | What it checks | Writes data? |
 | --- | --- | --- |
-| `database_contract.sql` | Catalogue checks: RLS is on, booking policies exist, the confirmed-overlap and consent-pair constraints exist, the listing accepted-pet contract and safe host function exist, the booking status enum and guard triggers are present, and the listing-photo bucket is private. | No |
+| `database_contract.sql` | Catalogue checks: RLS is on, booking policies exist, the confirmed-overlap and consent-pair constraints exist, the listing accepted-pet contract and listing-photo read policies exist, the booking status enum and guard triggers are present, and the listing-photo bucket is private. | No |
 | `booking_rules.test.sql` | Behaviour of the confirmed-overlap rule: overlap rejected, back-to-back allowed, non-confirmed and different-listing bookings allowed, zero-length window rejected. Runs in one transaction that is rolled back. | No (rolled back) |
 | `listing_rules.test.sql` | Behaviour of the required accepted-pet rule: an empty accepted-pet array is rejected by the named constraint. Runs in one transaction that is rolled back. | No (rolled back) |
+| `listing_photo_access.test.sql` | Storage RLS behaviour: an owner can select draft photos for signing, other authenticated and anonymous users cannot read drafts, and anonymous users can select published photos for signing. | No (rolled back) |
 
 ## Run locally
 
@@ -20,6 +21,8 @@ psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" \
   -v ON_ERROR_STOP=1 -f supabase/tests/booking_rules.test.sql
 psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" \
   -v ON_ERROR_STOP=1 -f supabase/tests/listing_rules.test.sql
+psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" \
+  -v ON_ERROR_STOP=1 -f supabase/tests/listing_photo_access.test.sql
 ```
 
 No local `psql`? Run it inside the database container instead:

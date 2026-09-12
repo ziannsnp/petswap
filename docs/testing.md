@@ -101,7 +101,7 @@ npx supabase db reset
 
 Then inspect the local database in Studio at `http://127.0.0.1:54323` and verify the actor cases listed in [environments](environments.md).
 
-The SQL contract checks in `supabase/tests/` now run automatically: `database_contract.sql` (schema catalogue), `booking_rules.test.sql` (overlap-rule behaviour), and `listing_rules.test.sql` (required accepted-pet behaviour). Run them locally after a reset, or let [`db-contract.yml`](ci-cd.md#database-contract-workflow) run them on every change under `supabase/`. They still read as a review checklist for a migration; see [`supabase/tests/README.md`](../supabase/tests/README.md). Actor-specific RLS (a signed-in user seeing only their own rows) still needs Studio or JWT impersonation until the Playwright journey exists.
+The SQL contract checks in `supabase/tests/` now run automatically: `database_contract.sql` (schema catalogue), `booking_rules.test.sql` (overlap-rule behaviour), `listing_rules.test.sql` (required accepted-pet behaviour), and `listing_photo_access.test.sql` (draft and published photo access). Run them locally after a reset, or let [`db-contract.yml`](ci-cd.md#database-contract-workflow) run them on every change under `supabase/`. They still read as a review checklist for a migration; see [`supabase/tests/README.md`](../supabase/tests/README.md). Actor-specific RLS cases not covered there still need Studio or JWT impersonation until the Playwright journey exists.
 
 The booking overlap rule is verified at both levels:
 
@@ -117,9 +117,9 @@ Playwright is wired up: [`web/playwright.config.ts`](../web/playwright.config.ts
 After `npx supabase db reset`, configure `web/.env.local` with the local API URL and anon key printed by `supabase start`, run `npm run dev` from `web/`, and sign in as `alex@petswap.test` with password `petswap-local-dev`.
 
 1. Open **My listings**, create a listing, enter at least one accepted pet type, select any combination of the six optional facility checkboxes, and add up to ten supported photos.
-2. Choose **Save draft**. Confirm the success message says the draft is private, the card is marked Draft, and its detail page shows every photo plus the host profile.
-3. Create another listing and choose **Publish listing**. Confirm it is marked Published and its direct detail URL works in a private browser window while the draft URL does not.
-4. In Supabase Studio Storage, confirm `listing-photos` is private. In the browser Network panel, photo requests should use signed URLs rather than a public object URL.
+2. Choose **Save draft**. Confirm the success message says the draft is private, the new card is marked Draft, and the database row remains in `draft` status.
+3. Create another listing and choose **Publish listing**. Confirm the success message and new card are marked Published, and the database row has `published` status.
+4. In Supabase Studio Storage, confirm `listing-photos` is private. In the My Listings browser requests, photo access should use a signed URL rather than a public object URL.
 5. Try no accepted pet type, zero/fractional capacity, an unsupported file, a file above 10 MB, and an eleventh photo. Each should be rejected without losing the rest of the form.
 
-Search/discovery is intentionally a separate user story, so the current home-page search placeholder is not evidence against this listing-creation story. For public detail testing, use the published listing's direct URL.
+Public listing details, host profiles, search, pet profiles, and bookings belong to their separate user stories and are not acceptance evidence for this listing-creation story.

@@ -325,7 +325,7 @@ export function RegisterScreen() {
                   setPassword(event.target.value);
                   clearFieldError('password');
                 }}
-                placeholder="••••••••"
+                placeholder="Password"
                 className={`${inputClass('password')} pr-11`}
                 autoComplete="new-password"
                 aria-invalid={visibleErrors.password ? true : undefined}
@@ -366,7 +366,7 @@ export function RegisterScreen() {
                   setPasswordConfirmation(event.target.value);
                   clearFieldError('passwordConfirmation');
                 }}
-                placeholder="••••••••"
+                placeholder="Password confirmation"
                 className={`${inputClass('passwordConfirmation')} pr-11`}
                 autoComplete="new-password"
                 aria-invalid={visibleErrors.passwordConfirmation ? true : undefined}

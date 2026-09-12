@@ -34,45 +34,57 @@ $$;
 
 do $$
 declare
-  rejected boolean := false;
+  violated_constraint text;
 begin
   begin
     update public.listings
-    set title = '   '
+    set title = E'\t\n'
     where id = '30000000-0000-4000-8000-000000000002';
   exception
-    when check_violation then rejected := true;
+    when check_violation then
+      get stacked diagnostics violated_constraint = constraint_name;
   end;
 
-  if not rejected then
-    raise exception 'listing edit: blank title was accepted';
+  if violated_constraint is distinct from 'listings_title_nonblank_check' then
+    raise exception 'listing edit: whitespace-only title failed unexpected constraint %', violated_constraint;
   end if;
 end;
 $$;
 
 do $$
 declare
-  rejected_location boolean := false;
-  rejected_description boolean := false;
+  violated_constraint text;
 begin
   begin
     update public.listings
     set location = E'\n\t'
     where id = '30000000-0000-4000-8000-000000000002';
   exception
-    when check_violation then rejected_location := true;
+    when check_violation then
+      get stacked diagnostics violated_constraint = constraint_name;
   end;
 
+  if violated_constraint is distinct from 'listings_location_nonblank_check' then
+    raise exception 'listing edit: whitespace-only location failed unexpected constraint %', violated_constraint;
+  end if;
+end;
+$$;
+
+do $$
+declare
+  violated_constraint text;
+begin
   begin
     update public.listings
-    set description = ' '
+    set description = E'\r\n\t'
     where id = '30000000-0000-4000-8000-000000000002';
   exception
-    when check_violation then rejected_description := true;
+    when check_violation then
+      get stacked diagnostics violated_constraint = constraint_name;
   end;
 
-  if not rejected_location or not rejected_description then
-    raise exception 'listing edit: a blank required text field was accepted';
+  if violated_constraint is distinct from 'listings_description_nonblank_check' then
+    raise exception 'listing edit: whitespace-only description failed unexpected constraint %', violated_constraint;
   end if;
 end;
 $$;

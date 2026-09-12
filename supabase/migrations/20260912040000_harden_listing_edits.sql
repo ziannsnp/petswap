@@ -1,6 +1,17 @@
 -- US-2.2: keep listing-photo edits valid even when a client is buggy or
 -- malicious. The first image by sort_order is the listing's main photo.
 
+-- The original trim-based checks only reject ordinary spaces. Require at
+-- least one non-whitespace character so tabs and line breaks cannot satisfy a
+-- required listing field during an edit.
+alter table public.listings
+  add constraint listings_title_nonblank_check
+  check (title ~ '[^[:space:]]'),
+  add constraint listings_location_nonblank_check
+  check (location ~ '[^[:space:]]'),
+  add constraint listings_description_nonblank_check
+  check (description ~ '[^[:space:]]');
+
 -- Existing rows predate ordered editing. Give every image a stable, contiguous
 -- position before the uniqueness constraint is installed.
 with ranked_images as (

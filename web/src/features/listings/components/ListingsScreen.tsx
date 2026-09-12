@@ -3,7 +3,6 @@ import { Link, useLocation } from 'react-router-dom';
 import { useMyListings } from '../hooks/useListings';
 import { petSpeciesLabel } from '../lib/listingOptions';
 import type { Listing } from '../lib/listingApi';
-import { ListingsNavigation } from './ListingsNavigation';
 
 export const STATUS_STYLES: Record<Listing['status'], { label: string; className: string }> = {
   draft: { label: 'Draft', className: 'bg-yellow-50 text-yellow-700' },
@@ -59,7 +58,6 @@ export function ListingsScreen() {
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900">
-      <ListingsNavigation />
       <main className="page-container">
         <div className="mb-7 flex items-center justify-between gap-4">
           <div>

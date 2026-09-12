@@ -6,11 +6,7 @@ export type Profile = Database['public']['Tables']['profiles']['Row'];
 export async function getCurrentProfile(): Promise<Profile | null> {
   const { data: userData, error: userError } = await getSupabaseClient().auth.getUser();
 
-  if (userError) {
-    throw userError;
-  }
-
-  if (!userData.user) {
+  if (userError || !userData.user) {
     return null;
   }
 

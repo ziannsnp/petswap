@@ -8,7 +8,6 @@ import { useCreateListing } from '../hooks/useCreateListing';
 import { FACILITY_OPTIONS, PET_TYPE_OPTIONS } from '../lib/listingOptions';
 import { partitionListingPhotos } from '../lib/listingPhotos';
 import type { RejectedListingPhoto } from '../lib/listingPhotos';
-import { ListingsNavigation } from './ListingsNavigation';
 import type { Facility, PetSpecies } from '../lib/listingOptions';
 
 const labelClassName = 'mb-2 block text-sm font-medium text-gray-700';
@@ -109,7 +108,6 @@ export function CreateListingScreen() {
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900">
-      <ListingsNavigation />
       <main className="mx-auto max-w-3xl px-4 py-6 sm:px-6 sm:py-8">
         <Link className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-brand-700" to="/listings">
           <ArrowLeft className="h-4 w-4" aria-hidden="true" /> Back to my listings

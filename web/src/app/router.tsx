@@ -9,13 +9,16 @@ import { SearchScreen } from '@/features/search';
 import { MainLayout, NotFoundScreen } from '@/shared/components';
 
 export const router = createBrowserRouter([
+  // Full-screen auth pages (without top Navbar)
+  { path: '/login', Component: AuthScreen },
+  { path: '/register', Component: RegisterScreen },
+
+  // App routes wrapped in MainLayout (with Navbar)
   {
     element: <MainLayout />,
     children: [
       // Public routes
       { path: '/', Component: SearchScreen },
-      { path: '/login', Component: AuthScreen },
-      { path: '/register', Component: RegisterScreen },
       { path: '/privacy', Component: PrivacyNoticeScreen },
       { path: '/terms', Component: TermsOfServiceScreen },
       { path: '/listings/:listingId', Component: ListingDetailScreen },
@@ -37,4 +40,5 @@ export const router = createBrowserRouter([
     ],
   },
 ]);
+
 

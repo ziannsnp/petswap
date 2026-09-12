@@ -126,7 +126,7 @@ describe('Navbar Component', () => {
       const profileLink = screen.getByRole('link', { name: /your profile/i });
       expect(profileLink).toBeInTheDocument();
       expect(profileLink).toHaveAttribute('href', '/profile');
-      expect(screen.getByText('Liger PetOwner')).toBeInTheDocument();
+      expect(screen.getByTitle('Liger PetOwner')).toBeInTheDocument();
 
       expect(screen.getByRole('button', { name: /log out/i })).toBeInTheDocument();
     });

@@ -113,7 +113,7 @@ export type Database = {
           location: string;
           description: string;
           capacity: number;
-          accepted_pet_types?: Database['public']['Enums']['pet_species'][];
+          accepted_pet_types: Database['public']['Enums']['pet_species'][];
           facilities?: string | null;
           status?: Database['public']['Enums']['listing_status'];
           deleted_at?: string | null;

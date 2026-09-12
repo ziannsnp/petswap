@@ -187,6 +187,40 @@ insert into _contract (check_name, passed) values
         and policyname = 'Listing owners read private listing photos'
         and cmd = 'SELECT'
     )
+  ),
+  (
+    'listing image metadata has safe edit constraints',
+    (
+      select count(*) = 3
+      from pg_constraint
+      where conrelid = 'public.listing_images'::regclass
+        and conname in (
+          'listing_images_sort_order_nonnegative_check',
+          'listing_images_storage_path_matches_listing_check',
+          'listing_images_listing_sort_order_key'
+        )
+    )
+  ),
+  (
+    'listing image changes enforce the ten-photo and immutable-identity rules',
+    exists (
+      select 1
+      from pg_trigger
+      where tgrelid = 'public.listing_images'::regclass
+        and tgname = 'guard_listing_image_change'
+        and not tgisinternal
+    )
+  ),
+  (
+    'listing owners have an atomic photo reorder operation',
+    exists (
+      select 1
+      from pg_proc as procedure
+      join pg_namespace as namespace on namespace.oid = procedure.pronamespace
+      where namespace.nspname = 'public'
+        and procedure.proname = 'reorder_listing_images'
+        and pg_get_function_identity_arguments(procedure.oid) = 'target_listing_id uuid, ordered_image_ids uuid[]'
+    )
   );
 
 insert into _contract (check_name, passed)

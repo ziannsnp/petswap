@@ -239,6 +239,10 @@ export type Database = {
         Args: { object_name: string };
         Returns: string | null;
       };
+      reorder_listing_images: {
+        Args: { target_listing_id: string; ordered_image_ids: string[] };
+        Returns: undefined;
+      };
     };
     Enums: {
       booking_status: 'pending' | 'confirmed' | 'declined' | 'cancelled' | 'completed';

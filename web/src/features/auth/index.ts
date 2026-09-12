@@ -1,10 +1,13 @@
 export { AuthScreen } from './components/AuthScreen';
 export { RegisterScreen } from './components/RegisterScreen';
 export { ProtectedRoute } from './components/ProtectedRoute';
+export { LogoutButton, type LogoutButtonProps } from './components/LogoutButton';
+export { LogoutConfirmDialog, type LogoutConfirmDialogProps } from './components/LogoutConfirmDialog';
 export { AuthProvider } from './components/AuthProvider';
 export { AuthContext } from './context/authContext';
 export type { AuthContextValue } from './context/authContext';
 export { useAuth, authKeys } from './hooks/useAuth';
+export { useSignIn } from './hooks/useSignIn';
 export { useSignUp } from './hooks/useSignUp';
 export {
   getCurrentSession,

@@ -14,8 +14,6 @@ import { routes } from './support/routes';
 
 const LISTING_ID = '30000000-0000-4000-8000-000000000001'; // "Sunny garden room", owned by alex, accepts dog/cat/rabbit.
 const PASSWORD = 'petswap-local-dev';
-const START_DATE = '2027-02-01';
-const END_DATE = '2027-02-05';
 
 const dateFormatter = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
 function formatBookingDate(date: string): string {
@@ -23,7 +21,14 @@ function formatBookingDate(date: string): string {
 }
 
 test.describe('booking request and confirmation', () => {
-  test('a requester books a listing and the owner confirms it', async ({ browser }) => {
+  test('a requester books a listing and the owner confirms it', async ({ browser }, testInfo) => {
+    // desktop-chromium and mobile-chromium run this file in parallel against the
+    // same local database, so each project needs a date range the other cannot
+    // also pick - a fixed calendar date would create two identical-looking cards.
+    const monthOffset = testInfo.project.name === 'mobile-chromium' ? 1 : 0;
+    const START_DATE = `2027-0${2 + monthOffset}-01`;
+    const END_DATE = `2027-0${2 + monthOffset}-05`;
+
     const requesterContext = await browser.newContext();
     const requesterPage = await requesterContext.newPage();
     const ownerContext = await browser.newContext();
@@ -38,7 +43,7 @@ test.describe('booking request and confirmation', () => {
       await expect(requesterPage).toHaveURL(/\/profile$/);
 
       await requesterPage.goto(routes.listingDetail(LISTING_ID));
-      await requesterPage.getByLabel('Pet').selectOption({ label: /rocket/i });
+      await requesterPage.getByLabel('Pet', { exact: true }).selectOption({ label: 'Rocket (Dog)' });
       await requesterPage.getByLabel('Start date').fill(START_DATE);
       await requesterPage.getByLabel('End date').fill(END_DATE);
       await requesterPage.getByRole('button', { name: /request booking/i }).click();

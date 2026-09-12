@@ -142,6 +142,28 @@ insert into _contract (check_name, passed) values
     )
   ),
   (
+    'the avatars storage bucket exists and is public',
+    exists (
+      select 1 from storage.buckets
+      where id = 'avatars' and public
+    )
+  ),
+  (
+    'avatars have public reads and owner-scoped writes',
+    (
+      select count(*) = 4
+      from pg_policies
+      where schemaname = 'storage'
+        and tablename = 'objects'
+        and policyname in (
+          'Public can read avatars',
+          'Users upload own avatars',
+          'Users update own avatars',
+          'Users delete own avatars'
+        )
+    )
+  ),
+  (
     'listings accept only pet_species values as accepted pet types',
     exists (
       select 1 from information_schema.columns
@@ -186,6 +208,40 @@ insert into _contract (check_name, passed) values
         and tablename = 'objects'
         and policyname = 'Listing owners read private listing photos'
         and cmd = 'SELECT'
+    )
+  ),
+  (
+    'listing image metadata has safe edit constraints',
+    (
+      select count(*) = 3
+      from pg_constraint
+      where conrelid = 'public.listing_images'::regclass
+        and conname in (
+          'listing_images_sort_order_nonnegative_check',
+          'listing_images_storage_path_matches_listing_check',
+          'listing_images_listing_sort_order_key'
+        )
+    )
+  ),
+  (
+    'listing image changes enforce the ten-photo and immutable-identity rules',
+    exists (
+      select 1
+      from pg_trigger
+      where tgrelid = 'public.listing_images'::regclass
+        and tgname = 'guard_listing_image_change'
+        and not tgisinternal
+    )
+  ),
+  (
+    'listing owners have an atomic photo reorder operation',
+    exists (
+      select 1
+      from pg_proc as procedure
+      join pg_namespace as namespace on namespace.oid = procedure.pronamespace
+      where namespace.nspname = 'public'
+        and procedure.proname = 'reorder_listing_images'
+        and pg_get_function_identity_arguments(procedure.oid) = 'target_listing_id uuid, ordered_image_ids uuid[]'
     )
   );
 

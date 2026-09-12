@@ -53,6 +53,9 @@ jobs:
       - name: Listing rules behavioural checks
         run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/listing_rules.test.sql
 
+      - name: Listing facility migration checks
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/listing_facility_migration.test.sql
+
       - name: Listing photo access behavioural checks
         run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/listing_photo_access.test.sql
 

@@ -16,12 +16,12 @@ export const router = createBrowserRouter([
   { path: '/privacy', Component: PrivacyNoticeScreen },
   { path: '/terms', Component: TermsOfServiceScreen },
   { path: '/listings/:listingId', Component: ListingDetailScreen },
-  { path: '/profile', Component: ProfileScreen },
 
   // Protected routes
   {
     element: <ProtectedRoute />,
     children: [
+      { path: '/profile', Component: ProfileScreen },
       { path: '/pets', Component: PetsScreen },
       { path: '/listings', Component: ListingsScreen },
       { path: '/listings/new', Component: CreateListingScreen },

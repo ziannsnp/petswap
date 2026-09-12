@@ -1,6 +1,6 @@
 export { ProfileScreen } from './components/ProfileScreen';
 export { useCurrentProfile } from './hooks/useProfile';
-export { getCurrentProfile } from './lib/profileApi';
+export { getCurrentProfile, getProfile, updateProfile, uploadAvatar } from './lib/profileApi';
 export {
   DISPLAY_NAME_MAX_LENGTH,
   PHONE_NUMBER_MIN_LENGTH,
@@ -23,6 +23,6 @@ export type {
   SanitizedProfileData,
   ProfileFormValidationResult,
 } from './lib/profileValidation';
-export type { Profile } from './lib/profileApi';
+export type { Profile, ProfileUpdate } from './lib/profileApi';
 
 

@@ -66,7 +66,7 @@ fill the result columns, and link it from the release-readiness PR.
 
 | # | Check | Desktop | Mobile | Evidence / notes |
 | --- | --- | --- | --- | --- |
-| 14 | Create a listing with title, location, description, capacity, pet types, facilities, photos | | | |
+| 14 | Create a listing with title, location, description, capacity, pet types, any combination of the six optional facility checkboxes, and photos | | | |
 | 15 | Required listing fields block submission; published listing is publicly visible | | | |
 | 16 | Edit and delete a listing you own; a deleted listing 404s on direct access and is absent from search | | | |
 | 17 | Listing detail shows host profile, facilities, capacity, pet types, photos, description | | | |

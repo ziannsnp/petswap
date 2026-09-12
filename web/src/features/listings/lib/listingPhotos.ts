@@ -6,10 +6,8 @@
 export const LISTING_PHOTO_MAX_BYTES = 10_485_760;
 
 /**
- * No functional requirement fixes a photo count; Squad B agreed on ten while reviewing
- * PR #30 on 9 September 2026 — enough for a listing gallery, bounded enough that one
- * listing cannot fill the bucket. The upload integration enforces the same number,
- * because a browser limit is user experience rather than a constraint.
+ * A listing may contain at most ten photos. The API adapter enforces the same product
+ * rule because a browser limit is user experience rather than an authority boundary.
  */
 export const LISTING_PHOTO_MAX_COUNT = 10;
 

@@ -1,16 +1,22 @@
 /** @jest-environment jsdom */
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { LISTING_PHOTO_MAX_BYTES, LISTING_PHOTO_MAX_COUNT } from '../lib/listingPhotos';
+import { FACILITY_OPTIONS, PET_TYPE_OPTIONS } from '../lib/listingOptions';
+import { validListingFormValues } from '../testing/listingFixtures';
 import { CreateListingScreen } from './CreateListingScreen';
+
+const mockMutateAsync = jest.fn();
+const mockReset = jest.fn();
+let mockMutationIsError = false;
 
 jest.mock('../hooks/useCreateListing', () => ({
   useCreateListing: () => ({
-    mutateAsync: jest.fn(),
-    reset: jest.fn(),
+    mutateAsync: mockMutateAsync,
+    reset: mockReset,
     isPending: false,
-    isError: false,
+    isError: mockMutationIsError,
   }),
 }));
 
@@ -39,7 +45,18 @@ beforeAll(() => {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  jest.useRealTimers();
+  mockMutationIsError = false;
+  mockMutateAsync.mockResolvedValue(undefined);
 });
+
+async function completeRequiredFields(user: ReturnType<typeof userEvent.setup>) {
+  await user.type(screen.getByLabelText(/listing title/i), validListingFormValues.title);
+  await user.type(screen.getByLabelText(/location/i), validListingFormValues.location);
+  await user.type(screen.getByLabelText(/description/i), validListingFormValues.description);
+  await user.clear(screen.getByLabelText(/capacity/i));
+  await user.type(screen.getByLabelText(/capacity/i), String(validListingFormValues.capacity));
+}
 
 describe('CreateListingScreen', () => {
   it('accepts a supported photo and shows its preview', async () => {
@@ -102,7 +119,7 @@ describe('CreateListingScreen', () => {
 
     expect(screen.queryByText('Listing title is required.')).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: /save listing/i }));
+    await user.click(screen.getByRole('button', { name: /publish listing/i }));
     expect(screen.getByText('Listing title is required.')).toBeInTheDocument();
     expect(screen.getByText('Location is required.')).toBeInTheDocument();
 
@@ -112,22 +129,26 @@ describe('CreateListingScreen', () => {
     expect(screen.getByText('Location is required.')).toBeInTheDocument();
   });
 
-  it('selects and deselects a facility independently of the others', async () => {
+  it('offers six optional facility checkboxes that can be selected independently', async () => {
     const user = userEvent.setup();
     renderScreen();
 
-    const fencedYard = screen.getByRole('checkbox', { name: 'Fenced yard' });
-    const airConditioning = screen.getByRole('checkbox', { name: 'Air conditioning' });
-    expect(fencedYard).not.toBeChecked();
+    for (const facility of FACILITY_OPTIONS) {
+      expect(screen.getByRole('checkbox', { name: facility })).not.toBeChecked();
+    }
 
-    await user.click(fencedYard);
-    await user.click(airConditioning);
-    expect(fencedYard).toBeChecked();
-    expect(airConditioning).toBeChecked();
+    const lawn = screen.getByRole('checkbox', { name: 'Lawn' });
+    const dailyUpdates = screen.getByRole('checkbox', { name: 'Daily photo updates' });
+    await user.click(lawn);
+    await user.click(dailyUpdates);
 
-    await user.click(fencedYard);
-    expect(fencedYard).not.toBeChecked();
-    expect(airConditioning).toBeChecked();
+    expect(lawn).toBeChecked();
+    expect(dailyUpdates).toBeChecked();
+
+    await user.click(lawn);
+
+    expect(lawn).not.toBeChecked();
+    expect(dailyUpdates).toBeChecked();
   });
 
   it('releases the object URL of a removed photo and leaves the others alone', async () => {
@@ -228,15 +249,94 @@ describe('CreateListingScreen', () => {
     expect(screen.queryByText(/at most 10 photos/)).not.toBeInTheDocument();
   });
 
-  it('labels pet types for people while tracking the pet_species value', async () => {
+  it('offers every supported pet species in a dropdown and starts with Dog selected', () => {
+    renderScreen();
+
+    const petTypeSelect = screen.getByRole('combobox', { name: 'Accepted pet type' });
+    expect(petTypeSelect).toHaveDisplayValue('Cat');
+
+    for (const { label } of PET_TYPE_OPTIONS) {
+      expect(screen.getByRole('option', { name: label })).toBeInTheDocument();
+    }
+    expect(screen.getByRole('button', { name: 'Remove Dog' })).toBeInTheDocument();
+  });
+
+  it('adds accepted pet types from the supported dropdown choices', async () => {
     const user = userEvent.setup();
     renderScreen();
 
-    expect(screen.getByRole('button', { name: 'Dog' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('button', { name: 'Cat' })).toHaveAttribute('aria-pressed', 'false');
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Accepted pet type' }), 'guinea_pig');
+    await user.click(screen.getByRole('button', { name: /add type/i }));
 
-    await user.click(screen.getByRole('button', { name: 'Cat' }));
+    expect(screen.getByRole('button', { name: 'Remove Guinea pig' })).toBeInTheDocument();
+  });
 
-    expect(screen.getByRole('button', { name: 'Cat' })).toHaveAttribute('aria-pressed', 'true');
+  it('requires at least one accepted pet type before saving', async () => {
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.click(screen.getByRole('button', { name: 'Remove Dog' }));
+    await user.click(screen.getByRole('button', { name: /publish listing/i }));
+
+    expect(screen.getByText('Choose at least one accepted pet type.')).toBeInTheDocument();
+    expect(mockMutateAsync).not.toHaveBeenCalled();
+  });
+
+  it('submits valid listing details to the create-listing mutation', async () => {
+    const user = userEvent.setup();
+    renderScreen();
+    await completeRequiredFields(user);
+    await user.click(screen.getByRole('checkbox', { name: 'Lawn' }));
+    await user.click(screen.getByRole('checkbox', { name: 'Daily photo updates' }));
+
+    await user.click(screen.getByRole('button', { name: /publish listing/i }));
+
+    await waitFor(() => {
+      expect(mockMutateAsync).toHaveBeenCalledWith(expect.objectContaining({
+        title: validListingFormValues.title,
+        location: validListingFormValues.location,
+        description: validListingFormValues.description,
+        capacity: validListingFormValues.capacity,
+        acceptedPetTypes: ['dog'],
+        facilities: ['Lawn', 'Daily photo updates'],
+        photos: [],
+        publicationMode: 'published',
+      }));
+    });
+  });
+
+  it('saves the same valid form as a private draft when requested', async () => {
+    const user = userEvent.setup();
+    renderScreen();
+    await completeRequiredFields(user);
+
+    await user.click(screen.getByRole('button', { name: /save draft/i }));
+
+    await waitFor(() => {
+      expect(mockMutateAsync).toHaveBeenCalledWith(expect.objectContaining({
+        title: validListingFormValues.title,
+        publicationMode: 'draft',
+      }));
+    });
+  });
+
+  it('keeps the completed form and reports an upload failure', async () => {
+    mockMutateAsync.mockImplementationOnce(async () => {
+      mockMutationIsError = true;
+      throw new Error('upload failed');
+    });
+    const user = userEvent.setup();
+    renderScreen();
+    await completeRequiredFields(user);
+    const photo = fileOfSize('yard.jpg', 'image/jpeg', 2048);
+    await user.upload(screen.getByLabelText(/add listing photos/i), photo);
+
+    await user.click(screen.getByRole('button', { name: /publish listing/i }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'We could not save your listing. Check your connection and try again.',
+    );
+    expect(screen.getByLabelText(/listing title/i)).toHaveValue(validListingFormValues.title);
+    expect(screen.getByRole('img', { name: 'yard.jpg' })).toBeInTheDocument();
   });
 });

@@ -29,7 +29,7 @@ The protected `main` branch is the only shared integration branch. GitHub requir
 
 ## Deployment
 
-The web app deploys to Cloudflare Workers static assets through Cloudflare's Git integration. Cloudflare watches this repository directly. There is no GitHub Actions deploy workflow for the web app, and one must not be added while the Git integration owns deployment; see [ADR 0005](decisions/0005-cloudflare-workers-hosting.md). Supabase migration release stays with GitHub Actions, so the two systems never deploy the same thing.
+The web app deploys to Cloudflare Workers static assets through Cloudflare's Git integration. Cloudflare watches this repository directly. There is no GitHub Actions deploy workflow for the web app, and one must not be added while the Git integration owns deployment; see [ADR 0005](decisions/0005-cloudflare-workers-hosting.md). Supabase migration and Edge Function release stays with GitHub Actions, so the two systems never deploy the same thing. The `supabase-migration` job pushes database migrations, then deploys every function under `supabase/functions/` in a separate step — a new function needs only its folder, not a second place in CI to remember it — gated on `supabase/**` actually changing in the push.
 
 A push to any branch other than `main` uploads a new Worker version and produces a preview URL. A push to protected `main` deploys that build to production. Cloudflare posts build status and both preview URLs as a pull-request comment. The Cloudflare check is informational and deliberately not a required check; Quality is the gate.
 

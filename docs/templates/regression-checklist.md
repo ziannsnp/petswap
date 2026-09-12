@@ -68,10 +68,11 @@ fill the result columns, and link it from the release-readiness PR.
 | --- | --- | --- | --- | --- |
 | 14 | Create a listing with title, location, description, capacity, pet types, any combination of the six optional facility checkboxes, and photos | | | |
 | 15 | Required listing fields block submission; published listing is publicly visible | | | |
-| 16 | Edit and delete a listing you own; a deleted listing 404s on direct access and is absent from search | | | |
+| 16 | Edit every supported field and photo on a listing you own, select a new main photo, and confirm the changes persist; delete it and confirm direct access and search no longer expose it | | | |
 | 17 | Listing detail shows host profile, facilities, capacity, pet types, photos, description | | | |
 | 18 | Search by location/keyword; empty query lists all published; no matches shows an empty state | | | |
 | 19 | Pet-type + capacity + date filters exclude listings that are too small or have an overlapping confirmed booking | | | |
+| US-2.2-A | Invalid listing edits and an eleventh photo are rejected; another user cannot update the listing or its photos | | | |
 
 ### Bookings (FR-5.1 – FR-5.4)
 

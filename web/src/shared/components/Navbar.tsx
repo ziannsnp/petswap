@@ -1,7 +1,19 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink } from 'react-router-dom';
-import { CalendarDays, Heart, Home, LogIn, Menu, PawPrint, Search, User, UserPlus, X } from 'lucide-react';
-import { useAuth, LogoutButton } from '@/features/auth';
+import {
+  CalendarDays,
+  Heart,
+  Home,
+  LogIn,
+  LogOut,
+  Menu,
+  PawPrint,
+  Search,
+  User,
+  UserPlus,
+  X,
+} from 'lucide-react';
+import { useAuth, LogoutConfirmDialog } from '@/features/auth';
 
 const PROTECTED_NAV_ITEMS = [
   { to: '/', label: 'Search', Icon: Search, end: true },
@@ -13,6 +25,24 @@ const PROTECTED_NAV_ITEMS = [
 export function Navbar() {
   const { isAuthenticated, isLoading, user } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const [isLogoutDialogOpen, setIsLogoutDialogOpen] = useState(false);
+  const accountMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!accountMenuOpen) {
+      return;
+    }
+
+    function handleClickOutside(event: MouseEvent) {
+      if (accountMenuRef.current && !accountMenuRef.current.contains(event.target as Node)) {
+        setAccountMenuOpen(false);
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [accountMenuOpen]);
 
   const displayName =
     (user?.user_metadata?.display_name as string | undefined) ||
@@ -29,19 +59,15 @@ export function Navbar() {
     .toUpperCase();
 
   return (
-    <header className="sticky top-0 z-50 border-b border-gray-200 bg-white/95 backdrop-blur-xs">
+    <header className="sticky top-0 z-40 border-b border-gray-200 bg-white">
       <nav
-        className="mx-auto flex h-16 max-w-7xl items-center gap-2 px-3 sm:px-6 lg:gap-6 lg:px-8"
+        className="mx-auto flex h-16 max-w-7xl items-center gap-2 px-4 sm:px-6 lg:px-8"
         aria-label="Primary navigation"
       >
         {/* Brand Logo */}
-        <Link
-          className="flex shrink-0 items-center gap-2 font-bold text-brand-700 hover:text-brand-800 transition-colors"
-          to="/"
-          aria-label="PetSwap home"
-        >
-          <PawPrint className="h-7 w-7 text-brand-600" aria-hidden="true" />
-          <span className="hidden text-xl font-bold tracking-tight sm:inline">PetSwap</span>
+        <Link to="/" className="flex shrink-0 items-center gap-2" aria-label="PetSwap home">
+          <PawPrint className="h-8 w-8 text-brand-600" aria-hidden="true" />
+          <span className="text-xl font-bold text-brand-700">PetSwap</span>
         </Link>
 
         {/* Desktop Navigation Links */}
@@ -89,17 +115,48 @@ export function Navbar() {
               <div className="h-9 w-20 animate-pulse rounded-lg bg-gray-200" />
             </div>
           ) : isAuthenticated ? (
-            <div className="flex items-center gap-3">
-              <Link
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-600 text-sm font-semibold text-white hover:bg-brand-700 sm:h-10 sm:w-10 transition-colors"
-                to="/profile"
-                aria-label="Your profile"
+            <div className="relative" ref={accountMenuRef}>
+              <button
+                type="button"
+                onClick={() => setAccountMenuOpen((prev) => !prev)}
+                className="flex items-center gap-2 rounded-md px-3 py-2 text-gray-600 hover:text-brand-600"
+                aria-haspopup="menu"
+                aria-expanded={accountMenuOpen}
+                aria-label="Account menu"
                 title={displayName}
               >
-                {userInitials || <User className="h-5 w-5" aria-hidden="true" />}
-              </Link>
+                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-600 text-sm font-semibold text-white">
+                  {userInitials || <User className="h-4 w-4" aria-hidden="true" />}
+                </span>
+                <span className="text-sm font-medium">Account</span>
+              </button>
 
-              <LogoutButton className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors" />
+              {accountMenuOpen && (
+                <div
+                  role="menu"
+                  className="absolute right-0 mt-2 w-48 rounded-lg border border-gray-100 bg-white shadow-lg"
+                >
+                  <Link
+                    to="/profile"
+                    role="menuitem"
+                    onClick={() => setAccountMenuOpen(false)}
+                    className="block px-4 py-2 text-sm text-gray-700 hover:bg-brand-50"
+                  >
+                    Edit profile
+                  </Link>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setAccountMenuOpen(false);
+                      setIsLogoutDialogOpen(true);
+                    }}
+                    className="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+                  >
+                    Log out
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
             <div className="flex items-center gap-2">
@@ -153,7 +210,7 @@ export function Navbar() {
                   className={({ isActive }) =>
                     `flex items-center gap-3 rounded-lg px-3 py-2.5 text-base font-medium transition-colors ${
                       isActive
-                        ? 'bg-brand-50 text-brand-700'
+                        ? 'bg-brand-50 text-brand-700 font-semibold'
                         : 'text-gray-700 hover:bg-gray-50'
                     }`
                   }
@@ -170,7 +227,7 @@ export function Navbar() {
                 className={({ isActive }) =>
                   `flex items-center gap-3 rounded-lg px-3 py-2.5 text-base font-medium transition-colors ${
                     isActive
-                      ? 'bg-brand-50 text-brand-700'
+                      ? 'bg-brand-50 text-brand-700 font-semibold'
                       : 'text-gray-700 hover:bg-gray-50'
                   }`
                 }
@@ -197,10 +254,17 @@ export function Navbar() {
                   <span className="truncate">{displayName}</span>
                 </Link>
                 <div className="px-3 pt-1">
-                  <LogoutButton
-                    onConfirm={() => setMobileMenuOpen(false)}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMobileMenuOpen(false);
+                      setIsLogoutDialogOpen(true);
+                    }}
                     className="flex w-full items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white py-2.5 text-sm font-medium text-red-600 hover:bg-red-50 transition-colors"
-                  />
+                  >
+                    <LogOut className="h-4 w-4" aria-hidden="true" />
+                    <span>Log out</span>
+                  </button>
                 </div>
               </div>
             ) : (
@@ -226,6 +290,8 @@ export function Navbar() {
           </div>
         </div>
       )}
+
+      <LogoutConfirmDialog isOpen={isLogoutDialogOpen} onClose={() => setIsLogoutDialogOpen(false)} />
     </header>
   );
 }

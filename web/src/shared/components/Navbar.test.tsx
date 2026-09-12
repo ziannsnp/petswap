@@ -7,16 +7,8 @@ import { useAuth } from '@/features/auth';
 
 jest.mock('@/features/auth', () => ({
   useAuth: jest.fn(),
-  LogoutButton: ({ className, onConfirm }: { className?: string; onConfirm?: () => void }) => (
-    <button
-      type="button"
-      className={className}
-      onClick={() => onConfirm?.()}
-      aria-label="Log out"
-    >
-      Log out
-    </button>
-  ),
+  LogoutConfirmDialog: ({ isOpen }: { isOpen: boolean }) =>
+    isOpen ? <div role="dialog">Confirm logout</div> : null,
 }));
 
 const mockedUseAuth = jest.mocked(useAuth);
@@ -120,15 +112,35 @@ describe('Navbar Component', () => {
       expect(screen.getByRole('link', { name: /^pets$/i })).toBeInTheDocument();
     });
 
-    it('renders user profile avatar/name and Logout button', () => {
+    it('renders an account menu button and no visible profile/logout links by default', () => {
       renderNavbar();
 
-      const profileLink = screen.getByRole('link', { name: /your profile/i });
+      expect(screen.getByTitle('Liger PetOwner')).toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: /edit profile/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /log out/i })).not.toBeInTheDocument();
+    });
+
+    it('opens the account menu to reveal Edit profile and Log out, matching the prototype layout', async () => {
+      const user = userEvent.setup();
+      renderNavbar();
+
+      await user.click(screen.getByRole('button', { name: /account menu/i }));
+
+      const profileLink = screen.getByRole('menuitem', { name: /edit profile/i });
       expect(profileLink).toBeInTheDocument();
       expect(profileLink).toHaveAttribute('href', '/profile');
-      expect(screen.getByTitle('Liger PetOwner')).toBeInTheDocument();
 
-      expect(screen.getByRole('button', { name: /log out/i })).toBeInTheDocument();
+      expect(screen.getByRole('menuitem', { name: /log out/i })).toBeInTheDocument();
+    });
+
+    it('opens the logout confirmation dialog when Log out is chosen from the account menu', async () => {
+      const user = userEvent.setup();
+      renderNavbar();
+
+      await user.click(screen.getByRole('button', { name: /account menu/i }));
+      await user.click(screen.getByRole('menuitem', { name: /log out/i }));
+
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
     });
 
     it('does NOT render Log in or Register links when authenticated', () => {
@@ -151,7 +163,7 @@ describe('Navbar Component', () => {
       expect(screen.getAllByRole('link', { name: /bookings/i })).toHaveLength(2);
       expect(screen.getAllByRole('link', { name: /my listings/i })).toHaveLength(2);
       expect(screen.getAllByRole('link', { name: /^pets$/i })).toHaveLength(2);
-      expect(screen.getAllByRole('button', { name: /log out/i })).toHaveLength(2);
+      expect(screen.getByRole('button', { name: /log out/i })).toBeInTheDocument();
     });
   });
 

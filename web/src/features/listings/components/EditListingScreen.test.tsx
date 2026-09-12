@@ -20,18 +20,17 @@ const sunnyRoom: Listing = {
   description: 'Fenced garden, quiet street.',
   capacity: 2,
   accepted_pet_types: ['dog', 'cat'],
-  facilities: 'Fenced yard\nAir conditioning\nVet 5 minutes away',
+  facilities: 'Lawn\nAir-conditioned room\nVet 5 minutes away',
   status: 'published',
   deleted_at: null,
   published_at: '2026-09-01T00:00:00.000Z',
   created_at: '2026-09-01T00:00:00.000Z',
   updated_at: '2026-09-01T00:00:00.000Z',
   listing_images: [
-    { id: 'img-1', listing_id: 'listing-1', storage_path: 'listing-1/a.jpg', alt_text: 'Garden', sort_order: 0, created_at: '2026-09-01T00:00:00.000Z' },
-    { id: 'img-2', listing_id: 'listing-1', storage_path: 'listing-1/b.jpg', alt_text: null, sort_order: 1, created_at: '2026-09-01T00:00:00.000Z' },
+    { id: 'img-1', listing_id: 'listing-1', storage_path: 'listing-1/a.jpg', alt_text: 'Garden', sort_order: 0, created_at: '2026-09-01T00:00:00.000Z', signed_url: 'https://storage.test/signed/a.jpg' },
+    { id: 'img-2', listing_id: 'listing-1', storage_path: 'listing-1/b.jpg', alt_text: null, sort_order: 1, created_at: '2026-09-01T00:00:00.000Z', signed_url: 'https://storage.test/signed/b.jpg' },
   ],
-  cover_photo_url: 'https://storage.test/listing-1/a.jpg',
-  photo_urls: ['https://storage.test/listing-1/a.jpg', 'https://storage.test/listing-1/b.jpg'],
+  cover_photo_url: 'https://storage.test/signed/a.jpg',
 };
 
 function listingsQuery(overrides: Partial<ReturnType<typeof useMyListings>>) {
@@ -93,8 +92,8 @@ describe('EditListingScreen', () => {
     expect(screen.getByRole('button', { name: 'Cat' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('button', { name: 'Rabbit' })).toHaveAttribute('aria-pressed', 'false');
 
-    expect(screen.getByRole('checkbox', { name: 'Fenced yard' })).toBeChecked();
-    expect(screen.getByRole('checkbox', { name: 'Air conditioning' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Lawn' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Air-conditioned room' })).toBeChecked();
     expect(screen.getByRole('checkbox', { name: 'Security cameras' })).not.toBeChecked();
   });
 
@@ -119,7 +118,7 @@ describe('EditListingScreen', () => {
     mockedUseMyListings.mockReturnValue(listingsQuery({ data: [sunnyRoom] }));
     renderAt('listing-1');
 
-    expect(screen.getByRole('img', { name: 'Garden' })).toHaveAttribute('src', 'https://storage.test/listing-1/a.jpg');
+    expect(screen.getByRole('img', { name: 'Garden' })).toHaveAttribute('src', 'https://storage.test/signed/a.jpg');
     expect(screen.getByRole('img', { name: 'Sunny garden room photo 2' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /remove/i })).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/add/i)).not.toBeInTheDocument();
@@ -127,7 +126,7 @@ describe('EditListingScreen', () => {
 
   it('shows an empty photo state for a listing with no photos', () => {
     mockedUseMyListings.mockReturnValue(
-      listingsQuery({ data: [{ ...sunnyRoom, listing_images: [], cover_photo_url: null, photo_urls: [] }] }),
+      listingsQuery({ data: [{ ...sunnyRoom, listing_images: [], cover_photo_url: null }] }),
     );
     renderAt('listing-1');
 
@@ -146,7 +145,20 @@ describe('EditListingScreen', () => {
     expect(screen.getByText('Listing title is required.')).toBeInTheDocument();
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
     expect(screen.getByLabelText(/location/i)).toHaveValue('Chiang Mai');
-    expect(screen.getByRole('checkbox', { name: 'Fenced yard' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Lawn' })).toBeChecked();
+  });
+
+  it('refuses to save with every pet type deselected, matching the database rule', async () => {
+    const user = userEvent.setup();
+    mockedUseMyListings.mockReturnValue(listingsQuery({ data: [sunnyRoom] }));
+    renderAt('listing-1');
+
+    await user.click(screen.getByRole('button', { name: 'Dog' }));
+    await user.click(screen.getByRole('button', { name: 'Cat' }));
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+
+    expect(screen.getByText('Choose at least one accepted pet type.')).toBeInTheDocument();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 
   it('confirms when the edited values are valid', async () => {

@@ -1,67 +1,70 @@
 import { Home, Image, Pencil, Plus } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useMyListings } from '../hooks/useListings';
 import { petSpeciesLabel } from '../lib/listingOptions';
+import { LISTING_STATUS_STYLES } from '../lib/listingStatus';
 import type { Listing } from '../lib/listingApi';
 import { ListingsNavigation } from './ListingsNavigation';
 
-const STATUS_STYLES: Record<Listing['status'], { label: string; className: string }> = {
-  draft: { label: 'Draft', className: 'bg-yellow-50 text-yellow-700' },
-  published: { label: 'Published', className: 'bg-green-50 text-green-700' },
-  deleted: { label: 'Deleted', className: 'bg-red-50 text-red-700' },
-};
-
 function ListingCard({ listing }: { listing: Listing }) {
-  const status = STATUS_STYLES[listing.status];
+  const status = LISTING_STATUS_STYLES[listing.status];
 
+  // The preview link and the edit link are siblings: an anchor cannot contain another
+  // anchor, so the card body is one link and the owner action sits in its own footer.
   return (
-    <article className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
-      <div className="aspect-video bg-gray-100">
-        {listing.cover_photo_url ? (
-          <img
-            className="h-full w-full object-cover"
-            src={listing.cover_photo_url}
-            alt={listing.listing_images[0]?.alt_text ?? listing.title}
-          />
-        ) : (
-          <div className="flex h-full flex-col items-center justify-center gap-2 text-sm text-gray-400">
-            <Image className="h-9 w-9" aria-hidden="true" />
-            <span>No photo yet</span>
+    <article className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm hover:border-brand-500">
+      <Link className="block" to={`/listings/${listing.id}`}>
+        <div className="aspect-video bg-gray-100">
+          {listing.cover_photo_url ? (
+            <img
+              className="h-full w-full object-cover"
+              src={listing.cover_photo_url}
+              alt={listing.listing_images[0]?.alt_text ?? listing.title}
+            />
+          ) : (
+            <div className="flex h-full flex-col items-center justify-center gap-2 text-sm text-gray-400">
+              <Image className="h-9 w-9" aria-hidden="true" />
+              <span>No photo yet</span>
+            </div>
+          )}
+        </div>
+        <div className="p-4">
+          <div className="flex items-start justify-between gap-3">
+            <h2 className="min-w-0 text-base font-semibold text-gray-900 break-words">{listing.title}</h2>
+            <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${status.className}`}>
+              {status.label}
+            </span>
           </div>
-        )}
-      </div>
-      <div className="p-4">
-        <div className="flex items-start justify-between gap-3">
-          <h2 className="min-w-0 text-base font-semibold text-gray-900 break-words">{listing.title}</h2>
-          <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${status.className}`}>
-            {status.label}
-          </span>
+          <p className="mt-1 text-sm text-gray-500">{listing.location}</p>
+          <div className="mt-3 flex flex-wrap gap-2" aria-label="Listing details">
+            {listing.accepted_pet_types.map((petType) => (
+              <span className="badge-brand" key={petType}>{petSpeciesLabel(petType)}</span>
+            ))}
+            <span className="badge-brand">Up to {listing.capacity} pets</span>
+          </div>
         </div>
-        <p className="mt-1 text-sm text-gray-500">{listing.location}</p>
-        <div className="mt-3 flex flex-wrap gap-2" aria-label="Listing details">
-          {listing.accepted_pet_types.map((petType) => (
-            <span className="badge-brand" key={petType}>{petSpeciesLabel(petType)}</span>
-          ))}
-          <span className="badge-brand">Up to {listing.capacity} pets</span>
-        </div>
-        <div className="mt-4 flex justify-end">
-          <Link
-            className="btn-secondary inline-flex items-center gap-1.5 text-sm"
-            to={`/listings/${listing.id}/edit`}
-            aria-label={`Edit ${listing.title}`}
-          >
-            <Pencil className="h-4 w-4" aria-hidden="true" />
-            Edit
-          </Link>
-        </div>
+      </Link>
+      <div className="flex justify-end border-t border-gray-100 px-4 py-3">
+        <Link
+          className="btn-secondary inline-flex items-center gap-1.5 text-sm"
+          to={`/listings/${listing.id}/edit`}
+          aria-label={`Edit listing ${listing.id}`}
+        >
+          <Pencil className="h-4 w-4" aria-hidden="true" />
+          Edit
+        </Link>
       </div>
     </article>
   );
 }
 
 export function ListingsScreen() {
+  const location = useLocation();
   const { data: listings = [], isPending, isError } = useMyListings();
   const activeListings = listings.filter((listing) => listing.status !== 'deleted');
+  const listingSaved = location.state?.listingSaved === 'draft' || location.state?.listingSaved === 'published'
+    ? location.state.listingSaved
+    : null;
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900">
@@ -78,6 +81,14 @@ export function ListingsScreen() {
             <span className="sr-only sm:hidden">Create listing</span>
           </Link>
         </div>
+
+        {listingSaved && (
+          <p className="mb-6 border-l-4 border-green-600 bg-green-50 px-4 py-3 text-sm text-green-700" role="status">
+            {listingSaved === 'published'
+              ? 'Listing published successfully. Pet owners can now discover it.'
+              : 'Draft saved successfully. Only you can view it until you publish it.'}
+          </p>
+        )}
 
         {isPending && (
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2" aria-label="Loading listings" aria-busy="true">

@@ -101,7 +101,7 @@ npx supabase db reset
 
 Then inspect the local database in Studio at `http://127.0.0.1:54323` and verify the actor cases listed in [environments](environments.md).
 
-The SQL contract checks in `supabase/tests/` now run automatically: `database_contract.sql` (schema catalogue) and `booking_rules.test.sql` (overlap-rule behaviour). Run them locally after a reset, or let [`db-contract.yml`](ci-cd.md#database-contract-workflow) run them on every change under `supabase/`. They still read as a review checklist for a migration; see [`supabase/tests/README.md`](../supabase/tests/README.md). Actor-specific RLS (a signed-in user seeing only their own rows) still needs Studio or JWT impersonation until the Playwright journey exists.
+The SQL contract checks in `supabase/tests/` now run automatically: `database_contract.sql` (schema catalogue), `booking_rules.test.sql` (overlap-rule behaviour), `listing_rules.test.sql` (required accepted-pet behaviour), `listing_facility_migration.test.sql` (legacy facility-label backfill), `listing_photo_access.test.sql` (draft and published photo access), and `listing_edit_rules.test.sql` (valid, invalid, unauthorized, and photo-order edit behaviour). Run them locally after a reset, or let [`db-contract.yml`](ci-cd.md#database-contract-workflow) run them on every change under `supabase/`. They still read as a review checklist for a migration; see [`supabase/tests/README.md`](../supabase/tests/README.md).
 
 The booking overlap rule is verified at both levels:
 
@@ -111,3 +111,23 @@ The booking overlap rule is verified at both levels:
 Playwright is wired up: [`web/playwright.config.ts`](../web/playwright.config.ts) starts `npm run dev` and runs `web/e2e/` on desktop and mobile Chromium. `e2e/smoke.spec.ts` covers the public shell (no auth or Supabase needed) and runs on every `web/**` change via the non-required [`e2e-smoke.yml`](ci-cd.md#e2e-smoke-workflow) workflow.
 
 `web/e2e/booking-flow.spec.ts` — the login → request → confirm journey — stays skipped until its screens are on `main`; the file itself documents how to enable it. Before a demo or release, run the [regression checklist](templates/regression-checklist.md) on desktop and mobile and link the filled copy from the release-readiness PR.
+
+## Manual listing journey
+
+After `npx supabase db reset`, configure `web/.env.local` with the local API URL and anon key printed by `supabase start`, run `npm run dev` from `web/`, and sign in as `alex@petswap.test` with password `petswap-local-dev`.
+
+1. Open **My listings**, create a listing, enter at least one accepted pet type, select any combination of the six optional facility checkboxes, and add up to ten supported photos.
+2. Choose **Save draft**. Confirm the success message says the draft is private, the new card is marked Draft, and the database row remains in `draft` status.
+3. Create another listing and choose **Publish listing**. Confirm the success message and new card are marked Published, and the database row has `published` status.
+4. In Supabase Studio Storage, confirm `listing-photos` is private. In the My Listings browser requests, photo access should use a signed URL rather than a public object URL.
+5. Try no accepted pet type, zero/fractional capacity, an unsupported file, a file above 10 MB, and an eleventh photo. Each should be rejected without losing the rest of the form.
+
+## Manual listing edit journey
+
+1. Sign in as `alex@petswap.test`, open an owned listing, edit every supported listing field, save, refresh, and confirm the changes persist.
+2. Add and remove photos, choose a different main photo, save, and confirm the chosen photo remains first after refresh. Repeat while keeping exactly ten photos; an eleventh must be rejected without losing the intended edit.
+3. Try a blank title, location, or description, zero/fractional capacity, and no accepted pet type. Each invalid edit must remain unsaved.
+4. While signed in as `blair@petswap.test`, navigate directly to Alex's edit URL and attempt the corresponding API requests. The listing and its image order must remain unchanged.
+5. Simulate an upload or database failure. Newly uploaded objects must be cleaned up where possible, and existing photos must remain attached until replacement metadata has committed.
+
+Public listing details, host/owner profiles, search, pet profiles, and bookings belong to their separate user stories and are not acceptance evidence for US-2.2 listing editing.

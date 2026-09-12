@@ -66,6 +66,15 @@ insert into _contract (check_name, passed) values
     )
   ),
   (
+    'listing publication timestamps are database-controlled',
+    exists (
+      select 1 from pg_trigger
+      where tgrelid = 'public.listings'::regclass
+        and tgname = 'set_listing_publication_timestamp'
+        and not tgisinternal
+    )
+  ),
+  (
     'all MVP tables have row-level security enabled',
     (
       select bool_and(relrowsecurity)
@@ -126,10 +135,10 @@ insert into _contract (check_name, passed) values
     )
   ),
   (
-    'the public listing-photos storage bucket exists and is public',
+    'the listing-photos storage bucket exists and is private',
     exists (
       select 1 from storage.buckets
-      where id = 'listing-photos' and public
+      where id = 'listing-photos' and not public
     )
   ),
   (
@@ -140,6 +149,77 @@ insert into _contract (check_name, passed) values
         and table_name = 'listings'
         and column_name = 'accepted_pet_types'
         and udt_name = '_pet_species'
+    )
+  ),
+  (
+    'listings require at least one accepted pet type',
+    exists (
+      select 1
+      from information_schema.columns
+      where table_schema = 'public'
+        and table_name = 'listings'
+        and column_name = 'accepted_pet_types'
+        and is_nullable = 'NO'
+        and column_default is null
+    ) and exists (
+      select 1 from pg_constraint
+      where conname = 'listings_accepted_pet_types_not_empty_check'
+        and conrelid = 'public.listings'::regclass
+        and contype = 'c'
+    )
+  ),
+  (
+    'published listing photos remain readable from the private bucket',
+    exists (
+      select 1 from pg_policies
+      where schemaname = 'storage'
+        and tablename = 'objects'
+        and policyname = 'Public can read listing photos'
+        and cmd = 'SELECT'
+    )
+  ),
+  (
+    'listing owners may read photos from their own private drafts',
+    exists (
+      select 1 from pg_policies
+      where schemaname = 'storage'
+        and tablename = 'objects'
+        and policyname = 'Listing owners read private listing photos'
+        and cmd = 'SELECT'
+    )
+  ),
+  (
+    'listing image metadata has safe edit constraints',
+    (
+      select count(*) = 3
+      from pg_constraint
+      where conrelid = 'public.listing_images'::regclass
+        and conname in (
+          'listing_images_sort_order_nonnegative_check',
+          'listing_images_storage_path_matches_listing_check',
+          'listing_images_listing_sort_order_key'
+        )
+    )
+  ),
+  (
+    'listing image changes enforce the ten-photo and immutable-identity rules',
+    exists (
+      select 1
+      from pg_trigger
+      where tgrelid = 'public.listing_images'::regclass
+        and tgname = 'guard_listing_image_change'
+        and not tgisinternal
+    )
+  ),
+  (
+    'listing owners have an atomic photo reorder operation',
+    exists (
+      select 1
+      from pg_proc as procedure
+      join pg_namespace as namespace on namespace.oid = procedure.pronamespace
+      where namespace.nspname = 'public'
+        and procedure.proname = 'reorder_listing_images'
+        and pg_get_function_identity_arguments(procedure.oid) = 'target_listing_id uuid, ordered_image_ids uuid[]'
     )
   );
 

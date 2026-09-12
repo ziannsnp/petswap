@@ -1,6 +1,6 @@
 # 0006. Listings reuse the pet_species vocabulary for accepted pet types
 
-Status: Accepted
+Status: Accepted, amended by 0007
 
 ## Context
 

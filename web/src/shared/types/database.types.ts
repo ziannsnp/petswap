@@ -113,7 +113,7 @@ export type Database = {
           location: string;
           description: string;
           capacity: number;
-          accepted_pet_types?: Database['public']['Enums']['pet_species'][];
+          accepted_pet_types: Database['public']['Enums']['pet_species'][];
           facilities?: string | null;
           status?: Database['public']['Enums']['listing_status'];
           deleted_at?: string | null;
@@ -238,6 +238,10 @@ export type Database = {
       storage_folder_listing_id: {
         Args: { object_name: string };
         Returns: string | null;
+      };
+      reorder_listing_images: {
+        Args: { target_listing_id: string; ordered_image_ids: string[] };
+        Returns: undefined;
       };
     };
     Enums: {

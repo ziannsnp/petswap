@@ -37,7 +37,7 @@ function EditListingForm({ listing }: EditListingFormProps) {
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [isChecked, setIsChecked] = useState(false);
 
-  const values = { title, location, description, capacity };
+  const values = { title, location, description, capacity, acceptedPetTypes };
   const errors: ListingFormErrors = hasSubmitted ? validateListingForm(values) : {};
 
   // A stored listing may carry a pet type the form does not offer, or a facility written
@@ -50,7 +50,8 @@ function EditListingForm({ listing }: EditListingFormProps) {
     ...PET_TYPE_OPTIONS,
     ...extraPetTypes.map((value) => ({ value, label: petSpeciesLabel(value) })),
   ];
-  const otherFacilities = facilities.filter((facility) => !FACILITY_OPTIONS.includes(facility));
+  const facilityOptions: readonly string[] = FACILITY_OPTIONS;
+  const otherFacilities = facilities.filter((facility) => !facilityOptions.includes(facility));
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -122,8 +123,8 @@ function EditListingForm({ listing }: EditListingFormProps) {
         {errors.capacity && <p className="mt-1 text-xs text-red-700" id="listing-capacity-error">{errors.capacity}</p>}
       </div>
 
-      <fieldset>
-        <legend className={labelClassName}>Accepted pet types</legend>
+      <fieldset aria-describedby={errors.acceptedPetTypes ? 'listing-pet-types-error' : undefined}>
+        <legend className={labelClassName}>Accepted pet types <span className="text-red-700" aria-hidden="true">*</span></legend>
         <div className="flex flex-wrap gap-2">
           {petTypeOptions.map(({ value, label }) => {
             const isSelected = acceptedPetTypes.includes(value);
@@ -144,6 +145,9 @@ function EditListingForm({ listing }: EditListingFormProps) {
             );
           })}
         </div>
+        {errors.acceptedPetTypes && (
+          <p className="mt-2 text-xs text-red-700" id="listing-pet-types-error">{errors.acceptedPetTypes}</p>
+        )}
       </fieldset>
 
       <fieldset>
@@ -171,19 +175,19 @@ function EditListingForm({ listing }: EditListingFormProps) {
 
       <div>
         <span className={labelClassName}>Photos</span>
-        {listing.photo_urls.length === 0 ? (
+        {listing.listing_images.length === 0 ? (
           <div className="flex min-h-32 flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-gray-300 text-sm text-gray-500">
             <Image className="h-7 w-7 text-gray-400" aria-hidden="true" />
             <span>No photos yet</span>
           </div>
         ) : (
           <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            {listing.photo_urls.map((url, index) => (
-              <li className="aspect-4/3 overflow-hidden rounded-lg border border-gray-200" key={url}>
+            {listing.listing_images.map((image, index) => (
+              <li className="aspect-4/3 overflow-hidden rounded-lg border border-gray-200" key={image.id}>
                 <img
                   className="h-full w-full object-cover"
-                  src={url}
-                  alt={listing.listing_images[index]?.alt_text ?? `${listing.title} photo ${index + 1}`}
+                  src={image.signed_url}
+                  alt={image.alt_text ?? `${listing.title} photo ${index + 1}`}
                 />
               </li>
             ))}

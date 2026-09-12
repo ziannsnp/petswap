@@ -5,6 +5,15 @@ import { MemoryRouter } from 'react-router-dom';
 import { LISTING_PHOTO_MAX_BYTES, LISTING_PHOTO_MAX_COUNT } from '../lib/listingPhotos';
 import { CreateListingScreen } from './CreateListingScreen';
 
+jest.mock('../hooks/useCreateListing', () => ({
+  useCreateListing: () => ({
+    mutateAsync: jest.fn(),
+    reset: jest.fn(),
+    isPending: false,
+    isError: false,
+  }),
+}));
+
 function fileOfSize(name: string, type: string, size: number): File {
   const file = new File(['photo'], name, { type });
   Object.defineProperty(file, 'size', { value: size });
@@ -79,9 +88,12 @@ describe('CreateListingScreen', () => {
     });
 
     expect(screen.getByRole('img', { name: 'yard.jpg' })).toBeInTheDocument();
-    expect(screen.getByRole('alert')).toHaveTextContent(
+    const rejectionAlert = screen.getByRole('alert');
+    expect(rejectionAlert).toHaveTextContent(
       'notes.pdf: Unsupported file type. Choose a JPG, PNG, WebP, or GIF file.',
     );
+    expect(screen.getByText('Photos').parentElement).toContainElement(rejectionAlert);
+    expect(screen.getByLabelText(/listing title/i).parentElement).not.toContainElement(rejectionAlert);
   });
 
   it('reports required fields only after a save attempt, then clears each as it is corrected', async () => {

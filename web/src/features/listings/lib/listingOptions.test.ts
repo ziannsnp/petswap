@@ -1,4 +1,12 @@
-import { FACILITY_OPTIONS, parseFacilities, serializeFacilities } from './listingOptions';
+import { FACILITY_OPTIONS, parseFacilities, PET_TYPE_OPTIONS, serializeFacilities } from './listingOptions';
+
+describe('pet type options', () => {
+  it('offers every pet species supported by the database vocabulary', () => {
+    expect(PET_TYPE_OPTIONS.map((option) => option.value)).toEqual([
+      'dog', 'cat', 'rabbit', 'hamster', 'guinea_pig', 'fish', 'reptile', 'exotic_mammal', 'bird', 'other',
+    ]);
+  });
+});
 
 describe('facilities round trip', () => {
   it('restores exactly what was selected', () => {

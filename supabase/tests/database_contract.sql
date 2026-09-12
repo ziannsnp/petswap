@@ -66,6 +66,15 @@ insert into _contract (check_name, passed) values
     )
   ),
   (
+    'listing publication timestamps are database-controlled',
+    exists (
+      select 1 from pg_trigger
+      where tgrelid = 'public.listings'::regclass
+        and tgname = 'set_listing_publication_timestamp'
+        and not tgisinternal
+    )
+  ),
+  (
     'all MVP tables have row-level security enabled',
     (
       select bool_and(relrowsecurity)

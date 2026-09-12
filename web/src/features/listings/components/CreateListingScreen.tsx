@@ -4,12 +4,12 @@ import { ArrowLeft, ImagePlus, LoaderCircle, X } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { validateListingForm } from '../lib/listingForm';
 import type { ListingFormErrors } from '../lib/listingForm';
+import { useCreateListing } from '../hooks/useCreateListing';
 import { FACILITY_OPTIONS, PET_TYPE_OPTIONS } from '../lib/listingOptions';
-import type { PetSpecies } from '../lib/listingOptions';
 import { partitionListingPhotos } from '../lib/listingPhotos';
 import type { RejectedListingPhoto } from '../lib/listingPhotos';
 import { ListingsNavigation } from './ListingsNavigation';
-
+import type { PetSpecies } from '../lib/listingOptions';
 const labelClassName = 'mb-2 block text-sm font-medium text-gray-700';
 
 interface SelectedPhoto {
@@ -19,10 +19,6 @@ interface SelectedPhoto {
 
 function inputClassName(hasError: boolean) {
   return `input-field ${hasError ? 'border-red-500 focus:ring-red-300' : ''}`;
-}
-
-function toggleChoice<T extends string>(value: T, selected: T[], update: (next: T[]) => void) {
-  update(selected.includes(value) ? selected.filter((item) => item !== value) : [...selected, value]);
 }
 
 export function CreateListingScreen() {
@@ -38,24 +34,30 @@ export function CreateListingScreen() {
   const [rejectedPhotos, setRejectedPhotos] = useState<RejectedListingPhoto[]>([]);
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [showSuccess, setShowSuccess] = useState(false);
-
+  const createListingMutation = useCreateListing();
+  const isSubmitting = isSaving || createListingMutation.isPending;
   const values = { title, location, description, capacity };
-  // Errors stay derived so correcting a field clears its message as the owner types,
-  // while nothing is reported until they have tried to save at least once.
   const errors: ListingFormErrors = hasSubmitted ? validateListingForm(values) : {};
+
+  const resetMutationError = () => {
+    if (createListingMutation.isError) createListingMutation.reset();
+  };
 
   useEffect(() => () => {
     previewUrls.current.forEach((url) => URL.revokeObjectURL(url));
   }, []);
 
+  const toggleChoice = <T extends string,>(value: T, selected: T[], update: (next: T[]) => void) => {
+    update(selected.includes(value) ? selected.filter((item) => item !== value) : [...selected, value]);
+  };
+
   const handlePhotoSelection = (event: ChangeEvent<HTMLInputElement>) => {
+    resetMutationError();
     const { accepted, rejected } = partitionListingPhotos(
       Array.from(event.target.files ?? []),
       photos.length,
     );
     setRejectedPhotos(rejected);
-
     const selectedPhotos = accepted.map((file) => {
       const previewUrl = URL.createObjectURL(file);
       previewUrls.current.push(previewUrl);
@@ -66,26 +68,38 @@ export function CreateListingScreen() {
   };
 
   const removePhoto = (previewUrl: string) => {
+    resetMutationError();
     URL.revokeObjectURL(previewUrl);
     previewUrls.current = previewUrls.current.filter((url) => url !== previewUrl);
     setPhotos((current) => current.filter((photo) => photo.previewUrl !== previewUrl));
-    // A capacity reason stops being true the moment a photo is removed. Reasons about the
-    // files themselves are still accurate, so they stay on screen.
     setRejectedPhotos((current) => current.filter((rejected) => rejected.kind !== 'capacity'));
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setShowSuccess(false);
     setHasSubmitted(true);
+    const nextErrors = validateListingForm({ title, location, description, capacity });
 
-    if (Object.keys(validateListingForm(values)).length > 0) return;
+    if (Object.keys(nextErrors).length > 0) return;
+    if (capacity === '') return;
 
     setIsSaving(true);
-    // TODO(T-2.1.5): Replace this UI-only delay with the create-listing mutation.
-    await new Promise((resolve) => window.setTimeout(resolve, 700));
-    setIsSaving(false);
-    setShowSuccess(true);
+    try {
+      await createListingMutation.mutateAsync({
+        title,
+        location,
+        description,
+        capacity,
+        acceptedPetTypes,
+        facilities,
+        photos: photos.map((photo) => photo.file),
+      });
+      void navigate('/listings', { state: { listingSaved: true } });
+    } catch {
+      return;
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -107,7 +121,8 @@ export function CreateListingScreen() {
               className={inputClassName(Boolean(errors.title))}
               id="listing-title"
               value={title}
-              onChange={(event) => setTitle(event.target.value)}
+              onChange={(event) => { resetMutationError(); setTitle(event.target.value); }}
+              disabled={isSubmitting}
               placeholder="For example, Quiet home near the park"
               aria-invalid={Boolean(errors.title)}
               aria-describedby={errors.title ? 'listing-title-error' : undefined}
@@ -121,7 +136,8 @@ export function CreateListingScreen() {
               className={inputClassName(Boolean(errors.location))}
               id="listing-location"
               value={location}
-              onChange={(event) => setLocation(event.target.value)}
+              onChange={(event) => { resetMutationError(); setLocation(event.target.value); }}
+              disabled={isSubmitting}
               placeholder="For example, Chiang Mai, Hang Dong"
               aria-invalid={Boolean(errors.location)}
               aria-describedby={errors.location ? 'listing-location-error' : undefined}
@@ -136,7 +152,8 @@ export function CreateListingScreen() {
               id="listing-description"
               rows={5}
               value={description}
-              onChange={(event) => setDescription(event.target.value)}
+              onChange={(event) => { resetMutationError(); setDescription(event.target.value); }}
+              disabled={isSubmitting}
               placeholder="Describe the space and the care you can provide"
               aria-invalid={Boolean(errors.description)}
               aria-describedby={errors.description ? 'listing-description-error' : undefined}
@@ -153,7 +170,11 @@ export function CreateListingScreen() {
               min="1"
               step="1"
               value={capacity}
-              onChange={(event) => setCapacity(event.target.value === '' ? '' : Number(event.target.value))}
+              onChange={(event) => {
+                resetMutationError();
+                setCapacity(event.target.value === '' ? '' : Number(event.target.value));
+              }}
+              disabled={isSubmitting}
               aria-invalid={Boolean(errors.capacity)}
               aria-describedby={errors.capacity
                 ? 'listing-capacity-help listing-capacity-error'
@@ -166,8 +187,8 @@ export function CreateListingScreen() {
           <fieldset>
             <legend className={labelClassName}>Accepted pet types</legend>
             <div className="flex flex-wrap gap-2">
-              {PET_TYPE_OPTIONS.map(({ value, label }) => {
-                const isSelected = acceptedPetTypes.includes(value);
+              {PET_TYPE_OPTIONS.map((petType) => {
+                const isSelected = acceptedPetTypes.includes(petType.value);
                 return (
                   <button
                     className={`min-h-10 rounded-lg border px-4 py-2 text-sm transition-colors ${
@@ -176,11 +197,12 @@ export function CreateListingScreen() {
                         : 'border-gray-200 bg-white text-gray-700 hover:border-brand-500 hover:bg-brand-50'
                     }`}
                     type="button"
-                    key={value}
+                    key={petType.value}
+                    disabled={isSubmitting}
                     aria-pressed={isSelected}
-                    onClick={() => toggleChoice(value, acceptedPetTypes, setAcceptedPetTypes)}
+                    onClick={() => toggleChoice(petType.value, acceptedPetTypes, setAcceptedPetTypes)}
                   >
-                    {label}
+                    {petType.label}
                   </button>
                 );
               })}
@@ -196,7 +218,11 @@ export function CreateListingScreen() {
                     className="h-4 w-4 accent-brand-600"
                     type="checkbox"
                     checked={facilities.includes(facility)}
-                    onChange={() => toggleChoice(facility, facilities, setFacilities)}
+                    disabled={isSubmitting}
+                    onChange={() => {
+                      resetMutationError();
+                      toggleChoice(facility, facilities, setFacilities);
+                    }}
                   />
                   <span className="break-words">{facility}</span>
                 </label>
@@ -223,6 +249,7 @@ export function CreateListingScreen() {
                     <button
                       className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-white/95 text-red-700 hover:bg-red-50"
                       type="button"
+                      disabled={isSubmitting}
                       onClick={() => removePhoto(photo.previewUrl)}
                       aria-label={`Remove ${photo.file.name}`}
                       title="Remove photo"
@@ -247,6 +274,7 @@ export function CreateListingScreen() {
               type="file"
               accept="image/jpeg,image/png,image/webp,image/gif"
               multiple
+              disabled={isSubmitting}
               onChange={handlePhotoSelection}
             />
             {rejectedPhotos.length > 0 && (
@@ -260,17 +288,17 @@ export function CreateListingScreen() {
             )}
           </div>
 
-          {showSuccess && (
-            <p className="border-l-4 border-green-600 bg-green-50 px-4 py-3 text-sm text-green-700" role="status">
-              Listing details checked successfully.
+          {createListingMutation.isError && (
+            <p className="border-l-4 border-red-600 bg-red-50 px-4 py-3 text-sm text-red-700" role="alert">
+              We could not save your listing. Check your connection and try again.
             </p>
           )}
 
           <div className="grid grid-cols-1 gap-3 pt-1 sm:grid-cols-2">
-            <button className="btn-secondary min-h-11 disabled:cursor-not-allowed disabled:opacity-60" type="button" onClick={() => navigate('/listings')} disabled={isSaving}>Cancel</button>
-            <button className="btn-primary order-first flex min-h-11 items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-60 sm:order-none" type="submit" disabled={isSaving} aria-busy={isSaving}>
-              {isSaving && <LoaderCircle className="h-5 w-5 animate-spin motion-reduce:animate-none" aria-hidden="true" />}
-              {isSaving ? 'Saving...' : 'Save listing'}
+            <button className="btn-secondary min-h-11 disabled:cursor-not-allowed disabled:opacity-60" type="button" onClick={() => navigate('/listings')} disabled={isSubmitting}>Cancel</button>
+            <button className="btn-primary order-first flex min-h-11 items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-60 sm:order-none" type="submit" disabled={isSubmitting} aria-busy={isSubmitting}>
+              {isSubmitting && <LoaderCircle className="h-5 w-5 animate-spin motion-reduce:animate-none" aria-hidden="true" />}
+              {isSubmitting ? 'Saving...' : 'Save listing'}
             </button>
           </div>
         </form>

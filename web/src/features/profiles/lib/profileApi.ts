@@ -18,6 +18,12 @@ function avatarStoragePath(userId: string, file: Pick<File, 'type'>): string {
   return `${userId}/avatar`;
 }
 
+function cacheBustedPublicUrl(publicUrl: string): string {
+  const url = new URL(publicUrl);
+  url.searchParams.set('v', Date.now().toString());
+  return url.toString();
+}
+
 /** Returns the authenticated user's profile, or null when no session exists. */
 export async function getProfile(): Promise<Profile | null> {
   const { data: userData, error: userError } = await getSupabaseClient().auth.getUser();
@@ -74,7 +80,7 @@ export async function updateProfile(values: ProfileUpdate): Promise<Profile> {
 }
 
 /**
- * Replaces the authenticated user's avatar and returns its stable public URL.
+ * Replaces the authenticated user's avatar and returns a cache-busted public URL.
  * Persist the result with updateProfile({ photo_url: publicUrl }).
  */
 export async function uploadAvatar(file: File): Promise<string> {
@@ -105,7 +111,7 @@ export async function uploadAvatar(file: File): Promise<string> {
     throw new Error('Could not create a public URL for the uploaded avatar.');
   }
 
-  return data.publicUrl;
+  return cacheBustedPublicUrl(data.publicUrl);
 }
 
 /** @deprecated Use getProfile. Retained for the existing profile query hook. */

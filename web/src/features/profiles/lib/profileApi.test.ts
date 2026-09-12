@@ -105,6 +105,7 @@ describe('updateProfile', () => {
 
 describe('uploadAvatar', () => {
   beforeEach(() => jest.clearAllMocks());
+  afterEach(() => jest.restoreAllMocks());
 
   function mockAvatarClient(options: {
     user?: { id: string } | null;
@@ -133,9 +134,10 @@ describe('uploadAvatar', () => {
 
   it('uploads to the current user path, replaces an existing avatar, and returns its public URL', async () => {
     const { from, upload, getPublicUrl } = mockAvatarClient({});
+    jest.spyOn(Date, 'now').mockReturnValue(1_789_876_543_210);
 
     await expect(uploadAvatar(jpegAvatar)).resolves.toBe(
-      'https://project.supabase.co/storage/v1/object/public/avatars/user-1/avatar',
+      'https://project.supabase.co/storage/v1/object/public/avatars/user-1/avatar?v=1789876543210',
     );
     expect(from).toHaveBeenCalledWith('avatars');
     expect(upload).toHaveBeenCalledWith('user-1/avatar', jpegAvatar, {

@@ -13,9 +13,9 @@ jest.mock('../hooks/useListings', () => ({
       capacity: 2,
       accepted_pet_types: ['dog'],
       facilities: null,
-      status: 'draft',
+      status: 'published',
       deleted_at: null,
-      published_at: null,
+      published_at: '2026-09-10T00:00:01.000Z',
       owner_id: 'owner-123',
       created_at: '2026-09-10T00:00:00.000Z',
       updated_at: '2026-09-10T00:00:00.000Z',
@@ -28,16 +28,28 @@ jest.mock('../hooks/useListings', () => ({
 }));
 
 describe('ListingsScreen', () => {
-  it('confirms that a newly created draft listing was saved', () => {
+  it('confirms that a newly published listing is discoverable', () => {
     render(
-      <MemoryRouter initialEntries={[{ pathname: '/listings', state: { listingSaved: true } }]}>
+      <MemoryRouter initialEntries={[{ pathname: '/listings', state: { listingSaved: 'published' } }]}>
         <ListingsScreen />
       </MemoryRouter>,
     );
 
     expect(screen.getByRole('status')).toHaveTextContent(
-      'Draft listing saved successfully. You can preview it from My listings.',
+      'Listing published successfully. Pet owners can now discover it.',
     );
     expect(screen.getByRole('link', { name: /quiet home/i })).toHaveAttribute('href', '/listings/listing-123');
+  });
+
+  it('confirms that a draft remains private', () => {
+    render(
+      <MemoryRouter initialEntries={[{ pathname: '/listings', state: { listingSaved: 'draft' } }]}>
+        <ListingsScreen />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Draft saved successfully. Only you can view it until you publish it.',
+    );
   });
 });

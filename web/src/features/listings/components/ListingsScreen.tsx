@@ -53,7 +53,9 @@ export function ListingsScreen() {
   const location = useLocation();
   const { data: listings = [], isPending, isError } = useMyListings();
   const activeListings = listings.filter((listing) => listing.status !== 'deleted');
-  const listingSaved = location.state?.listingSaved === true;
+  const listingSaved = location.state?.listingSaved === 'draft' || location.state?.listingSaved === 'published'
+    ? location.state.listingSaved
+    : null;
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900">
@@ -73,7 +75,9 @@ export function ListingsScreen() {
 
         {listingSaved && (
           <p className="mb-6 border-l-4 border-green-600 bg-green-50 px-4 py-3 text-sm text-green-700" role="status">
-            Draft listing saved successfully. You can preview it from My listings.
+            {listingSaved === 'published'
+              ? 'Listing published successfully. Pet owners can now discover it.'
+              : 'Draft saved successfully. Only you can view it until you publish it.'}
           </p>
         )}
 

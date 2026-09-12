@@ -135,10 +135,10 @@ insert into _contract (check_name, passed) values
     )
   ),
   (
-    'the public listing-photos storage bucket exists and is public',
+    'the listing-photos storage bucket exists and is private',
     exists (
       select 1 from storage.buckets
-      where id = 'listing-photos' and public
+      where id = 'listing-photos' and not public
     )
   ),
   (
@@ -149,6 +149,43 @@ insert into _contract (check_name, passed) values
         and table_name = 'listings'
         and column_name = 'accepted_pet_types'
         and udt_name = '_pet_species'
+    )
+  ),
+  (
+    'listings require at least one accepted pet type',
+    exists (
+      select 1
+      from information_schema.columns
+      where table_schema = 'public'
+        and table_name = 'listings'
+        and column_name = 'accepted_pet_types'
+        and is_nullable = 'NO'
+        and column_default is null
+    ) and exists (
+      select 1 from pg_constraint
+      where conname = 'listings_accepted_pet_types_not_empty_check'
+        and conrelid = 'public.listings'::regclass
+        and contype = 'c'
+    )
+  ),
+  (
+    'published listing photos remain readable from the private bucket',
+    exists (
+      select 1 from pg_policies
+      where schemaname = 'storage'
+        and tablename = 'objects'
+        and policyname = 'Public can read listing photos'
+        and cmd = 'SELECT'
+    )
+  ),
+  (
+    'listing owners may read photos from their own private drafts',
+    exists (
+      select 1 from pg_policies
+      where schemaname = 'storage'
+        and tablename = 'objects'
+        and policyname = 'Listing owners read private listing photos'
+        and cmd = 'SELECT'
     )
   );
 

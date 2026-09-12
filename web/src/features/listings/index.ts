@@ -1,4 +1,5 @@
 export { CreateListingScreen } from './components/CreateListingScreen';
+export { EditListingScreen } from './components/EditListingScreen';
 export { ListingDetailScreen } from './components/ListingDetailScreen';
 export { ListingsScreen } from './components/ListingsScreen';
 export { useCreateListing } from './hooks/useCreateListing';

@@ -1,11 +1,11 @@
 import { Home, Image, Plus } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useMyListings } from '../hooks/useListings';
 import { petSpeciesLabel } from '../lib/listingOptions';
 import type { Listing } from '../lib/listingApi';
 import { ListingsNavigation } from './ListingsNavigation';
 
-const STATUS_STYLES: Record<Listing['status'], { label: string; className: string }> = {
+export const STATUS_STYLES: Record<Listing['status'], { label: string; className: string }> = {
   draft: { label: 'Draft', className: 'bg-yellow-50 text-yellow-700' },
   published: { label: 'Published', className: 'bg-green-50 text-green-700' },
   deleted: { label: 'Deleted', className: 'bg-red-50 text-red-700' },
@@ -15,7 +15,7 @@ function ListingCard({ listing }: { listing: Listing }) {
   const status = STATUS_STYLES[listing.status];
 
   return (
-    <article className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
+    <Link className="block overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm hover:border-brand-500" to={`/listings/${listing.id}`}>
       <div className="aspect-video bg-gray-100">
         {listing.cover_photo_url ? (
           <img
@@ -45,13 +45,15 @@ function ListingCard({ listing }: { listing: Listing }) {
           <span className="badge-brand">Up to {listing.capacity} pets</span>
         </div>
       </div>
-    </article>
+    </Link>
   );
 }
 
 export function ListingsScreen() {
+  const location = useLocation();
   const { data: listings = [], isPending, isError } = useMyListings();
   const activeListings = listings.filter((listing) => listing.status !== 'deleted');
+  const listingSaved = location.state?.listingSaved === true;
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900">
@@ -68,6 +70,12 @@ export function ListingsScreen() {
             <span className="sr-only sm:hidden">Create listing</span>
           </Link>
         </div>
+
+        {listingSaved && (
+          <p className="mb-6 border-l-4 border-green-600 bg-green-50 px-4 py-3 text-sm text-green-700" role="status">
+            Draft listing saved successfully. You can preview it from My listings.
+          </p>
+        )}
 
         {isPending && (
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2" aria-label="Loading listings" aria-busy="true">

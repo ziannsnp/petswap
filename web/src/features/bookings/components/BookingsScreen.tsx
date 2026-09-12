@@ -1,5 +1,6 @@
+import { useState } from 'react';
 import type { UseQueryResult } from '@tanstack/react-query';
-import { useIncomingBookings, useOutgoingBookings } from '../hooks/useBookings';
+import { useIncomingBookings, useOutgoingBookings, useUpdateBookingStatus } from '../hooks/useBookings';
 import type { BookingWithDetails } from '../lib/bookingApi';
 import type { Database } from '@/shared/types/database.types';
 
@@ -29,7 +30,18 @@ function BookingStatusBadge({ status }: { readonly status: BookingStatus }) {
   return <span className={`booking-status booking-status--${status}`}>{STATUS_LABELS[status]}</span>;
 }
 
-function BookingCard({ booking }: { readonly booking: BookingWithDetails }) {
+interface BookingCardProps {
+  readonly booking: BookingWithDetails;
+  readonly variant: 'incoming' | 'outgoing';
+  readonly onConfirm?: (bookingId: string) => void;
+  readonly onDecline?: (bookingId: string) => void;
+  readonly isResponding?: boolean;
+  readonly responseError?: string | null;
+}
+
+function BookingCard({ booking, variant, onConfirm, onDecline, isResponding, responseError }: BookingCardProps) {
+  const canRespond = variant === 'incoming' && booking.status === 'pending';
+
   return (
     <li className="booking-card">
       <div className="booking-card__row">
@@ -44,6 +56,31 @@ function BookingCard({ booking }: { readonly booking: BookingWithDetails }) {
       <p className="booking-card__dates">
         {formatBookingDate(booking.start_date)} &ndash; {formatBookingDate(booking.end_date)}
       </p>
+      {canRespond && (
+        <div className="booking-card__actions">
+          <button
+            type="button"
+            className="btn-primary"
+            onClick={() => onConfirm?.(booking.id)}
+            disabled={isResponding}
+          >
+            {isResponding ? 'Saving...' : 'Confirm'}
+          </button>
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={() => onDecline?.(booking.id)}
+            disabled={isResponding}
+          >
+            Decline
+          </button>
+          {responseError && (
+            <p className="booking-card__error" role="alert">
+              {responseError}
+            </p>
+          )}
+        </div>
+      )}
     </li>
   );
 }
@@ -83,9 +120,23 @@ interface BookingSectionProps {
   readonly title: string;
   readonly emptyMessage: string;
   readonly query: UseQueryResult<BookingWithDetails[], Error>;
+  readonly variant: 'incoming' | 'outgoing';
+  readonly onConfirm?: (bookingId: string) => void;
+  readonly onDecline?: (bookingId: string) => void;
+  readonly respondingId?: string | null;
+  readonly responseError?: { bookingId: string; message: string } | null;
 }
 
-function BookingSection({ title, emptyMessage, query }: BookingSectionProps) {
+function BookingSection({
+  title,
+  emptyMessage,
+  query,
+  variant,
+  onConfirm,
+  onDecline,
+  respondingId,
+  responseError,
+}: BookingSectionProps) {
   return (
     <section className="booking-section" aria-busy={query.isLoading}>
       <h2>{title}</h2>
@@ -108,7 +159,15 @@ function BookingSection({ title, emptyMessage, query }: BookingSectionProps) {
       {query.isSuccess && query.data.length > 0 && (
         <ul className="booking-list">
           {query.data.map((booking) => (
-            <BookingCard key={booking.id} booking={booking} />
+            <BookingCard
+              key={booking.id}
+              booking={booking}
+              variant={variant}
+              onConfirm={onConfirm}
+              onDecline={onDecline}
+              isResponding={respondingId === booking.id}
+              responseError={responseError?.bookingId === booking.id ? responseError.message : null}
+            />
           ))}
         </ul>
       )}
@@ -119,9 +178,24 @@ function BookingSection({ title, emptyMessage, query }: BookingSectionProps) {
 export function BookingsScreen() {
   const outgoing = useOutgoingBookings();
   const incoming = useIncomingBookings();
+  const updateStatus = useUpdateBookingStatus();
+  const [respondingId, setRespondingId] = useState<string | null>(null);
+  const [responseError, setResponseError] = useState<{ bookingId: string; message: string } | null>(null);
 
   const noRelatedBookings =
     outgoing.isSuccess && incoming.isSuccess && outgoing.data.length === 0 && incoming.data.length === 0;
+
+  async function respond(bookingId: string, status: 'confirmed' | 'declined') {
+    setRespondingId(bookingId);
+    setResponseError(null);
+    try {
+      await updateStatus.mutateAsync({ bookingId, status });
+    } catch {
+      setResponseError({ bookingId, message: 'Could not update this booking. Please try again.' });
+    } finally {
+      setRespondingId(null);
+    }
+  }
 
   return (
     <main className="bookings-screen">
@@ -133,11 +207,21 @@ export function BookingsScreen() {
         </p>
       ) : (
         <>
-          <BookingSection title="Outgoing requests" emptyMessage="You haven't sent any requests yet" query={outgoing} />
+          <BookingSection
+            title="Outgoing requests"
+            emptyMessage="You haven't sent any requests yet"
+            query={outgoing}
+            variant="outgoing"
+          />
           <BookingSection
             title="Incoming requests"
             emptyMessage="No incoming requests on your listings"
             query={incoming}
+            variant="incoming"
+            onConfirm={(bookingId) => void respond(bookingId, 'confirmed')}
+            onDecline={(bookingId) => void respond(bookingId, 'declined')}
+            respondingId={respondingId}
+            responseError={responseError}
           />
         </>
       )}

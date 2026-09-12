@@ -11,4 +11,5 @@ export const routes = {
   listings: '/listings',
   newListing: '/listings/new',
   bookings: '/bookings',
+  listingDetail: (listingId: string) => `/listings/${listingId}`,
 } as const;

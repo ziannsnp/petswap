@@ -112,6 +112,8 @@ Playwright is wired up: [`web/playwright.config.ts`](../web/playwright.config.ts
 
 `web/e2e/booking-flow.spec.ts` — the login → request → confirm journey — stays skipped until its screens are on `main`; the file itself documents how to enable it. Before a demo or release, run the [regression checklist](templates/regression-checklist.md) on desktop and mobile and link the filled copy from the release-readiness PR.
 
+`web/e2e/navbar-account-menu.spec.ts` covers the account-menu dropdown and mobile-menu logout flow; it signs in as `alex@petswap.test`, so it needs the local Supabase stack (`supabase start`) the same way the manual journey below does. It is not part of the required `Quality` gate or the `e2e-smoke.yml` workflow (both only run `smoke.spec.ts`), so run it locally after touching the navbar or logout flow: `npm run test:e2e -- navbar-account-menu.spec.ts`.
+
 ## Manual listing journey
 
 After `npx supabase db reset`, configure `web/.env.local` with the local API URL and anon key printed by `supabase start`, run `npm run dev` from `web/`, and sign in as `alex@petswap.test` with password `petswap-local-dev`.

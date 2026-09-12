@@ -142,6 +142,28 @@ insert into _contract (check_name, passed) values
     )
   ),
   (
+    'the avatars storage bucket exists and is public',
+    exists (
+      select 1 from storage.buckets
+      where id = 'avatars' and public
+    )
+  ),
+  (
+    'avatars have public reads and owner-scoped writes',
+    (
+      select count(*) = 4
+      from pg_policies
+      where schemaname = 'storage'
+        and tablename = 'objects'
+        and policyname in (
+          'Public can read avatars',
+          'Users upload own avatars',
+          'Users update own avatars',
+          'Users delete own avatars'
+        )
+    )
+  ),
+  (
     'listings accept only pet_species values as accepted pet types',
     exists (
       select 1 from information_schema.columns

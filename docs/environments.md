@@ -150,7 +150,7 @@ For database review, inspect:
 - Listing owners can confirm, decline, or complete incoming bookings through valid transitions.
 - Confirmed bookings cannot overlap for the same listing, and back-to-back dates are allowed.
 
-The SQL checks in `supabase/tests/` (`database_contract.sql`, `booking_rules.test.sql`, `listing_rules.test.sql`, `listing_facility_migration.test.sql`, `listing_photo_access.test.sql`, and `avatar_storage_access.test.sql`) run these as an automated gate — locally after a reset, or in CI via [ci-cd.md](ci-cd.md#database-contract-workflow). Use Supabase Studio, SQL editor JWT impersonation, or API-level tests for actor-specific RLS cases not covered there until end-to-end auth flows are automated.
+The SQL checks in `supabase/tests/` (`database_contract.sql`, `booking_rules.test.sql`, `listing_rules.test.sql`, `listing_facility_migration.test.sql`, `listing_photo_access.test.sql`, and `listing_edit_rules.test.sql`) run these as an automated gate — locally after a reset, or in CI via [ci-cd.md](ci-cd.md#database-contract-workflow). The listing edit suite impersonates an owner and a non-owner to cover its actor-specific RLS contract; use Supabase Studio, SQL editor JWT impersonation, or API-level tests for remaining actor cases until end-to-end auth flows are automated.
 
 ## Hosted push workflow
 

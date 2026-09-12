@@ -101,7 +101,7 @@ npx supabase db reset
 
 Then inspect the local database in Studio at `http://127.0.0.1:54323` and verify the actor cases listed in [environments](environments.md).
 
-The SQL contract checks in `supabase/tests/` now run automatically: `database_contract.sql` (schema catalogue), `booking_rules.test.sql` (overlap-rule behaviour), `listing_rules.test.sql` (required accepted-pet behaviour), `listing_facility_migration.test.sql` (legacy facility-label backfill), `listing_photo_access.test.sql` (draft and published photo access), and `avatar_storage_access.test.sql` (public avatar reads and owner-only writes). Run them locally after a reset, or let [`db-contract.yml`](ci-cd.md#database-contract-workflow) run them on every change under `supabase/`. They still read as a review checklist for a migration; see [`supabase/tests/README.md`](../supabase/tests/README.md). Actor-specific RLS cases not covered there still need Studio or JWT impersonation until the Playwright journey exists.
+The SQL contract checks in `supabase/tests/` now run automatically: `database_contract.sql` (schema catalogue), `booking_rules.test.sql` (overlap-rule behaviour), `listing_rules.test.sql` (required accepted-pet behaviour), `listing_facility_migration.test.sql` (legacy facility-label backfill), `listing_photo_access.test.sql` (draft and published photo access), and `listing_edit_rules.test.sql` (valid, invalid, unauthorized, and photo-order edit behaviour). Run them locally after a reset, or let [`db-contract.yml`](ci-cd.md#database-contract-workflow) run them on every change under `supabase/`. They still read as a review checklist for a migration; see [`supabase/tests/README.md`](../supabase/tests/README.md).
 
 The booking overlap rule is verified at both levels:
 
@@ -122,4 +122,12 @@ After `npx supabase db reset`, configure `web/.env.local` with the local API URL
 4. In Supabase Studio Storage, confirm `listing-photos` is private. In the My Listings browser requests, photo access should use a signed URL rather than a public object URL.
 5. Try no accepted pet type, zero/fractional capacity, an unsupported file, a file above 10 MB, and an eleventh photo. Each should be rejected without losing the rest of the form.
 
-Public listing details, host profiles, search, pet profiles, and bookings belong to their separate user stories and are not acceptance evidence for this listing-creation story.
+## Manual listing edit journey
+
+1. Sign in as `alex@petswap.test`, open an owned listing, edit every supported listing field, save, refresh, and confirm the changes persist.
+2. Add and remove photos, choose a different main photo, save, and confirm the chosen photo remains first after refresh. Repeat while keeping exactly ten photos; an eleventh must be rejected without losing the intended edit.
+3. Try a blank title, location, or description, zero/fractional capacity, and no accepted pet type. Each invalid edit must remain unsaved.
+4. While signed in as `blair@petswap.test`, navigate directly to Alex's edit URL and attempt the corresponding API requests. The listing and its image order must remain unchanged.
+5. Simulate an upload or database failure. Newly uploaded objects must be cleaned up where possible, and existing photos must remain attached until replacement metadata has committed.
+
+Public listing details, host/owner profiles, search, pet profiles, and bookings belong to their separate user stories and are not acceptance evidence for US-2.2 listing editing.

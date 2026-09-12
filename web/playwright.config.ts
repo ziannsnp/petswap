@@ -5,9 +5,8 @@ const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? `http://127.0.0.1:${PORT}`;
 
 // The smoke suite (e2e/smoke.spec.ts) only touches public, static routes, so it
 // runs against `npm run dev` with no Supabase env. The booking journey
-// (e2e/booking-flow.spec.ts) stays skipped until auth-backed screens exist; when
-// enabled it also needs the local Supabase stack and the seeded accounts from
-// supabase/seed.sql.
+// (e2e/booking-flow.spec.ts) needs the local Supabase stack running and reset
+// (`npx supabase db reset`) so the seeded accounts from supabase/seed.sql exist.
 //
 // Set PLAYWRIGHT_BASE_URL to run against an already-running server or a deployed
 // preview instead of starting one here.

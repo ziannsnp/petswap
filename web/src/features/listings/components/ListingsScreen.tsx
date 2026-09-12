@@ -1,4 +1,4 @@
-import { Home, Image, Plus } from 'lucide-react';
+import { Home, Image, Pencil, Plus } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useMyListings } from '../hooks/useListings';
 import { petSpeciesLabel } from '../lib/listingOptions';
@@ -43,6 +43,16 @@ function ListingCard({ listing }: { listing: Listing }) {
             <span className="badge-brand" key={petType}>{petSpeciesLabel(petType)}</span>
           ))}
           <span className="badge-brand">Up to {listing.capacity} pets</span>
+        </div>
+        <div className="mt-4 flex justify-end">
+          <Link
+            className="btn-secondary inline-flex items-center gap-1.5 text-sm"
+            to={`/listings/${listing.id}/edit`}
+            aria-label={`Edit ${listing.title}`}
+          >
+            <Pencil className="h-4 w-4" aria-hidden="true" />
+            Edit
+          </Link>
         </div>
       </div>
     </article>

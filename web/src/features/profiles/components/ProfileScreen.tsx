@@ -110,6 +110,7 @@ export function ProfileScreen() {
                 email={displayEmail}
                 onCancel={() => setIsEditing(false)}
                 onSave={() => setIsEditing(false)}
+                canEdit={isOwner}
               />
             ) : (
               <div

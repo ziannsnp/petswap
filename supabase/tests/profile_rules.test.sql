@@ -42,6 +42,7 @@ $$;
 -- ---------------------------------------------------------------------------
 -- 2. Blair attempts to update Alex's profile (adversarial update across users)
 -- ---------------------------------------------------------------------------
+reset role;
 select set_config(
   'request.jwt.claims',
   '{"sub":"10000000-0000-4000-8000-000000000002","role":"authenticated"}',

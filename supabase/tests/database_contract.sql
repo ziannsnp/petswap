@@ -276,6 +276,7 @@ select
     where schemaname = 'public'
       and tablename = 'profiles'
       and cmd = 'UPDATE'
+      and qual like '%auth.uid()%'
       and with_check like '%auth.uid()%'
   ) as passed;
 

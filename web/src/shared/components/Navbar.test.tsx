@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { Navbar } from './Navbar';
 import { useAuth } from '@/features/auth';
+import { useCurrentProfile } from '@/features/profiles';
 
 jest.mock('@/features/auth', () => ({
   useAuth: jest.fn(),
@@ -11,7 +12,12 @@ jest.mock('@/features/auth', () => ({
     isOpen ? <div role="dialog">Confirm logout</div> : null,
 }));
 
+jest.mock('@/features/profiles', () => ({
+  useCurrentProfile: jest.fn(),
+}));
+
 const mockedUseAuth = jest.mocked(useAuth);
+const mockedUseCurrentProfile = jest.mocked(useCurrentProfile);
 
 function renderNavbar(initialEntries = ['/']) {
   return render(
@@ -24,6 +30,9 @@ function renderNavbar(initialEntries = ['/']) {
 describe('Navbar Component', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockedUseCurrentProfile.mockReturnValue({
+      data: undefined,
+    } as unknown as ReturnType<typeof useCurrentProfile>);
   });
 
   describe('Unauthenticated State', () => {
@@ -116,17 +125,17 @@ describe('Navbar Component', () => {
       renderNavbar();
 
       expect(screen.getByTitle('Liger PetOwner')).toBeInTheDocument();
-      expect(screen.queryByRole('link', { name: /edit profile/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: /view profile/i })).not.toBeInTheDocument();
       expect(screen.queryByRole('button', { name: /log out/i })).not.toBeInTheDocument();
     });
 
-    it('opens the account menu to reveal Edit profile and Log out, matching the prototype layout', async () => {
+    it('opens the account menu to reveal View profile and Log out, matching the prototype layout', async () => {
       const user = userEvent.setup();
       renderNavbar();
 
       await user.click(screen.getByRole('button', { name: /account menu/i }));
 
-      const profileLink = screen.getByRole('menuitem', { name: /edit profile/i });
+      const profileLink = screen.getByRole('menuitem', { name: /view profile/i });
       expect(profileLink).toBeInTheDocument();
       expect(profileLink).toHaveAttribute('href', '/profile');
 
@@ -155,6 +164,30 @@ describe('Navbar Component', () => {
 
       expect(screen.queryByRole('menu')).not.toBeInTheDocument();
       expect(accountMenuButton).toHaveFocus();
+    });
+
+    it('renders a neutral skeleton in the account button while the profile is still loading', () => {
+      mockedUseCurrentProfile.mockReturnValue({
+        data: undefined,
+        isLoading: true,
+      } as unknown as ReturnType<typeof useCurrentProfile>);
+
+      renderNavbar();
+
+      const accountButton = screen.getByRole('button', { name: /account menu/i });
+      expect(accountButton.querySelector('[data-testid="account-avatar-skeleton"]')).toBeInTheDocument();
+      expect(accountButton).not.toHaveTextContent('LP');
+    });
+
+    it('renders the profile photo in the account button when one is set', () => {
+      mockedUseCurrentProfile.mockReturnValue({
+        data: { photo_url: 'https://example.com/avatar.jpg' },
+      } as unknown as ReturnType<typeof useCurrentProfile>);
+
+      renderNavbar();
+
+      const avatarImg = screen.getByRole('button', { name: /account menu/i }).querySelector('img');
+      expect(avatarImg).toHaveAttribute('src', 'https://example.com/avatar.jpg');
     });
 
     it('does NOT render Log in or Register links when authenticated', () => {

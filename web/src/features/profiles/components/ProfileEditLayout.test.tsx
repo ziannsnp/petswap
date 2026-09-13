@@ -192,6 +192,13 @@ describe('ProfileEditLayout', () => {
   });
 
   describe('photo upload', () => {
+    it('shows initials instead of a broken image when there is no photo', () => {
+      renderLayout();
+
+      expect(screen.queryByAltText('Somchai Petlover')).not.toBeInTheDocument();
+      expect(screen.getByRole('img', { name: 'Somchai Petlover' })).toHaveTextContent('SP');
+    });
+
     it('shows an instant preview after choosing a valid photo, and a Remove photo option', () => {
       renderLayout();
 
@@ -210,7 +217,8 @@ describe('ProfileEditLayout', () => {
       fireEvent.change(screen.getByLabelText(/upload profile photo/i), { target: { files: [oversized] } });
 
       expect(screen.getByText(/must be 5mb or smaller/i)).toBeInTheDocument();
-      expect(screen.getByAltText('Somchai Petlover')).not.toHaveAttribute('src', expect.stringMatching(/^blob:/));
+      expect(screen.queryByAltText('Somchai Petlover')).not.toBeInTheDocument();
+      expect(screen.getByRole('img', { name: 'Somchai Petlover' })).toHaveTextContent('SP');
       expect(uploadMutateAsync).not.toHaveBeenCalled();
     });
 

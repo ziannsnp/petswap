@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useAuth } from '@/features/auth';
 import { useCurrentProfile } from '../hooks/useProfile';
-import { ProfileHeaderNav } from './ProfileHeaderNav';
 import { ProfileViewCard } from './ProfileViewCard';
 import { ProfileEditLayout } from './ProfileEditLayout';
 import type { Profile } from '../lib/profileApi';
@@ -9,9 +8,8 @@ import type { Profile } from '../lib/profileApi';
 function ProfileSkeleton() {
   return (
     <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xs animate-pulse" aria-hidden="true">
-      <div className="h-28 bg-gray-200 sm:h-36" />
-      <div className="px-6 pb-8 pt-0 sm:px-8">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between -mt-14 sm:-mt-16 mb-6">
+      <div className="px-6 pb-8 pt-6 sm:px-8">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between mb-6">
           <div className="h-28 w-28 rounded-full border-4 border-white bg-gray-200 sm:h-32 sm:w-32" />
           <div className="h-10 w-28 rounded-lg bg-gray-200" />
         </div>
@@ -37,7 +35,6 @@ export function ProfileScreen() {
   const { user } = useAuth();
   const { data: profile, isLoading, isError, refetch } = useCurrentProfile();
   const [isEditing, setIsEditing] = useState(false);
-  const [justSaved, setJustSaved] = useState(false);
 
   const displayEmail = user?.email || 'alex.rivera@example.com';
 
@@ -57,12 +54,6 @@ export function ProfileScreen() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
-      {/* Global PetSwap Top Navigation */}
-      <ProfileHeaderNav
-        displayName={activeProfile.display_name}
-        photoUrl={activeProfile.photo_url}
-      />
-
       {/* Main Content Area */}
       <main className="flex-1 max-w-3xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10">
         {/* Loading State */}
@@ -97,30 +88,17 @@ export function ProfileScreen() {
         {!isLoading && !isError && (
           <>
             {!isEditing ? (
-              <>
-                {justSaved && (
-                  <div role="status" className="mb-4 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm font-medium text-green-700">
-                    Profile updated.
-                  </div>
-                )}
-                <ProfileViewCard
-                  profile={activeProfile}
-                  email={displayEmail}
-                  onEdit={() => {
-                    setJustSaved(false);
-                    setIsEditing(true);
-                  }}
-                />
-              </>
+              <ProfileViewCard
+                profile={activeProfile}
+                email={displayEmail}
+                onEdit={() => setIsEditing(true)}
+              />
             ) : (
               <ProfileEditLayout
                 profile={activeProfile}
                 email={displayEmail}
                 onCancel={() => setIsEditing(false)}
-                onSave={() => {
-                  setIsEditing(false);
-                  setJustSaved(true);
-                }}
+                onSave={() => setIsEditing(false)}
               />
             )}
           </>

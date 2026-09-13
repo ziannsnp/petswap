@@ -116,6 +116,23 @@ describe('ProfileScreen UI (View & Edit mode layout)', () => {
     expect(screen.getByRole('button', { name: /edit your profile/i })).toBeInTheDocument();
   });
 
+  it('shows initials instead of a broken image when the profile has no photo', () => {
+    mockUseCurrentProfile.mockReturnValue({
+      data: { ...sampleProfile, photo_url: null },
+      isLoading: false,
+      isError: false,
+    });
+
+    render(
+      <MemoryRouter>
+        <ProfileScreen />
+      </MemoryRouter>
+    );
+
+    expect(screen.queryByAltText('Somchai Petlover')).not.toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Somchai Petlover' })).toHaveTextContent('SP');
+  });
+
   it('toggles to Edit Mode when clicking Edit Profile and returns on Cancel', () => {
     mockUseCurrentProfile.mockReturnValue({
       data: sampleProfile,

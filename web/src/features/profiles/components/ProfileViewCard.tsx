@@ -1,4 +1,6 @@
+import { useState } from 'react';
 import { AtSign, Edit2, Mail, MapPin, Phone, User } from 'lucide-react';
+import { getInitials } from '@/shared/lib/initials';
 import type { Profile } from '../lib/profileApi';
 
 interface ProfileViewCardProps {
@@ -8,28 +10,35 @@ interface ProfileViewCardProps {
 }
 
 export function ProfileViewCard({ profile, email, onEdit }: ProfileViewCardProps) {
-  const avatarFallback = `https://ui-avatars.com/api/?name=${encodeURIComponent(
-    profile.display_name || profile.username || 'User'
-  )}&background=0d9488&color=fff&size=160`;
+  const [photoFailed, setPhotoFailed] = useState(false);
+  // Initials fallback matches the Navbar's account avatar, rather than each
+  // rendering its own (previously the Navbar used local initials while this
+  // card called out to ui-avatars.com, which produces different results).
+  const initials = getInitials(profile.display_name || profile.username);
+  const showPhoto = Boolean(profile.photo_url) && !photoFailed;
 
   return (
     <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xs">
-      {/* Top Banner Accent */}
-      <div className="h-28 bg-gradient-to-r from-brand-600 via-brand-500 to-teal-400 sm:h-36" />
-
-      <div className="relative px-6 pb-8 pt-0 sm:px-8">
+      <div className="relative px-6 pb-8 pt-6 sm:px-8">
         {/* Avatar & Header Action */}
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between -mt-14 sm:-mt-16 mb-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between mb-6">
           <div className="relative inline-block">
-            <img
-              src={profile.photo_url || avatarFallback}
-              alt={profile.display_name}
-              className="h-28 w-28 rounded-full border-4 border-white bg-white object-cover shadow-md sm:h-32 sm:w-32"
-              onError={(e) => {
-                // Fallback to generated avatar if image URL fails to load
-                (e.currentTarget as HTMLImageElement).src = avatarFallback;
-              }}
-            />
+            {showPhoto ? (
+              <img
+                src={profile.photo_url as string}
+                alt={profile.display_name}
+                className="h-28 w-28 rounded-full border-4 border-white bg-white object-cover shadow-md sm:h-32 sm:w-32"
+                onError={() => setPhotoFailed(true)}
+              />
+            ) : (
+              <div
+                className="flex h-28 w-28 items-center justify-center rounded-full border-4 border-white bg-brand-600 text-4xl font-semibold text-white shadow-md sm:h-32 sm:w-32 sm:text-5xl"
+                role="img"
+                aria-label={profile.display_name}
+              >
+                {initials || <User className="h-10 w-10" aria-hidden="true" />}
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-3">

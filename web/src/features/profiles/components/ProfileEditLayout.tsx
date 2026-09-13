@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import { ArrowLeft, AtSign, Camera, Mail } from 'lucide-react';
+import { getInitials } from '@/shared/lib/initials';
 import { useUpdateProfile, useUploadAvatar } from '../hooks/useProfile';
 import { validateProfileForm, type ProfileValidationErrors } from '../lib/profileValidation';
 import type { Profile } from '../lib/profileApi';
@@ -30,6 +31,7 @@ export function ProfileEditLayout({ profile, email, onCancel, onSave }: ProfileE
   const [avatarPreviewUrl, setAvatarPreviewUrl] = useState<string | null>(null);
   const [removePhoto, setRemovePhoto] = useState(false);
   const [photoError, setPhotoError] = useState<string | null>(null);
+  const [photoFailed, setPhotoFailed] = useState(false);
   const updateProfileMutation = useUpdateProfile();
   const uploadAvatarMutation = useUploadAvatar();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -44,12 +46,16 @@ export function ProfileEditLayout({ profile, email, onCancel, onSave }: ProfileE
     };
   }, [avatarPreviewUrl]);
 
-  const avatarFallback = `https://ui-avatars.com/api/?name=${encodeURIComponent(
-    profile.display_name || profile.username || 'User',
-  )}&background=0d9488&color=fff&size=160`;
-
-  const avatarSrc = avatarPreviewUrl ?? (removePhoto ? avatarFallback : profile.photo_url || avatarFallback);
+  // Initials fallback matches the Navbar's account avatar and ProfileViewCard,
+  // rather than each place calling out to ui-avatars.com with its own rules.
+  const initials = getInitials(profile.display_name || profile.username);
+  const avatarSrc = avatarPreviewUrl ?? (removePhoto ? null : profile.photo_url);
+  const showPhoto = Boolean(avatarSrc) && !photoFailed;
   const canRemovePhoto = !removePhoto && Boolean(avatarFile || profile.photo_url);
+
+  useEffect(() => {
+    setPhotoFailed(false);
+  }, [avatarSrc]);
   const isSaving = uploadAvatarMutation.isPending || updateProfileMutation.isPending;
 
   function clearFieldError(field: keyof ProfileValidationErrors) {
@@ -170,15 +176,24 @@ export function ProfileEditLayout({ profile, email, onCancel, onSave }: ProfileE
         {/* Profile Photo Layout Section */}
         <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6 pb-6 border-b border-gray-100">
           <div className="relative group">
-            <img
-              src={avatarSrc}
-              alt={profile.display_name}
-              className="h-28 w-28 rounded-full border-2 border-gray-200 bg-gray-50 object-cover shadow-xs cursor-pointer"
-              onClick={() => fileInputRef.current?.click()}
-              onError={(e) => {
-                (e.currentTarget as HTMLImageElement).src = avatarFallback;
-              }}
-            />
+            {showPhoto ? (
+              <img
+                src={avatarSrc as string}
+                alt={profile.display_name}
+                className="h-28 w-28 rounded-full border-2 border-gray-200 bg-gray-50 object-cover shadow-xs cursor-pointer"
+                onClick={() => fileInputRef.current?.click()}
+                onError={() => setPhotoFailed(true)}
+              />
+            ) : (
+              <div
+                className="flex h-28 w-28 items-center justify-center rounded-full border-2 border-gray-200 bg-brand-600 text-4xl font-semibold text-white shadow-xs cursor-pointer"
+                role="img"
+                aria-label={profile.display_name}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                {initials}
+              </div>
+            )}
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}

@@ -243,6 +243,23 @@ export type Database = {
         Args: { target_listing_id: string; ordered_image_ids: string[] };
         Returns: undefined;
       };
+      update_listing_with_images: {
+        Args: {
+          target_listing_id: string;
+          new_title: string;
+          new_location: string;
+          new_description: string;
+          new_capacity: number;
+          new_accepted_pet_types: Database['public']['Enums']['pet_species'][];
+          new_facilities: string | null;
+          new_status: Database['public']['Enums']['listing_status'];
+          new_published_at: string | null;
+          retained_image_ids: string[];
+          new_images: Json;
+          ordered_image_ids: string[];
+        };
+        Returns: undefined;
+      };
     };
     Enums: {
       booking_status: 'pending' | 'confirmed' | 'declined' | 'cancelled' | 'completed';

@@ -2,7 +2,11 @@ import { getSupabaseClient } from '@/shared/lib/supabase';
 import type { Database } from '@/shared/types/database.types';
 import { serializeFacilities } from './listingOptions';
 import type { Facility, PetSpecies } from './listingOptions';
-import { LISTING_PHOTO_MAX_COUNT } from './listingPhotos';
+import {
+  LISTING_PHOTO_MAX_BYTES,
+  LISTING_PHOTO_MAX_COUNT,
+  LISTING_PHOTO_MIME_TYPES,
+} from './listingPhotos';
 
 export type ListingPublicationMode = 'draft' | 'published';
 
@@ -14,6 +18,21 @@ export interface CreateListingValues {
   acceptedPetTypes: PetSpecies[];
   facilities: Facility[];
   photos: File[];
+  publicationMode: ListingPublicationMode;
+}
+
+export type ListingPhotoInput =
+  | { kind: 'existing'; id: string }
+  | { kind: 'new'; file: File };
+
+export interface UpdateListingValues {
+  title: string;
+  location: string;
+  description: string;
+  capacity: number;
+  acceptedPetTypes: PetSpecies[];
+  facilities: readonly string[];
+  photos: ListingPhotoInput[];
   publicationMode: ListingPublicationMode;
 }
 
@@ -134,6 +153,132 @@ export async function createListing(values: CreateListingValues): Promise<Listin
     if (cleanupErrors.length > 0) {
       const originalMessage = error instanceof Error ? error.message : String(error);
       throw new Error(`Listing creation failed: ${originalMessage}; ${cleanupErrors.join('; ')}`);
+    }
+    throw error;
+  }
+}
+
+export async function updateListing(listingId: string, values: UpdateListingValues): Promise<Listing> {
+  if (values.photos.length > LISTING_PHOTO_MAX_COUNT) {
+    throw new Error(`A listing can have at most ${LISTING_PHOTO_MAX_COUNT} photos.`);
+  }
+
+  for (const photo of values.photos) {
+    if (photo.kind !== 'new') continue;
+    if (!(LISTING_PHOTO_MIME_TYPES as readonly string[]).includes(photo.file.type)) {
+      throw new Error(`Unsupported file type for ${photo.file.name}. Choose a JPG, PNG, WebP, or GIF file.`);
+    }
+    if (photo.file.size > LISTING_PHOTO_MAX_BYTES) {
+      throw new Error(`${photo.file.name} is larger than the 10 MB limit.`);
+    }
+  }
+
+  const supabase = getSupabaseClient();
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+
+  if (userError) throw userError;
+  if (!userData.user) throw new Error('You must be signed in to edit a listing.');
+
+  const { data: currentListing, error: currentListingError } = await supabase
+    .from('listings')
+    .select('*, listing_images(*)')
+    .eq('id', listingId)
+    .maybeSingle();
+
+  if (currentListingError) throw currentListingError;
+  if (!currentListing || currentListing.owner_id !== userData.user.id) {
+    throw new Error('You can only edit your own listings.');
+  }
+
+  const currentImages = currentListing.listing_images ?? [];
+  const existingImageIds = new Set(currentImages.map((image) => image.id));
+  const requestedExistingIds = values.photos
+    .filter((photo): photo is { kind: 'existing'; id: string } => photo.kind === 'existing')
+    .map((photo) => photo.id);
+
+  if (
+    new Set(requestedExistingIds).size !== requestedExistingIds.length
+    || requestedExistingIds.some((imageId) => !existingImageIds.has(imageId))
+  ) {
+    throw new Error('Photo selection must contain each retained listing photo at most once.');
+  }
+
+  const uploadedPaths: string[] = [];
+  const newImages: Array<{ id: string; storage_path: string; alt_text: null }> = [];
+  let databaseCommitted = false;
+  try {
+    for (const photo of values.photos) {
+      if (photo.kind !== 'new') continue;
+
+      const storagePath = photoStoragePath(listingId, photo.file);
+      const { error: uploadError } = await supabase.storage
+        .from('listing-photos')
+        .upload(storagePath, photo.file, { contentType: photo.file.type, upsert: false });
+      if (uploadError) throw uploadError;
+
+      uploadedPaths.push(storagePath);
+      newImages.push({ id: crypto.randomUUID(), storage_path: storagePath, alt_text: null });
+    }
+
+    const removedImageIds = currentImages
+      .filter((image) => !requestedExistingIds.includes(image.id))
+      .map((image) => image.id);
+
+    const orderedImageIds = [
+      ...requestedExistingIds,
+      ...newImages.map((image) => image.id),
+    ];
+    const { error: updateError } = await supabase.rpc('update_listing_with_images', {
+      target_listing_id: listingId,
+      new_title: values.title.trim(),
+      new_location: values.location.trim(),
+      new_description: values.description.trim(),
+      new_capacity: values.capacity,
+      new_accepted_pet_types: values.acceptedPetTypes,
+      new_facilities: values.facilities.length > 0 ? values.facilities.join('\n') : null,
+      new_status: values.publicationMode,
+      new_published_at: values.publicationMode === 'published'
+        ? (currentListing.published_at ?? new Date().toISOString())
+        : null,
+      retained_image_ids: requestedExistingIds,
+      new_images: newImages,
+      ordered_image_ids: orderedImageIds,
+    });
+    if (updateError) throw updateError;
+    databaseCommitted = true;
+
+    const { data: updatedListing, error: reloadError } = await supabase
+      .from('listings')
+      .select('*, listing_images(*)')
+      .eq('id', listingId)
+      .single();
+    if (reloadError) throw reloadError;
+
+    const removedStoragePaths = currentImages
+      .filter((image) => removedImageIds.includes(image.id))
+      .map((image) => image.storage_path);
+    try {
+      await removeUploadedPhotos(removedStoragePaths);
+    } catch (cleanupError) {
+      void cleanupError;
+    }
+
+    return addSignedPhotoUrls({
+      ...updatedListing,
+      listing_images: updatedListing.listing_images ?? [],
+    });
+  } catch (error) {
+    const cleanupErrors: string[] = [];
+    if (!databaseCommitted) {
+      try {
+        await removeUploadedPhotos(uploadedPaths);
+      } catch (cleanupError) {
+        cleanupErrors.push(`photo cleanup failed: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`);
+      }
+    }
+    if (cleanupErrors.length > 0) {
+      const originalMessage = error instanceof Error ? error.message : String(error);
+      throw new Error(`${originalMessage}; ${cleanupErrors.join('; ')}`);
     }
     throw error;
   }

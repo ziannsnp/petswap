@@ -194,6 +194,70 @@ values
   ('50000000-0000-4000-8000-000000000002', '30000000-0000-4000-8000-000000000002', '30000000-0000-4000-8000-000000000002/two.jpg', 1),
   ('50000000-0000-4000-8000-000000000003', '30000000-0000-4000-8000-000000000002', '30000000-0000-4000-8000-000000000002/three.jpg', 2);
 
+select public.update_listing_with_images(
+  '30000000-0000-4000-8000-000000000002',
+  'Atomic update title',
+  'Chiang Mai',
+  'Atomic update description.',
+  3,
+  array['dog']::public.pet_species[],
+  E'Lawn\nSecurity cameras',
+  'published',
+  '2026-09-13T00:00:00Z'::timestamptz,
+  array[
+    '50000000-0000-4000-8000-000000000001',
+    '50000000-0000-4000-8000-000000000002',
+    '50000000-0000-4000-8000-000000000003'
+  ]::uuid[],
+  '[]'::jsonb,
+  array[
+    '50000000-0000-4000-8000-000000000003',
+    '50000000-0000-4000-8000-000000000001',
+    '50000000-0000-4000-8000-000000000002'
+  ]::uuid[]
+);
+
+do $$
+declare
+  rejected boolean := false;
+begin
+  begin
+    perform public.update_listing_with_images(
+      '30000000-0000-4000-8000-000000000002',
+      'Should roll back',
+      'Chiang Mai',
+      'This update must not persist.',
+      3,
+      array['dog']::public.pet_species[],
+      null,
+      'published',
+      null,
+      array[
+        '50000000-0000-4000-8000-000000000001',
+        '50000000-0000-4000-8000-000000000002',
+        '50000000-0000-4000-8000-000000000003'
+      ]::uuid[],
+      '[]'::jsonb,
+      array[
+        '50000000-0000-4000-8000-000000000001',
+        '50000000-0000-4000-8000-000000000002'
+      ]::uuid[]
+    );
+  exception
+    when invalid_parameter_value then rejected := true;
+  end;
+
+  if not rejected then
+    raise exception 'listing edit: invalid atomic update was accepted';
+  end if;
+
+  if (select title from public.listings where id = '30000000-0000-4000-8000-000000000002')
+    is distinct from 'Atomic update title' then
+    raise exception 'listing edit: failed atomic update changed listing fields';
+  end if;
+end;
+$$;
+
 do $$
 declare
   violated_constraint text;
@@ -347,6 +411,7 @@ declare
   changed_rows integer;
   rejected_reorder boolean := false;
   rejected_image_insert boolean := false;
+  rejected_listing_update boolean := false;
 begin
   update public.listings
   set title = 'Unauthorized change'
@@ -356,6 +421,33 @@ begin
   if changed_rows <> 0 then
     raise exception 'listing edit: non-owner changed % listing rows', changed_rows;
   end if;
+
+  begin
+    perform public.update_listing_with_images(
+      '30000000-0000-4000-8000-000000000002',
+      'Unauthorized RPC update',
+      'Chiang Mai',
+      'Should not persist.',
+      2,
+      array['dog']::public.pet_species[],
+      null,
+      'published',
+      null,
+      array[
+        '50000000-0000-4000-8000-000000000003',
+        '50000000-0000-4000-8000-000000000001',
+        '50000000-0000-4000-8000-000000000002'
+      ]::uuid[],
+      '[]'::jsonb,
+      array[
+        '50000000-0000-4000-8000-000000000003',
+        '50000000-0000-4000-8000-000000000001',
+        '50000000-0000-4000-8000-000000000002'
+      ]::uuid[]
+    );
+  exception
+    when insufficient_privilege then rejected_listing_update := true;
+  end;
 
   begin
     perform public.reorder_listing_images(
@@ -381,7 +473,7 @@ begin
     when insufficient_privilege then rejected_image_insert := true;
   end;
 
-  if not rejected_reorder or not rejected_image_insert then
+  if not rejected_listing_update or not rejected_reorder or not rejected_image_insert then
     raise exception 'listing edit: non-owner photo mutation was accepted';
   end if;
 end;

@@ -28,7 +28,7 @@ export function ProfileEditLayout({
   email,
   onCancel,
   onSave,
-  canEdit = true,
+  canEdit = false,
 }: ProfileEditLayoutProps) {
   const [displayName, setDisplayName] = useState(profile.display_name);
   const [phoneNumber, setPhoneNumber] = useState(profile.phone_number ?? '');
@@ -116,6 +116,10 @@ export function ProfileEditLayout({
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
 
+    if (!canEdit) {
+      return;
+    }
+
     const result = validateProfileForm({ displayName, phoneNumber, location });
 
     if (!result.isValid) {
@@ -147,10 +151,6 @@ export function ProfileEditLayout({
         }
       }
       photoUrl = null;
-    }
-
-    if (!canEdit) {
-      return;
     }
 
     try {
@@ -229,7 +229,7 @@ export function ProfileEditLayout({
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              disabled={isSaving}
+              disabled={isSaving || !canEdit}
               className="absolute bottom-0 right-0 rounded-full bg-brand-600 p-2 text-white shadow-md hover:bg-brand-700 transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
               aria-label="Change profile photo"
             >
@@ -240,7 +240,7 @@ export function ProfileEditLayout({
               type="file"
               accept="image/jpeg,image/png,image/webp"
               onChange={handleAvatarChange}
-              disabled={isSaving}
+              disabled={isSaving || !canEdit}
               className="hidden"
               aria-label="Upload profile photo"
             />
@@ -254,7 +254,7 @@ export function ProfileEditLayout({
               <button
                 type="button"
                 onClick={handleRemovePhoto}
-                disabled={isSaving}
+                disabled={isSaving || !canEdit}
                 className="mt-2 text-sm font-medium text-red-600 hover:text-red-700 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Remove photo

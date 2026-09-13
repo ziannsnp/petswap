@@ -10,7 +10,7 @@ interface ProfileViewCardProps {
   canEdit?: boolean;
 }
 
-export function ProfileViewCard({ profile, email, onEdit, canEdit = true }: ProfileViewCardProps) {
+export function ProfileViewCard({ profile, email, onEdit, canEdit = false }: ProfileViewCardProps) {
   const [photoFailed, setPhotoFailed] = useState(false);
   // Initials fallback matches the Navbar's account avatar, rather than each
   // rendering its own (previously the Navbar used local initials while this

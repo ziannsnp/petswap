@@ -206,6 +206,32 @@ describe('ProfileEditLayout', () => {
     expect(mutateAsync).not.toHaveBeenCalled();
   });
 
+  it('does not upload an avatar when submitting with canEdit as false', () => {
+    renderLayout({ canEdit: false });
+
+    // Try submitting form
+    const form = screen.getByRole('button', { name: /save changes/i }).closest('form');
+    if (form) {
+      fireEvent.submit(form);
+    }
+
+    expect(uploadMutateAsync).not.toHaveBeenCalled();
+    expect(mutateAsync).not.toHaveBeenCalled();
+  });
+
+  it('defaults canEdit to false (fail-closed) when omitted', () => {
+    render(
+      <ProfileEditLayout
+        profile={sampleProfile}
+        email="somchai@example.com"
+        onCancel={jest.fn()}
+      />,
+    );
+
+    expect(screen.getByRole('alert')).toHaveTextContent('You do not have permission to edit this profile.');
+    expect(screen.getByRole('button', { name: /save changes/i })).toBeDisabled();
+  });
+
   it('disables Save and Cancel while the mutation is pending', () => {
     mockUseUpdateProfile.mockReturnValue({
       mutateAsync,

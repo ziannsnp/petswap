@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuth } from '@/features/auth';
 import { useCurrentProfile } from '../hooks/useProfile';
 import { ProfileViewCard } from './ProfileViewCard';
@@ -34,6 +34,10 @@ export function ProfileScreen() {
   const { user } = useAuth();
   const { data: profile, isLoading, isError, refetch } = useCurrentProfile();
   const [isEditing, setIsEditing] = useState(false);
+
+  useEffect(() => {
+    setIsEditing(false);
+  }, [profile?.id]);
 
   const displayEmail = user?.email ?? '';
   const isOwner = Boolean(user?.id && profile?.id && user.id === profile.id);

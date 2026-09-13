@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { ArrowLeft, Home, Image } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
@@ -26,8 +26,6 @@ interface EditListingFormProps {
 
 function EditListingForm({ listing }: EditListingFormProps) {
   const navigate = useNavigate();
-  // The screen renders this only after the listing has loaded, so the initial values can
-  // come straight from props. If a different listing is opened the screen remounts it by key.
   const [title, setTitle] = useState(listing.title);
   const [location, setLocation] = useState(listing.location);
   const [description, setDescription] = useState(listing.description);
@@ -36,6 +34,33 @@ function EditListingForm({ listing }: EditListingFormProps) {
   const [facilities, setFacilities] = useState<string[]>(() => parseFacilities(listing.facilities));
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [isChecked, setIsChecked] = useState(false);
+  const [isPristine, setIsPristine] = useState(true);
+
+  // The list query is served from cache first and refetched in the background, so the
+  // listing prop can change after this form has mounted without its id changing. Follow
+  // the newer values only while the owner has not typed anything; once they have, their
+  // edits win over a background refresh.
+  const syncedFrom = useRef(listing);
+  if (isPristine && syncedFrom.current !== listing) {
+    syncedFrom.current = listing;
+    setTitle(listing.title);
+    setLocation(listing.location);
+    setDescription(listing.description);
+    setCapacity(listing.capacity);
+    setAcceptedPetTypes(listing.accepted_pet_types);
+    setFacilities(parseFacilities(listing.facilities));
+  }
+
+  const edit = <T,>(update: (value: T) => void) => (value: T) => {
+    setIsPristine(false);
+    update(value);
+  };
+  const editTitle = edit(setTitle);
+  const editLocation = edit(setLocation);
+  const editDescription = edit(setDescription);
+  const editCapacity = edit(setCapacity);
+  const editAcceptedPetTypes = edit(setAcceptedPetTypes);
+  const editFacilities = edit(setFacilities);
 
   const values = { title, location, description, capacity, acceptedPetTypes };
   const errors: ListingFormErrors = hasSubmitted ? validateListingForm(values) : {};
@@ -72,7 +97,7 @@ function EditListingForm({ listing }: EditListingFormProps) {
           className={inputClassName(Boolean(errors.title))}
           id="listing-title"
           value={title}
-          onChange={(event) => setTitle(event.target.value)}
+          onChange={(event) => editTitle(event.target.value)}
           aria-invalid={Boolean(errors.title)}
           aria-describedby={errors.title ? 'listing-title-error' : undefined}
         />
@@ -85,7 +110,7 @@ function EditListingForm({ listing }: EditListingFormProps) {
           className={inputClassName(Boolean(errors.location))}
           id="listing-location"
           value={location}
-          onChange={(event) => setLocation(event.target.value)}
+          onChange={(event) => editLocation(event.target.value)}
           aria-invalid={Boolean(errors.location)}
           aria-describedby={errors.location ? 'listing-location-error' : undefined}
         />
@@ -99,7 +124,7 @@ function EditListingForm({ listing }: EditListingFormProps) {
           id="listing-description"
           rows={5}
           value={description}
-          onChange={(event) => setDescription(event.target.value)}
+          onChange={(event) => editDescription(event.target.value)}
           aria-invalid={Boolean(errors.description)}
           aria-describedby={errors.description ? 'listing-description-error' : undefined}
         />
@@ -115,7 +140,7 @@ function EditListingForm({ listing }: EditListingFormProps) {
           min="1"
           step="1"
           value={capacity}
-          onChange={(event) => setCapacity(event.target.value === '' ? '' : Number(event.target.value))}
+          onChange={(event) => editCapacity(event.target.value === '' ? '' : Number(event.target.value))}
           aria-invalid={Boolean(errors.capacity)}
           aria-describedby={errors.capacity ? 'listing-capacity-help listing-capacity-error' : 'listing-capacity-help'}
         />
@@ -138,7 +163,7 @@ function EditListingForm({ listing }: EditListingFormProps) {
                 type="button"
                 key={value}
                 aria-pressed={isSelected}
-                onClick={() => toggleChoice(value, acceptedPetTypes, setAcceptedPetTypes)}
+                onClick={() => toggleChoice(value, acceptedPetTypes, editAcceptedPetTypes)}
               >
                 {label}
               </button>
@@ -159,7 +184,7 @@ function EditListingForm({ listing }: EditListingFormProps) {
                 className="h-4 w-4 accent-brand-600"
                 type="checkbox"
                 checked={facilities.includes(facility)}
-                onChange={() => toggleChoice(facility, facilities, setFacilities)}
+                onChange={() => toggleChoice(facility, facilities, editFacilities)}
               />
               <span className="break-words">{facility}</span>
             </label>
@@ -214,7 +239,11 @@ export function EditListingScreen() {
   // My listings is already the entry point and its query is cached, so the listing comes
   // from that list. Anything not in it is either missing or not the owner's — one state.
   const { data: listings, isPending, isError } = useMyListings();
-  const listing = listings?.find((candidate) => candidate.id === listingId);
+  // The owner's list still contains soft-deleted rows; My listings hides them, and so must
+  // a bookmarked edit URL. FR-3.2 makes a deleted listing unavailable to direct access.
+  const listing = listings?.find(
+    (candidate) => candidate.id === listingId && candidate.status !== 'deleted' && candidate.deleted_at === null,
+  );
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900">

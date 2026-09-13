@@ -79,6 +79,60 @@ describe('EditListingScreen', () => {
     expect(screen.queryByLabelText(/listing title/i)).not.toBeInTheDocument();
   });
 
+  it('refuses the direct route for a soft-deleted listing the owner still owns', () => {
+    mockedUseMyListings.mockReturnValue(
+      listingsQuery({ data: [{ ...sunnyRoom, status: 'deleted', deleted_at: '2026-09-10T00:00:00.000Z' }] }),
+    );
+    renderAt('listing-1');
+
+    expect(screen.getByText('We could not find that listing')).toBeInTheDocument();
+    expect(screen.queryByLabelText(/listing title/i)).not.toBeInTheDocument();
+  });
+
+  it('follows a background refetch of the same listing while the form is untouched', () => {
+    mockedUseMyListings.mockReturnValue(listingsQuery({ data: [sunnyRoom] }));
+    const view = renderAt('listing-1');
+    expect(screen.getByLabelText(/listing title/i)).toHaveValue('Sunny garden room');
+
+    // Same id, newer values: what TanStack Query hands back after a stale cache is refreshed.
+    mockedUseMyListings.mockReturnValue(
+      listingsQuery({ data: [{ ...sunnyRoom, title: 'Sunny garden room (renamed elsewhere)', capacity: 4 }] }),
+    );
+    view.rerender(
+      <MemoryRouter initialEntries={['/listings/listing-1/edit']}>
+        <Routes>
+          <Route path="/listings/:listingId/edit" element={<EditListingScreen />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByLabelText(/listing title/i)).toHaveValue('Sunny garden room (renamed elsewhere)');
+    expect(screen.getByLabelText(/capacity/i)).toHaveValue(4);
+  });
+
+  it('keeps the owner\'s typing when a background refetch lands after they started editing', async () => {
+    const user = userEvent.setup();
+    mockedUseMyListings.mockReturnValue(listingsQuery({ data: [sunnyRoom] }));
+    const view = renderAt('listing-1');
+
+    await user.clear(screen.getByLabelText(/listing title/i));
+    await user.type(screen.getByLabelText(/listing title/i), 'My own new title');
+
+    mockedUseMyListings.mockReturnValue(
+      listingsQuery({ data: [{ ...sunnyRoom, title: 'Sunny garden room (renamed elsewhere)', capacity: 4 }] }),
+    );
+    view.rerender(
+      <MemoryRouter initialEntries={['/listings/listing-1/edit']}>
+        <Routes>
+          <Route path="/listings/:listingId/edit" element={<EditListingScreen />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByLabelText(/listing title/i)).toHaveValue('My own new title');
+    expect(screen.getByLabelText(/capacity/i)).toHaveValue(2);
+  });
+
   it('prefills every field from the stored listing', () => {
     mockedUseMyListings.mockReturnValue(listingsQuery({ data: [sunnyRoom] }));
     renderAt('listing-1');

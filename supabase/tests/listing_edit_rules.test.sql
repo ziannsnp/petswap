@@ -303,6 +303,74 @@ begin
 end;
 $$;
 
+-- Test new-photo path: add a new image, retain two existing images, and drop one
+-- Verify: new image gets sort_order=0, dropped image is removed, and listing has exactly 3 images
+do $$
+declare
+  new_image_id uuid := gen_random_uuid();
+  image_count integer;
+  new_image_sort_order integer;
+  dropped_image_exists boolean;
+begin
+  select public.update_listing_with_images(
+    '30000000-0000-4000-8000-000000000002',
+    'New photo test',
+    'Chiang Mai',
+    'Testing new photo insertion.',
+    3,
+    array['dog']::public.pet_species[],
+    'Lawn',
+    'published',
+    '2026-09-13T00:00:00Z'::timestamptz,
+    array[
+      '50000000-0000-4000-8000-000000000001',
+      '50000000-0000-4000-8000-000000000002'
+    ]::uuid[],
+    jsonb_build_array(
+      jsonb_build_object(
+        'id', new_image_id,
+        'storage_path', '30000000-0000-4000-8000-000000000002/four.jpg',
+        'alt_text', null
+      )
+    ),
+    array[
+      new_image_id,
+      '50000000-0000-4000-8000-000000000001',
+      '50000000-0000-4000-8000-000000000002'
+    ]::uuid[]
+  );
+
+  -- Assert new image has sort_order = 0
+  select sort_order into new_image_sort_order
+  from public.listing_images
+  where id = new_image_id;
+
+  if new_image_sort_order is distinct from 0 then
+    raise exception 'listing edit: new image has sort_order % instead of 0', new_image_sort_order;
+  end if;
+
+  -- Assert image ...003 no longer exists
+  select exists(
+    select 1
+    from public.listing_images
+    where id = '50000000-0000-4000-8000-000000000003'
+  ) into dropped_image_exists;
+
+  if dropped_image_exists then
+    raise exception 'listing edit: dropped image ...003 still exists';
+  end if;
+
+  -- Assert listing has exactly 3 images
+  select count(*) into image_count
+  from public.listing_images
+  where listing_id = '30000000-0000-4000-8000-000000000002';
+
+  if image_count is distinct from 3 then
+    raise exception 'listing edit: listing has % images instead of 3', image_count;
+  end if;
+end;
+$$;
+
 do $$
 declare
   rejected boolean := false;

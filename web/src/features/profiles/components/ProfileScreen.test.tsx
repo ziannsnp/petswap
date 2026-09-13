@@ -195,4 +195,80 @@ describe('ProfileScreen UI (View & Edit mode layout)', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'Somchai Petlover' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /edit your profile/i })).toBeInTheDocument();
   });
+
+  it('hides the Edit profile button when viewing another user profile', () => {
+    mockUseCurrentProfile.mockReturnValue({
+      data: { ...sampleProfile, id: 'user-456' },
+      isLoading: false,
+      isError: false,
+    });
+
+    render(
+      <MemoryRouter>
+        <ProfileScreen />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Somchai Petlover' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /edit your profile/i })).not.toBeInTheDocument();
+  });
+
+  it('protects against editing another user profile when authenticated as a different user', () => {
+    mockUseAuth.mockReturnValue({
+      user: {
+        id: 'user-different',
+        email: 'different@example.com',
+      },
+    });
+    mockUseCurrentProfile.mockReturnValue({
+      data: sampleProfile,
+      isLoading: false,
+      isError: false,
+    });
+
+    render(
+      <MemoryRouter>
+        <ProfileScreen />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Somchai Petlover' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /edit your profile/i })).not.toBeInTheDocument();
+  });
+
+  it('resets isEditing to false when profile id changes', () => {
+    mockUseCurrentProfile.mockReturnValue({
+      data: sampleProfile,
+      isLoading: false,
+      isError: false,
+    });
+
+    const { rerender } = render(
+      <MemoryRouter>
+        <ProfileScreen />
+      </MemoryRouter>
+    );
+
+    // Enter edit mode
+    fireEvent.click(screen.getByRole('button', { name: /edit your profile/i }));
+    expect(screen.getByRole('heading', { level: 1, name: /edit profile/i })).toBeInTheDocument();
+
+    // Profile changes to another user
+    mockUseCurrentProfile.mockReturnValue({
+      data: { ...sampleProfile, id: 'user-other', display_name: 'Other User' },
+      isLoading: false,
+      isError: false,
+    });
+
+    rerender(
+      <MemoryRouter>
+        <ProfileScreen />
+      </MemoryRouter>
+    );
+
+    // Edit mode should be cleanly reset to view mode
+    expect(screen.getByRole('heading', { level: 1, name: 'Other User' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { level: 1, name: /edit profile/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /edit your profile/i })).not.toBeInTheDocument();
+  });
 });

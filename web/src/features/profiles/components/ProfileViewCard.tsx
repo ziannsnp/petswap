@@ -7,9 +7,10 @@ interface ProfileViewCardProps {
   profile: Profile;
   email?: string | null;
   onEdit: () => void;
+  canEdit?: boolean;
 }
 
-export function ProfileViewCard({ profile, email, onEdit }: ProfileViewCardProps) {
+export function ProfileViewCard({ profile, email, onEdit, canEdit = false }: ProfileViewCardProps) {
   const [photoFailed, setPhotoFailed] = useState(false);
   // Initials fallback matches the Navbar's account avatar, rather than each
   // rendering its own (previously the Navbar used local initials while this
@@ -45,17 +46,19 @@ export function ProfileViewCard({ profile, email, onEdit }: ProfileViewCardProps
             )}
           </div>
 
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={onEdit}
-              className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white shadow-xs hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 transition-colors cursor-pointer"
-              aria-label="Edit your profile"
-            >
-              <Edit2 className="h-4 w-4" aria-hidden="true" />
-              <span>Edit profile</span>
-            </button>
-          </div>
+          {canEdit && (
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={onEdit}
+                className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white shadow-xs hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 transition-colors cursor-pointer"
+                aria-label="Edit your profile"
+              >
+                <Edit2 className="h-4 w-4" aria-hidden="true" />
+                <span>Edit profile</span>
+              </button>
+            </div>
+          )}
         </div>
 
         {/* User Identity Title */}

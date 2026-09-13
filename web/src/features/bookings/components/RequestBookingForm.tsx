@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '@/features/auth';
 import { useMyPets } from '@/features/pets';
-import { validateBookingRequestForm } from '../lib/bookingRequestForm';
+import { todayIsoDate, validateBookingRequestForm } from '../lib/bookingRequestForm';
 import type { BookingRequestFormErrors } from '../lib/bookingRequestForm';
 import { useCreateBookingRequest } from '../hooks/useBookings';
 
@@ -33,8 +33,12 @@ export function RequestBookingForm({ listingId, listingOwnerId, acceptedPetTypes
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [isSent, setIsSent] = useState(false);
 
+  // Recomputed per render rather than memoised, so a tab left open overnight
+  // still rejects yesterday once the calendar day rolls over.
+  const today = todayIsoDate();
+
   const errors: BookingRequestFormErrors = hasSubmitted
-    ? validateBookingRequestForm({ petId, startDate, endDate })
+    ? validateBookingRequestForm({ petId, startDate, endDate }, today)
     : {};
 
   if (!isAuthenticated || !user) {
@@ -64,7 +68,7 @@ export function RequestBookingForm({ listingId, listingOwnerId, acceptedPetTypes
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setHasSubmitted(true);
-    const nextErrors = validateBookingRequestForm({ petId, startDate, endDate });
+    const nextErrors = validateBookingRequestForm({ petId, startDate, endDate }, today);
     if (Object.keys(nextErrors).length > 0 || !user) return;
 
     try {
@@ -131,6 +135,7 @@ export function RequestBookingForm({ listingId, listingOwnerId, acceptedPetTypes
                   className={inputClassName(Boolean(errors.startDate))}
                   id="booking-start-date"
                   type="date"
+                  min={today}
                   value={startDate}
                   onChange={(event) => { resetMutationState(); setStartDate(event.target.value); }}
                   disabled={createBookingRequestMutation.isPending}
@@ -146,6 +151,7 @@ export function RequestBookingForm({ listingId, listingOwnerId, acceptedPetTypes
                   className={inputClassName(Boolean(errors.endDate))}
                   id="booking-end-date"
                   type="date"
+                  min={startDate || today}
                   value={endDate}
                   onChange={(event) => { resetMutationState(); setEndDate(event.target.value); }}
                   disabled={createBookingRequestMutation.isPending}

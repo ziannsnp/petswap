@@ -6,6 +6,7 @@ import { RequestBookingForm } from './RequestBookingForm';
 import { useAuth } from '@/features/auth';
 import { useMyPets } from '@/features/pets';
 import { useCreateBookingRequest } from '../hooks/useBookings';
+import { todayIsoDate } from '../lib/bookingRequestForm';
 
 // Explicit factories so the real hook modules (and their supabase/import.meta.env
 // chains) never load under Jest.
@@ -135,4 +136,37 @@ it('shows an error banner when the request fails', async () => {
   fireEvent.click(screen.getByRole('button', { name: /request booking/i }));
 
   expect(await screen.findByRole('alert')).toHaveTextContent(/could not send your booking request/i);
+});
+
+it('refuses a stay that starts in the past', () => {
+  authenticatedAs(REQUESTER_ID);
+  mockUseMyPets.mockReturnValue(petsResult([{ id: 'pet-1', name: 'Rocket', species: 'dog' }]));
+  const mutateAsync = jest.fn();
+  mockUseCreateBookingRequest.mockReturnValue({ mutateAsync, isPending: false, isError: false, reset: jest.fn() });
+
+  renderForm();
+
+  fireEvent.change(screen.getByLabelText('Pet'), { target: { value: 'pet-1' } });
+  fireEvent.change(screen.getByLabelText('Start date'), { target: { value: '2020-01-01' } });
+  fireEvent.change(screen.getByLabelText('End date'), { target: { value: '2020-01-05' } });
+  fireEvent.click(screen.getByRole('button', { name: /request booking/i }));
+
+  expect(screen.getByText('Start date cannot be in the past.')).toBeInTheDocument();
+  expect(mutateAsync).not.toHaveBeenCalled();
+});
+
+it('stops the date pickers offering days before today', () => {
+  authenticatedAs(REQUESTER_ID);
+  mockUseMyPets.mockReturnValue(petsResult([{ id: 'pet-1', name: 'Rocket', species: 'dog' }]));
+  mockUseCreateBookingRequest.mockReturnValue({ mutateAsync: jest.fn(), isPending: false, isError: false, reset: jest.fn() });
+
+  renderForm();
+
+  const today = todayIsoDate();
+  expect(screen.getByLabelText('Start date')).toHaveAttribute('min', today);
+  expect(screen.getByLabelText('End date')).toHaveAttribute('min', today);
+
+  // Once a start date is chosen the end picker cannot reach back past it.
+  fireEvent.change(screen.getByLabelText('Start date'), { target: { value: '2027-01-10' } });
+  expect(screen.getByLabelText('End date')).toHaveAttribute('min', '2027-01-10');
 });

@@ -1,5 +1,5 @@
 import { getSupabaseClient, type AppSupabaseClient } from '@/shared/lib/supabase';
-import { deleteAvatar, getProfile, updateProfile, uploadAvatar } from './profileApi';
+import { AVATAR_MAX_BYTES, deleteAvatar, getProfile, updateProfile, uploadAvatar } from './profileApi';
 
 jest.mock('@/shared/lib/supabase', () => ({ getSupabaseClient: jest.fn() }));
 
@@ -95,6 +95,14 @@ describe('updateProfile', () => {
     expect(from).not.toHaveBeenCalled();
   });
 
+  it('propagates an authentication error', async () => {
+    const error = new Error('Auth unavailable');
+    const { from } = mockClient({ userError: error });
+
+    await expect(updateProfile({ location: 'Bangkok' })).rejects.toBe(error);
+    expect(from).not.toHaveBeenCalled();
+  });
+
   it('propagates a profile update error', async () => {
     const error = new Error('Update rejected');
     mockClient({ profileResult: { data: null, error } });
@@ -154,6 +162,36 @@ describe('uploadAvatar', () => {
 
     await expect(uploadAvatar(jpegAvatar)).rejects.toThrow('You must be signed in to upload an avatar.');
     expect(from).not.toHaveBeenCalled();
+  });
+
+  it('propagates an authentication error', async () => {
+    const error = new Error('Auth unavailable');
+    const { from } = mockAvatarClient({ userError: error });
+
+    await expect(uploadAvatar(jpegAvatar)).rejects.toBe(error);
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it('accepts uppercase MIME types', async () => {
+    const { upload } = mockAvatarClient({});
+    const uppercaseJpeg = { name: 'portrait.jpg', type: 'image/JPEG', size: 1024 } as File;
+
+    await expect(uploadAvatar(uppercaseJpeg)).resolves.toContain('/avatars/user-1/avatar?v=');
+    expect(upload).toHaveBeenCalledWith('user-1/avatar', uppercaseJpeg, {
+      contentType: 'image/JPEG',
+      upsert: true,
+    });
+  });
+
+  it('rejects a file exceeding the 10 MB Storage limit before authenticating', async () => {
+    const oversizedJpeg = {
+      name: 'portrait.jpg',
+      type: 'image/jpeg',
+      size: AVATAR_MAX_BYTES + 1,
+    } as File;
+
+    await expect(uploadAvatar(oversizedJpeg)).rejects.toThrow('Avatar image must be smaller than 10 MB.');
+    expect(mockedGetSupabaseClient).not.toHaveBeenCalled();
   });
 
   it('rejects unsupported image types before uploading', async () => {

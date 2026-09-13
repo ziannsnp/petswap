@@ -143,6 +143,20 @@ describe('Navbar Component', () => {
       expect(screen.getByRole('dialog')).toBeInTheDocument();
     });
 
+    it('closes the account menu on Escape and returns focus to the account menu button', async () => {
+      const user = userEvent.setup();
+      renderNavbar();
+
+      const accountMenuButton = screen.getByRole('button', { name: /account menu/i });
+      await user.click(accountMenuButton);
+      expect(screen.getByRole('menu')).toBeInTheDocument();
+
+      await user.keyboard('{Escape}');
+
+      expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+      expect(accountMenuButton).toHaveFocus();
+    });
+
     it('does NOT render Log in or Register links when authenticated', () => {
       renderNavbar();
 

@@ -28,6 +28,7 @@ export function Navbar() {
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [isLogoutDialogOpen, setIsLogoutDialogOpen] = useState(false);
   const accountMenuRef = useRef<HTMLDivElement>(null);
+  const accountMenuButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!accountMenuOpen) {
@@ -40,8 +41,19 @@ export function Navbar() {
       }
     }
 
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setAccountMenuOpen(false);
+        accountMenuButtonRef.current?.focus();
+      }
+    }
+
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
   }, [accountMenuOpen]);
 
   const displayName =
@@ -117,6 +129,7 @@ export function Navbar() {
           ) : isAuthenticated ? (
             <div className="relative" ref={accountMenuRef}>
               <button
+                ref={accountMenuButtonRef}
                 type="button"
                 onClick={() => setAccountMenuOpen((prev) => !prev)}
                 className="flex items-center gap-2 rounded-md px-3 py-2 text-gray-600 hover:text-brand-600"

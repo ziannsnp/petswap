@@ -56,6 +56,14 @@ function renderAt(listingId: string) {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  Object.defineProperty(URL, 'createObjectURL', {
+    configurable: true,
+    value: jest.fn((file: File) => `blob:${file.name}`),
+  });
+  Object.defineProperty(URL, 'revokeObjectURL', {
+    configurable: true,
+    value: jest.fn(),
+  });
   mockedUseUpdateListing.mockReturnValue({
     isPending: false,
     isError: false,
@@ -206,6 +214,35 @@ describe('EditListingScreen', () => {
         photos: [{ kind: 'existing', id: 'img-2' }],
       }),
     }));
+  });
+
+  it('does not upload a newly added photo again on a consecutive save', async () => {
+    const user = userEvent.setup();
+    const persistedNewImage = {
+      ...sunnyRoom.listing_images[1],
+      id: 'img-new',
+      storage_path: 'listing-1/new-yard.jpg',
+      signed_url: 'https://storage.test/signed/new-yard.jpg',
+    };
+    const savedListing: Listing = {
+      ...sunnyRoom,
+      listing_images: [sunnyRoom.listing_images[0], persistedNewImage],
+    };
+    const mutateAsync = jest.fn().mockResolvedValue(savedListing);
+    mockedUseUpdateListing.mockReturnValue({ isPending: false, isError: false, mutateAsync } as never);
+    mockedUseMyListings.mockReturnValue(listingsQuery({ data: [sunnyRoom] }));
+    renderAt('listing-1');
+
+    const file = new File(['photo'], 'new-yard.jpg', { type: 'image/jpeg' });
+    await user.upload(screen.getByLabelText(/add photos/i), file);
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+
+    expect(mutateAsync).toHaveBeenCalledTimes(2);
+    expect(mutateAsync.mock.calls[1][0].values.photos).toEqual([
+      { kind: 'existing', id: 'img-1' },
+      { kind: 'existing', id: 'img-new' },
+    ]);
   });
 
   it('shows an empty photo state for a listing with no photos', () => {

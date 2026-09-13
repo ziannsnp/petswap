@@ -1,5 +1,5 @@
 import { getSupabaseClient, type AppSupabaseClient } from '@/shared/lib/supabase';
-import { getProfile, updateProfile, uploadAvatar } from './profileApi';
+import { deleteAvatar, getProfile, updateProfile, uploadAvatar } from './profileApi';
 
 jest.mock('@/shared/lib/supabase', () => ({ getSupabaseClient: jest.fn() }));
 
@@ -111,13 +111,15 @@ describe('uploadAvatar', () => {
     user?: { id: string } | null;
     userError?: Error | null;
     uploadError?: Error | null;
+    removeError?: Error | null;
     publicUrl?: string;
   }) {
     const upload = jest.fn().mockResolvedValue({ error: options.uploadError ?? null });
+    const remove = jest.fn().mockResolvedValue({ error: options.removeError ?? null });
     const getPublicUrl = jest.fn().mockReturnValue({
       data: { publicUrl: options.publicUrl ?? 'https://project.supabase.co/storage/v1/object/public/avatars/user-1/avatar' },
     });
-    const from = jest.fn().mockReturnValue({ upload, getPublicUrl });
+    const from = jest.fn().mockReturnValue({ upload, remove, getPublicUrl });
     const getUser = jest.fn().mockResolvedValue({
       data: { user: options.user === undefined ? { id: 'user-1' } : options.user },
       error: options.userError ?? null,
@@ -127,7 +129,7 @@ describe('uploadAvatar', () => {
       auth: { getUser },
       storage: { from },
     } as unknown as AppSupabaseClient);
-    return { from, upload, getPublicUrl };
+    return { from, upload, remove, getPublicUrl };
   }
 
   const jpegAvatar = { name: 'portrait.jpg', type: 'image/jpeg' } as File;
@@ -169,5 +171,50 @@ describe('uploadAvatar', () => {
 
     await expect(uploadAvatar(jpegAvatar)).rejects.toBe(error);
     expect(getPublicUrl).not.toHaveBeenCalled();
+  });
+});
+
+describe('deleteAvatar', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  function mockDeleteAvatarClient(options: {
+    user?: { id: string } | null;
+    userError?: Error | null;
+    removeError?: Error | null;
+  }) {
+    const remove = jest.fn().mockResolvedValue({ error: options.removeError ?? null });
+    const from = jest.fn().mockReturnValue({ remove });
+    const getUser = jest.fn().mockResolvedValue({
+      data: { user: options.user === undefined ? { id: 'user-1' } : options.user },
+      error: options.userError ?? null,
+    });
+
+    mockedGetSupabaseClient.mockReturnValue({
+      auth: { getUser },
+      storage: { from },
+    } as unknown as AppSupabaseClient);
+    return { from, remove };
+  }
+
+  it('removes the current user avatar through the Storage API', async () => {
+    const { from, remove } = mockDeleteAvatarClient({});
+
+    await expect(deleteAvatar()).resolves.toBeUndefined();
+    expect(from).toHaveBeenCalledWith('avatars');
+    expect(remove).toHaveBeenCalledWith(['user-1/avatar']);
+  });
+
+  it('rejects a delete without an authenticated user', async () => {
+    const { from } = mockDeleteAvatarClient({ user: null });
+
+    await expect(deleteAvatar()).rejects.toThrow('You must be signed in to delete an avatar.');
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it('propagates a Storage API delete error', async () => {
+    const error = new Error('Storage unavailable');
+    mockDeleteAvatarClient({ removeError: error });
+
+    await expect(deleteAvatar()).rejects.toBe(error);
   });
 });

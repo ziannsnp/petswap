@@ -4,25 +4,20 @@ import type { Database } from '@/shared/types/database.types';
 export type Profile = Database['public']['Tables']['profiles']['Row'];
 export type ProfileUpdate = Pick<
   Database['public']['Tables']['profiles']['Update'],
-export type ProfileUpdate = Pick<
-  Database['public']['Tables']['profiles']['Update'],
   'display_name' | 'phone_number' | 'location' | 'photo_url'
->;
 >;
 
 const AVATAR_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
 
-function avatarStoragePath(userId: string, file: Pick<File, 'type'>): string {
+function avatarStoragePath(userId: string): string {
+  return `${userId}/avatar`;
+}
+
+function assertSupportedAvatarType(file: Pick<File, 'type'>): void {
   const normalizedType = file.type.trim().toLowerCase();
   if (!AVATAR_MIME_TYPES.has(normalizedType)) {
     throw new Error('Unsupported avatar type. Choose a JPG, PNG, WebP, or GIF image.');
   }
-  if (!AVATAR_MIME_TYPES.has(file.type)) {
-    throw new Error('Unsupported avatar type. Choose a JPG, PNG, WebP, or GIF image.');
-  }
-
-  // A fixed object path prevents a JPG-to-PNG replacement leaving the old public object behind.
-  return `${userId}/avatar`;
 }
 
 function cacheBustedPublicUrl(publicUrl: string): string {
@@ -106,7 +101,9 @@ export async function uploadAvatar(file: File): Promise<string> {
     throw new Error('You must be signed in to upload an avatar.');
   }
 
-  const storagePath = avatarStoragePath(userData.user.id, file);
+  assertSupportedAvatarType(file);
+  // A fixed object path prevents a JPG-to-PNG replacement leaving the old public object behind.
+  const storagePath = avatarStoragePath(userData.user.id);
   const avatarBucket = supabase.storage.from('avatars');
   const { error: uploadError } = await avatarBucket.upload(storagePath, file, {
     contentType: file.type,
@@ -123,6 +120,25 @@ export async function uploadAvatar(file: File): Promise<string> {
   }
 
   return cacheBustedPublicUrl(data.publicUrl);
+}
+
+/** Removes the authenticated user's avatar object. Clear photo_url separately when needed. */
+export async function deleteAvatar(): Promise<void> {
+  const supabase = getSupabaseClient();
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+
+  if (userError) {
+    throw userError;
+  }
+
+  if (!userData.user) {
+    throw new Error('You must be signed in to delete an avatar.');
+  }
+
+  const { error } = await supabase.storage.from('avatars').remove([avatarStoragePath(userData.user.id)]);
+  if (error) {
+    throw error;
+  }
 }
 
 /** @deprecated Use getProfile. Retained for the existing profile query hook. */

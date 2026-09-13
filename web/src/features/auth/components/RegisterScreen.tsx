@@ -205,7 +205,7 @@ export function RegisterScreen() {
       });
 
       if (session) {
-        void navigate('/profile', { replace: true });
+        void navigate('/', { replace: true });
       } else {
         setConfirmationSent(true);
       }

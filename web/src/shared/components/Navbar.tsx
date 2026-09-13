@@ -14,6 +14,8 @@ import {
   X,
 } from 'lucide-react';
 import { useAuth, LogoutConfirmDialog } from '@/features/auth';
+import { useCurrentProfile } from '@/features/profiles';
+import { getInitials } from '@/shared/lib/initials';
 
 const PROTECTED_NAV_ITEMS = [
   { to: '/', label: 'Search', Icon: Search, end: true },
@@ -24,6 +26,8 @@ const PROTECTED_NAV_ITEMS = [
 
 export function Navbar() {
   const { isAuthenticated, isLoading, user } = useAuth();
+  const { data: profile, isLoading: isProfileLoading } = useCurrentProfile({ enabled: isAuthenticated });
+  const [photoFailed, setPhotoFailed] = useState(false);
   const { pathname } = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
@@ -36,6 +40,10 @@ export function Navbar() {
     setAccountMenuOpen(false);
     setMobileMenuOpen(false);
   }, [pathname]);
+
+  useEffect(() => {
+    setPhotoFailed(false);
+  }, [profile?.photo_url]);
 
   useEffect(() => {
     if (!accountMenuOpen) {
@@ -87,13 +95,9 @@ export function Navbar() {
     user?.email ||
     'User';
 
-  const userInitials = displayName
-    .split(' ')
-    .filter(Boolean)
-    .map((part) => part[0])
-    .slice(0, 2)
-    .join('')
-    .toUpperCase();
+  // Prefer the profiles-table name so initials match what the profile page shows;
+  // fall back to auth metadata while that profile is still loading.
+  const userInitials = getInitials(profile?.display_name || displayName);
 
   return (
     <header className="sticky top-0 z-40 border-b border-gray-200 bg-white">
@@ -163,9 +167,26 @@ export function Navbar() {
                 aria-label="Account menu"
                 title={displayName}
               >
-                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-600 text-sm font-semibold text-white">
-                  {userInitials || <User className="h-4 w-4" aria-hidden="true" />}
-                </span>
+                {isProfileLoading ? (
+                  <span
+                    data-testid="account-avatar-skeleton"
+                    className="h-8 w-8 shrink-0 animate-pulse rounded-full bg-gray-200"
+                    aria-hidden="true"
+                  />
+                ) : (
+                  <span className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-brand-600 text-sm font-semibold text-white">
+                    {profile?.photo_url && !photoFailed ? (
+                      <img
+                        src={profile.photo_url}
+                        alt=""
+                        className="h-full w-full object-cover"
+                        onError={() => setPhotoFailed(true)}
+                      />
+                    ) : (
+                      userInitials || <User className="h-4 w-4" aria-hidden="true" />
+                    )}
+                  </span>
+                )}
                 <span className="text-sm font-medium">Account</span>
               </button>
 
@@ -180,7 +201,7 @@ export function Navbar() {
                     onClick={() => setAccountMenuOpen(false)}
                     className="block px-4 py-2 text-sm text-gray-700 hover:bg-brand-50"
                   >
-                    Edit profile
+                    View profile
                   </Link>
                   <button
                     type="button"
@@ -288,9 +309,22 @@ export function Navbar() {
                   onClick={() => setMobileMenuOpen(false)}
                   className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-base font-medium text-gray-700 hover:bg-gray-50 transition-colors"
                 >
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-600 text-xs font-semibold text-white">
-                    {userInitials || <User className="h-4 w-4" aria-hidden="true" />}
-                  </div>
+                  {isProfileLoading ? (
+                    <div className="h-8 w-8 shrink-0 animate-pulse rounded-full bg-gray-200" aria-hidden="true" />
+                  ) : (
+                    <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-brand-600 text-xs font-semibold text-white">
+                      {profile?.photo_url && !photoFailed ? (
+                        <img
+                          src={profile.photo_url}
+                          alt=""
+                          className="h-full w-full object-cover"
+                          onError={() => setPhotoFailed(true)}
+                        />
+                      ) : (
+                        userInitials || <User className="h-4 w-4" aria-hidden="true" />
+                      )}
+                    </div>
+                  )}
                   <span className="truncate">{displayName}</span>
                 </Link>
                 <div className="px-3 pt-1">

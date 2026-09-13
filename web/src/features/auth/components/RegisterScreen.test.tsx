@@ -250,7 +250,7 @@ describe('RegisterScreen', () => {
     expect(screen.getByRole('link', { name: /go to sign in/i })).toBeInTheDocument();
   });
 
-  it('redirects to /profile when signup returns a session', async () => {
+  it('redirects to / when signup returns a session', async () => {
     const user = userEvent.setup();
     const mutateAsync = jest
       .fn()
@@ -266,7 +266,7 @@ describe('RegisterScreen', () => {
     await user.click(screen.getByRole('checkbox'));
     await user.click(screen.getByRole('button', { name: /create account/i }));
 
-    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/profile', { replace: true }));
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/', { replace: true }));
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 

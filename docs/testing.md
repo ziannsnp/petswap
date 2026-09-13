@@ -101,7 +101,9 @@ npx supabase db reset
 
 Then inspect the local database in Studio at `http://127.0.0.1:54323` and verify the actor cases listed in [environments](environments.md).
 
-The SQL contract checks in `supabase/tests/` now run automatically: `database_contract.sql` (schema catalogue), `booking_rules.test.sql` (overlap-rule behaviour), `listing_rules.test.sql` (required accepted-pet behaviour), `listing_facility_migration.test.sql` (legacy facility-label backfill), `listing_photo_access.test.sql` (draft and published photo access), and `listing_edit_rules.test.sql` (valid, invalid, unauthorized, and photo-order edit behaviour). Run them locally after a reset, or let [`db-contract.yml`](ci-cd.md#database-contract-workflow) run them on every change under `supabase/`. They still read as a review checklist for a migration; see [`supabase/tests/README.md`](../supabase/tests/README.md).
+The SQL contract checks in `supabase/tests/` now run automatically: `database_contract.sql` (schema catalogue), `booking_rules.test.sql` (overlap-rule behaviour), `listing_rules.test.sql` (required accepted-pet behaviour), `listing_facility_migration.test.sql` (legacy facility-label backfill), `listing_photo_access.test.sql` (draft and published photo access), `listing_edit_rules.test.sql` (valid, invalid, unauthorized, and photo-order edit behaviour), and `avatar_storage_access.test.sql` (public avatar reads and owner-only writes). Run them locally after a reset, or let [`db-contract.yml`](ci-cd.md#database-contract-workflow) run them on every change under `supabase/`. They still read as a review checklist for a migration; see [`supabase/tests/README.md`](../supabase/tests/README.md). Actor-specific RLS cases not covered there still need Studio or JWT impersonation until the Playwright journey exists.
+
+The `avatars` bucket is public-read for profile photos; its Storage policies still limit uploads, replacements, and deletes to the authenticated user's own folder.
 
 The booking overlap rule is verified at both levels:
 

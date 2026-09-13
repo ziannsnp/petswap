@@ -1,0 +1,142 @@
+-- Profile avatars are publicly readable, while an authenticated user can only
+-- create, replace, or remove objects directly in their own UUID-named folder.
+
+\set ON_ERROR_STOP on
+
+begin;
+
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"10000000-0000-4000-8000-000000000001","role":"authenticated"}',
+  true
+);
+set local role authenticated;
+
+insert into storage.objects (id, bucket_id, name)
+values (
+  '50000000-0000-4000-8000-000000000010',
+  'avatars',
+  '10000000-0000-4000-8000-000000000001/avatar.jpg'
+);
+
+update storage.objects
+set metadata = '{"version": "replacement"}'::jsonb
+where bucket_id = 'avatars'
+  and name = '10000000-0000-4000-8000-000000000001/avatar.jpg';
+
+do $$
+begin
+  begin
+    insert into storage.objects (id, bucket_id, name)
+    values (
+      '50000000-0000-4000-8000-000000000011',
+      'avatars',
+      '10000000-0000-4000-8000-000000000002/avatar.jpg'
+    );
+    raise exception 'avatar access: a user uploaded into another user''s folder';
+  exception
+    when insufficient_privilege then null;
+  end;
+end;
+$$;
+
+reset role;
+select set_config(
+  'request.jwt.claims',
+  '{"role":"anon"}',
+  true
+);
+set local role anon;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from storage.objects
+    where bucket_id = 'avatars'
+      and name = '10000000-0000-4000-8000-000000000001/avatar.jpg'
+  ) then
+    raise exception 'avatar access: an anonymous user cannot read a public avatar';
+  end if;
+end;
+$$;
+
+do $$
+begin
+  begin
+    insert into storage.objects (id, bucket_id, name)
+    values (
+      '50000000-0000-4000-8000-000000000012',
+      'avatars',
+      'anonymous/avatar.jpg'
+    );
+    raise exception 'avatar access: an anonymous user uploaded an avatar';
+  exception
+    when insufficient_privilege then null;
+  end;
+end;
+$$;
+
+reset role;
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"10000000-0000-4000-8000-000000000002","role":"authenticated"}',
+  true
+);
+set local role authenticated;
+
+do $$
+declare
+  updated_rows integer;
+begin
+  update storage.objects
+  set metadata = '{"malicious": "update"}'::jsonb
+  where bucket_id = 'avatars'
+    and name = '10000000-0000-4000-8000-000000000001/avatar.jpg';
+
+  get diagnostics updated_rows = row_count;
+  if updated_rows <> 0 then
+    raise exception 'avatar access: a user updated another user''s avatar';
+  end if;
+end;
+$$;
+
+-- Storage rejects direct SQL deletes to prevent orphaned objects. A real client
+-- must use the Storage API, where the owner-only DELETE policy is enforced.
+do $$
+declare
+  deleted_rows integer;
+begin
+  begin
+    delete from storage.objects
+    where bucket_id = 'avatars'
+      and name = '10000000-0000-4000-8000-000000000001/avatar.jpg';
+
+    get diagnostics deleted_rows = row_count;
+    if deleted_rows <> 0 then
+      raise exception 'avatar access: a user deleted another user''s avatar';
+    end if;
+  exception
+    when others then
+      if SQLERRM not like 'Direct deletion from storage tables is not allowed%' then
+        raise;
+      end if;
+  end;
+end;
+$$;
+
+reset role;
+do $$
+begin
+  if not exists (
+    select 1
+    from storage.objects
+    where bucket_id = 'avatars'
+      and name = '10000000-0000-4000-8000-000000000001/avatar.jpg'
+  ) then
+    raise exception 'avatar access: a user deleted another user''s avatar';
+  end if;
+end;
+$$;
+
+rollback;

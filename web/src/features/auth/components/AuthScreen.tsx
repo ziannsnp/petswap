@@ -10,7 +10,7 @@ import type { SignInErrorCode } from '../types';
 const IDENTIFIER_REQUIREMENTS_MESSAGE = 'Enter a valid email address or username.';
 const INCOMPLETE_MESSAGE = 'Complete all required fields.';
 const GENERIC_FAILURE_MESSAGE = "We couldn't sign you in. Please try again.";
-const DEFAULT_DESTINATION = '/profile';
+const DEFAULT_DESTINATION = '/';
 
 type FieldName = 'identifier' | 'password';
 type FieldErrors = Partial<Record<FieldName, string>>;

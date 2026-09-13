@@ -37,6 +37,7 @@ export function ProfileScreen() {
   const { user } = useAuth();
   const { data: profile, isLoading, isError, refetch } = useCurrentProfile();
   const [isEditing, setIsEditing] = useState(false);
+  const [justSaved, setJustSaved] = useState(false);
 
   const displayEmail = user?.email || 'alex.rivera@example.com';
 
@@ -96,17 +97,30 @@ export function ProfileScreen() {
         {!isLoading && !isError && (
           <>
             {!isEditing ? (
-              <ProfileViewCard
-                profile={activeProfile}
-                email={displayEmail}
-                onEdit={() => setIsEditing(true)}
-              />
+              <>
+                {justSaved && (
+                  <div role="status" className="mb-4 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm font-medium text-green-700">
+                    Profile updated.
+                  </div>
+                )}
+                <ProfileViewCard
+                  profile={activeProfile}
+                  email={displayEmail}
+                  onEdit={() => {
+                    setJustSaved(false);
+                    setIsEditing(true);
+                  }}
+                />
+              </>
             ) : (
               <ProfileEditLayout
                 profile={activeProfile}
                 email={displayEmail}
                 onCancel={() => setIsEditing(false)}
-                onSave={() => setIsEditing(false)}
+                onSave={() => {
+                  setIsEditing(false);
+                  setJustSaved(true);
+                }}
               />
             )}
           </>

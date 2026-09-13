@@ -9,6 +9,12 @@ import type { Profile } from '../lib/profileApi';
 
 jest.mock('../hooks/useProfile', () => ({
   useCurrentProfile: jest.fn(),
+  useUpdateProfile: jest.fn(() => ({
+    mutateAsync: jest.fn(),
+    isPending: false,
+    isError: false,
+    error: null,
+  })),
 }));
 
 jest.mock('@/features/auth', () => ({

@@ -1,5 +1,5 @@
 export { ProfileScreen } from './components/ProfileScreen';
-export { useCurrentProfile } from './hooks/useProfile';
+export { profileKeys, useCurrentProfile, useUpdateProfile } from './hooks/useProfile';
 export { getCurrentProfile, getProfile, updateProfile, uploadAvatar } from './lib/profileApi';
 export {
   DISPLAY_NAME_MAX_LENGTH,

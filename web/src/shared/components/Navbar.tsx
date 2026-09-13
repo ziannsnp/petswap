@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, NavLink } from 'react-router-dom';
+import { Link, NavLink, useLocation } from 'react-router-dom';
 import {
   CalendarDays,
   Heart,
@@ -24,11 +24,18 @@ const PROTECTED_NAV_ITEMS = [
 
 export function Navbar() {
   const { isAuthenticated, isLoading, user } = useAuth();
+  const { pathname } = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [isLogoutDialogOpen, setIsLogoutDialogOpen] = useState(false);
   const accountMenuRef = useRef<HTMLDivElement>(null);
   const accountMenuButtonRef = useRef<HTMLButtonElement>(null);
+  const mobileMenuButtonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    setAccountMenuOpen(false);
+    setMobileMenuOpen(false);
+  }, [pathname]);
 
   useEffect(() => {
     if (!accountMenuOpen) {
@@ -55,6 +62,24 @@ export function Navbar() {
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, [accountMenuOpen]);
+
+  useEffect(() => {
+    if (!mobileMenuOpen) {
+      return;
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setMobileMenuOpen(false);
+        mobileMenuButtonRef.current?.focus();
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [mobileMenuOpen]);
 
   const displayName =
     (user?.user_metadata?.display_name as string | undefined) ||
@@ -147,7 +172,7 @@ export function Navbar() {
               {accountMenuOpen && (
                 <div
                   role="menu"
-                  className="absolute right-0 mt-2 w-48 rounded-lg border border-gray-100 bg-white shadow-lg"
+                  className="absolute right-0 mt-2 w-48 rounded-lg border border-gray-100 bg-white shadow-lg z-50"
                 >
                   <Link
                     to="/profile"
@@ -194,9 +219,11 @@ export function Navbar() {
         {/* Mobile Hamburger Button */}
         <div className="ml-auto flex md:hidden">
           <button
+            ref={mobileMenuButtonRef}
             type="button"
             onClick={() => setMobileMenuOpen((prev) => !prev)}
             className="inline-flex items-center justify-center rounded-lg p-2 text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors"
+            aria-controls="mobile-menu"
             aria-expanded={mobileMenuOpen}
             aria-label="Toggle main menu"
           >
@@ -211,7 +238,7 @@ export function Navbar() {
 
       {/* Mobile Menu Panel */}
       {mobileMenuOpen && (
-        <div className="border-b border-gray-200 bg-white px-4 pt-2 pb-4 md:hidden" data-testid="mobile-menu">
+        <div id="mobile-menu" className="border-b border-gray-200 bg-white px-4 pt-2 pb-4 md:hidden" data-testid="mobile-menu">
           <div className="space-y-1 pb-3">
             {isAuthenticated ? (
               PROTECTED_NAV_ITEMS.map(({ to, label, Icon, end }) => (

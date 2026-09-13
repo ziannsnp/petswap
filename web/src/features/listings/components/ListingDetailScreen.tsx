@@ -1,5 +1,6 @@
 import { ArrowLeft, Image } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
+import { RequestBookingForm } from '@/features/bookings';
 import { useListing } from '../hooks/useListings';
 import { petSpeciesLabel, parseFacilities } from '../lib/listingOptions';
 import { LISTING_STATUS_STYLES } from '../lib/listingStatus';
@@ -60,6 +61,14 @@ export function ListingDetailScreen() {
               </div>
             </div>
           </article>
+        )}
+
+        {!isPending && !isError && listing && (
+          <RequestBookingForm
+            listingId={listing.id}
+            listingOwnerId={listing.owner_id}
+            acceptedPetTypes={listing.accepted_pet_types}
+          />
         )}
       </main>
     </div>

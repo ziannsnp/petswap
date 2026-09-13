@@ -312,7 +312,7 @@ declare
   new_image_sort_order integer;
   dropped_image_exists boolean;
 begin
-  select public.update_listing_with_images(
+  perform public.update_listing_with_images(
     '30000000-0000-4000-8000-000000000002',
     'New photo test',
     'Chiang Mai',

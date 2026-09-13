@@ -77,6 +77,8 @@
   .booking-card__species { @apply font-normal text-gray-500; }
   .booking-card__listing { @apply mt-1 text-gray-700; }
   .booking-card__dates { @apply mt-0.5 text-gray-500 text-sm; }
+  .booking-card__actions { @apply mt-3 flex flex-wrap items-center gap-2; }
+  .booking-card__error { @apply w-full text-sm text-red-700; }
 
   .booking-card--skeleton { @apply flex flex-col gap-2 animate-pulse; }
   .skeleton-line {

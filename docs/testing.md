@@ -112,7 +112,9 @@ The booking overlap rule is verified at both levels:
 
 Playwright is wired up: [`web/playwright.config.ts`](../web/playwright.config.ts) starts `npm run dev` and runs `web/e2e/` on desktop and mobile Chromium. `e2e/smoke.spec.ts` covers the public shell (no auth or Supabase needed) and runs on every `web/**` change via the non-required [`e2e-smoke.yml`](ci-cd.md#e2e-smoke-workflow) workflow.
 
-`web/e2e/booking-flow.spec.ts` — the login → request → confirm journey — stays skipped until its screens are on `main`; the file itself documents how to enable it. Before a demo or release, run the [regression checklist](templates/regression-checklist.md) on desktop and mobile and link the filled copy from the release-readiness PR.
+`web/e2e/booking-flow.spec.ts` — the login → request → confirm journey — runs against the local Supabase stack (`npx supabase db reset`, then `npm run test:e2e`); it needs the `sign-in` Edge Function's local origin allowlist populated (`cp supabase/functions/.env.example supabase/functions/.env`) or username sign-in returns a 403. Before a demo or release, run the [regression checklist](templates/regression-checklist.md) on desktop and mobile and link the filled copy from the release-readiness PR.
+
+`web/e2e/navbar-account-menu.spec.ts` covers the account-menu dropdown and mobile-menu logout flow; it signs in as `alex@petswap.test`, so it needs the local Supabase stack (`supabase start`) the same way the manual journey below does. It is not part of the required `Quality` gate or the `e2e-smoke.yml` workflow (both only run `smoke.spec.ts`), so run it locally after touching the navbar or logout flow: `npm run test:e2e -- navbar-account-menu.spec.ts`.
 
 ## Manual listing journey
 

@@ -4,7 +4,6 @@ import { useMyListings } from '../hooks/useListings';
 import { petSpeciesLabel } from '../lib/listingOptions';
 import { LISTING_STATUS_STYLES } from '../lib/listingStatus';
 import type { Listing } from '../lib/listingApi';
-import { ListingsNavigation } from './ListingsNavigation';
 
 function ListingCard({ listing }: { listing: Listing }) {
   const status = LISTING_STATUS_STYLES[listing.status];
@@ -68,7 +67,6 @@ export function ListingsScreen() {
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900">
-      <ListingsNavigation />
       <main className="page-container">
         <div className="mb-7 flex items-center justify-between gap-4">
           <div>

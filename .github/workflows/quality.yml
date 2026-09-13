@@ -121,3 +121,15 @@ jobs:
         run: |
           supabase link --project-ref $SUPABASE_PROJECT_ID
           supabase db push --include-all
+
+      # No function name given: the CLI deploys every function under
+      # supabase/functions/, so a new function only needs its folder -- no
+      # second place to remember to wire it into CI, which is exactly the gap
+      # that left `sign-in` undeployed since it was written.
+      - name: Deploy Edge Functions
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+        run: |
+          supabase link --project-ref $SUPABASE_PROJECT_ID
+          supabase functions deploy

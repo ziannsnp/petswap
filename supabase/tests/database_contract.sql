@@ -266,6 +266,30 @@ from pg_proc p
 join pg_namespace n on n.oid = p.pronamespace
 where n.nspname = 'public'
   and p.proname = 'is_username_available';
+
+insert into _contract (check_name, passed)
+select
+  'profiles have owner-scoped update policy' as check_name,
+  exists (
+    select 1
+    from pg_policies
+    where schemaname = 'public'
+      and tablename = 'profiles'
+      and cmd = 'UPDATE'
+      and with_check like '%auth.uid()%'
+  ) as passed;
+
+insert into _contract (check_name, passed)
+select
+  'profiles have owner-scoped delete policy' as check_name,
+  exists (
+    select 1
+    from pg_policies
+    where schemaname = 'public'
+      and tablename = 'profiles'
+      and cmd = 'DELETE'
+      and qual like '%auth.uid()%'
+  ) as passed;
 select check_name, passed
 from _contract
 order by passed nulls first, check_name;

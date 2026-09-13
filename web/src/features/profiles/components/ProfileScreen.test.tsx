@@ -195,4 +195,44 @@ describe('ProfileScreen UI (View & Edit mode layout)', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'Somchai Petlover' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /edit your profile/i })).toBeInTheDocument();
   });
+
+  it('hides the Edit profile button when viewing another user profile', () => {
+    mockUseCurrentProfile.mockReturnValue({
+      data: { ...sampleProfile, id: 'user-456' },
+      isLoading: false,
+      isError: false,
+    });
+
+    render(
+      <MemoryRouter>
+        <ProfileScreen />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Somchai Petlover' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /edit your profile/i })).not.toBeInTheDocument();
+  });
+
+  it('protects against editing another user profile when authenticated as a different user', () => {
+    mockUseAuth.mockReturnValue({
+      user: {
+        id: 'user-different',
+        email: 'different@example.com',
+      },
+    });
+    mockUseCurrentProfile.mockReturnValue({
+      data: sampleProfile,
+      isLoading: false,
+      isError: false,
+    });
+
+    render(
+      <MemoryRouter>
+        <ProfileScreen />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Somchai Petlover' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /edit your profile/i })).not.toBeInTheDocument();
+  });
 });

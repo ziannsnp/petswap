@@ -37,14 +37,22 @@ function renderLayout({
   email = 'somchai@example.com',
   onCancel = jest.fn(),
   onSave = jest.fn(),
+  canEdit = true,
 }: Partial<{
   profile: Profile;
   email: string | null;
   onCancel: () => void;
   onSave: () => void;
+  canEdit: boolean;
 }> = {}) {
   return render(
-    <ProfileEditLayout profile={profile} email={email} onCancel={onCancel} onSave={onSave} />,
+    <ProfileEditLayout
+      profile={profile}
+      email={email}
+      onCancel={onCancel}
+      onSave={onSave}
+      canEdit={canEdit}
+    />,
   );
 }
 
@@ -173,6 +181,29 @@ describe('ProfileEditLayout', () => {
     renderLayout();
 
     expect(screen.getByRole('alert')).toHaveTextContent("We couldn't save your changes. Please try again.");
+  });
+
+  it('shows a permission denied message when the save fails with a row-level security error', () => {
+    mockUseUpdateProfile.mockReturnValue({
+      mutateAsync,
+      isPending: false,
+      isError: true,
+      error: new Error('new row violates row-level security policy for table "profiles"'),
+    });
+
+    renderLayout();
+
+    expect(screen.getByRole('alert')).toHaveTextContent('You do not have permission to edit this profile.');
+  });
+
+  it('blocks editing and disables save when canEdit is false', () => {
+    renderLayout({ canEdit: false });
+
+    expect(screen.getByRole('alert')).toHaveTextContent('You do not have permission to edit this profile.');
+    expect(screen.getByRole('button', { name: /save changes/i })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
+    expect(mutateAsync).not.toHaveBeenCalled();
   });
 
   it('disables Save and Cancel while the mutation is pending', () => {

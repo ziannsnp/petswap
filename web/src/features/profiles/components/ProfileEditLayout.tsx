@@ -10,6 +10,7 @@ interface ProfileEditLayoutProps {
   email?: string | null;
   onCancel: () => void;
   onSave?: () => void;
+  canEdit?: boolean;
 }
 
 const GENERIC_FAILURE_MESSAGE = "We couldn't save your changes. Please try again.";
@@ -22,7 +23,13 @@ const AVATAR_TOO_LARGE_MESSAGE = 'Photo must be 5MB or smaller.';
 const INVALID_AVATAR_TYPE_MESSAGE = 'Choose a JPG, PNG, or WebP image.';
 const AVATAR_UPLOAD_FAILURE_MESSAGE = "Couldn't upload your photo. Please try again.";
 
-export function ProfileEditLayout({ profile, email, onCancel, onSave }: ProfileEditLayoutProps) {
+export function ProfileEditLayout({
+  profile,
+  email,
+  onCancel,
+  onSave,
+  canEdit = true,
+}: ProfileEditLayoutProps) {
   const [displayName, setDisplayName] = useState(profile.display_name);
   const [phoneNumber, setPhoneNumber] = useState(profile.phone_number ?? '');
   const [location, setLocation] = useState(profile.location ?? '');
@@ -142,6 +149,10 @@ export function ProfileEditLayout({ profile, email, onCancel, onSave }: ProfileE
       photoUrl = null;
     }
 
+    if (!canEdit) {
+      return;
+    }
+
     try {
       await updateProfileMutation.mutateAsync({
         display_name: result.sanitizedValues.displayName,
@@ -155,11 +166,20 @@ export function ProfileEditLayout({ profile, email, onCancel, onSave }: ProfileE
     }
   }
 
-  const requestError = updateProfileMutation.isError
-    ? updateProfileMutation.error instanceof Error
-      ? updateProfileMutation.error.message
-      : GENERIC_FAILURE_MESSAGE
-    : null;
+  const rawErrorMessage =
+    updateProfileMutation.error instanceof Error ? updateProfileMutation.error.message : '';
+  const isPermissionDenied =
+    rawErrorMessage.toLowerCase().includes('row-level security') ||
+    rawErrorMessage.toLowerCase().includes('permission denied') ||
+    rawErrorMessage.toLowerCase().includes('cannot edit another');
+
+  const requestError = !canEdit
+    ? 'You do not have permission to edit this profile.'
+    : updateProfileMutation.isError
+      ? isPermissionDenied
+        ? 'You do not have permission to edit this profile.'
+        : rawErrorMessage || GENERIC_FAILURE_MESSAGE
+      : null;
 
   return (
     <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xs">
@@ -361,7 +381,7 @@ export function ProfileEditLayout({ profile, email, onCancel, onSave }: ProfileE
             </button>
             <button
               type="submit"
-              disabled={isSaving}
+              disabled={isSaving || !canEdit}
               className="btn-primary text-center cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isSaving ? 'Saving...' : 'Save changes'}

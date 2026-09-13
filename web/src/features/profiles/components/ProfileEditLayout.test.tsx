@@ -2,16 +2,18 @@
 import '@testing-library/jest-dom';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { ProfileEditLayout } from './ProfileEditLayout';
-import { useUpdateProfile, useUploadAvatar } from '../hooks/useProfile';
+import { useDeleteAvatar, useUpdateProfile, useUploadAvatar } from '../hooks/useProfile';
 import type { Profile } from '../lib/profileApi';
 
 jest.mock('../hooks/useProfile', () => ({
   useUpdateProfile: jest.fn(),
   useUploadAvatar: jest.fn(),
+  useDeleteAvatar: jest.fn(),
 }));
 
 const mockUseUpdateProfile = useUpdateProfile as jest.Mock;
 const mockUseUploadAvatar = useUploadAvatar as jest.Mock;
+const mockUseDeleteAvatar = useDeleteAvatar as jest.Mock;
 
 const sampleProfile: Profile = {
   id: 'user-123',
@@ -49,6 +51,7 @@ function renderLayout({
 describe('ProfileEditLayout', () => {
   let mutateAsync: jest.Mock;
   let uploadMutateAsync: jest.Mock;
+  let deleteAvatarMutateAsync: jest.Mock;
 
   beforeAll(() => {
     // jsdom doesn't implement the Blob URL APIs.
@@ -68,6 +71,11 @@ describe('ProfileEditLayout', () => {
     });
     mockUseUploadAvatar.mockReturnValue({
       mutateAsync: uploadMutateAsync,
+      isPending: false,
+    });
+    deleteAvatarMutateAsync = jest.fn().mockResolvedValue(undefined);
+    mockUseDeleteAvatar.mockReturnValue({
+      mutateAsync: deleteAvatarMutateAsync,
       isPending: false,
     });
   });
@@ -255,7 +263,7 @@ describe('ProfileEditLayout', () => {
       );
     });
 
-    it('saves photo_url as null when Remove photo was chosen', async () => {
+    it('saves photo_url as null when Remove photo was chosen, and deletes the storage object', async () => {
       renderLayout({ profile: { ...sampleProfile, photo_url: 'https://example.com/old.jpg' } });
 
       fireEvent.click(screen.getByRole('button', { name: /remove photo/i }));
@@ -263,6 +271,19 @@ describe('ProfileEditLayout', () => {
 
       await screen.findByRole('button', { name: /save changes/i });
       expect(uploadMutateAsync).not.toHaveBeenCalled();
+      expect(deleteAvatarMutateAsync).toHaveBeenCalledTimes(1);
+      expect(mutateAsync).toHaveBeenCalledWith(expect.objectContaining({ photo_url: null }));
+    });
+
+    it('still clears photo_url and saves even if deleting the storage object fails', async () => {
+      deleteAvatarMutateAsync.mockRejectedValue(new Error('Storage is unreachable.'));
+      jest.spyOn(console, 'error').mockImplementation(() => {});
+      renderLayout({ profile: { ...sampleProfile, photo_url: 'https://example.com/old.jpg' } });
+
+      fireEvent.click(screen.getByRole('button', { name: /remove photo/i }));
+      fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
+
+      await screen.findByRole('button', { name: /save changes/i });
       expect(mutateAsync).toHaveBeenCalledWith(expect.objectContaining({ photo_url: null }));
     });
 
@@ -286,6 +307,22 @@ describe('ProfileEditLayout', () => {
       renderLayout();
 
       expect(screen.getByRole('button', { name: /saving/i })).toBeDisabled();
+    });
+
+    it('disables the photo controls and text inputs while saving', () => {
+      mockUseUploadAvatar.mockReturnValue({
+        mutateAsync: uploadMutateAsync,
+        isPending: true,
+      });
+
+      renderLayout({ profile: { ...sampleProfile, photo_url: 'https://example.com/old.jpg' } });
+
+      expect(screen.getByLabelText(/upload profile photo/i)).toBeDisabled();
+      expect(screen.getByRole('button', { name: /change profile photo/i })).toBeDisabled();
+      expect(screen.getByRole('button', { name: /remove photo/i })).toBeDisabled();
+      expect(screen.getByLabelText(/display name/i)).toBeDisabled();
+      expect(screen.getByLabelText(/phone number/i)).toBeDisabled();
+      expect(screen.getByLabelText(/^location/i)).toBeDisabled();
     });
   });
 });

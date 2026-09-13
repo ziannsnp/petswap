@@ -250,7 +250,7 @@ describe('RegisterScreen', () => {
     expect(screen.getByRole('link', { name: /go to sign in/i })).toBeInTheDocument();
   });
 
-  it('redirects to /profile when signup returns a session', async () => {
+  it('redirects to / when signup returns a session', async () => {
     const user = userEvent.setup();
     const mutateAsync = jest
       .fn()

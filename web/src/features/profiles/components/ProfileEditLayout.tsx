@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
-import { ArrowLeft, AtSign, Camera, Mail } from 'lucide-react';
+import { ArrowLeft, AtSign, Camera, Mail, User } from 'lucide-react';
 import { getInitials } from '@/shared/lib/initials';
-import { useUpdateProfile, useUploadAvatar } from '../hooks/useProfile';
+import { useDeleteAvatar, useUpdateProfile, useUploadAvatar } from '../hooks/useProfile';
 import { validateProfileForm, type ProfileValidationErrors } from '../lib/profileValidation';
 import type { Profile } from '../lib/profileApi';
 
@@ -34,6 +34,7 @@ export function ProfileEditLayout({ profile, email, onCancel, onSave }: ProfileE
   const [photoFailed, setPhotoFailed] = useState(false);
   const updateProfileMutation = useUpdateProfile();
   const uploadAvatarMutation = useUploadAvatar();
+  const deleteAvatarMutation = useDeleteAvatar();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Revokes the previous blob URL whenever it's replaced, and on unmount.
@@ -56,7 +57,8 @@ export function ProfileEditLayout({ profile, email, onCancel, onSave }: ProfileE
   useEffect(() => {
     setPhotoFailed(false);
   }, [avatarSrc]);
-  const isSaving = uploadAvatarMutation.isPending || updateProfileMutation.isPending;
+  const isSaving =
+    uploadAvatarMutation.isPending || deleteAvatarMutation.isPending || updateProfileMutation.isPending;
 
   function clearFieldError(field: keyof ProfileValidationErrors) {
     setFieldErrors((previous) => {
@@ -127,6 +129,16 @@ export function ProfileEditLayout({ profile, email, onCancel, onSave }: ProfileE
         return;
       }
     } else if (removePhoto) {
+      if (profile.photo_url) {
+        try {
+          await deleteAvatarMutation.mutateAsync();
+        } catch (err) {
+          // Storage cleanup failing shouldn't block clearing photo_url on the
+          // profile row - the object is orphaned either way if this fails,
+          // but the user's own "remove photo" intent still needs to save.
+          console.error('Failed to remove the avatar from storage:', err);
+        }
+      }
       photoUrl = null;
     }
 
@@ -181,7 +193,7 @@ export function ProfileEditLayout({ profile, email, onCancel, onSave }: ProfileE
                 src={avatarSrc as string}
                 alt={profile.display_name}
                 className="h-28 w-28 rounded-full border-2 border-gray-200 bg-gray-50 object-cover shadow-xs cursor-pointer"
-                onClick={() => fileInputRef.current?.click()}
+                onClick={() => !isSaving && fileInputRef.current?.click()}
                 onError={() => setPhotoFailed(true)}
               />
             ) : (
@@ -189,15 +201,16 @@ export function ProfileEditLayout({ profile, email, onCancel, onSave }: ProfileE
                 className="flex h-28 w-28 items-center justify-center rounded-full border-2 border-gray-200 bg-brand-600 text-4xl font-semibold text-white shadow-xs cursor-pointer"
                 role="img"
                 aria-label={profile.display_name}
-                onClick={() => fileInputRef.current?.click()}
+                onClick={() => !isSaving && fileInputRef.current?.click()}
               >
-                {initials}
+                {initials || <User className="h-10 w-10" aria-hidden="true" />}
               </div>
             )}
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="absolute bottom-0 right-0 rounded-full bg-brand-600 p-2 text-white shadow-md hover:bg-brand-700 transition-colors cursor-pointer"
+              disabled={isSaving}
+              className="absolute bottom-0 right-0 rounded-full bg-brand-600 p-2 text-white shadow-md hover:bg-brand-700 transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
               aria-label="Change profile photo"
             >
               <Camera className="h-4 w-4" aria-hidden="true" />
@@ -207,6 +220,7 @@ export function ProfileEditLayout({ profile, email, onCancel, onSave }: ProfileE
               type="file"
               accept="image/jpeg,image/png,image/webp"
               onChange={handleAvatarChange}
+              disabled={isSaving}
               className="hidden"
               aria-label="Upload profile photo"
             />
@@ -220,7 +234,8 @@ export function ProfileEditLayout({ profile, email, onCancel, onSave }: ProfileE
               <button
                 type="button"
                 onClick={handleRemovePhoto}
-                className="mt-2 text-sm font-medium text-red-600 hover:text-red-700 cursor-pointer"
+                disabled={isSaving}
+                className="mt-2 text-sm font-medium text-red-600 hover:text-red-700 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Remove photo
               </button>
@@ -264,6 +279,7 @@ export function ProfileEditLayout({ profile, email, onCancel, onSave }: ProfileE
                     setDisplayName(event.target.value);
                     clearFieldError('displayName');
                   }}
+                  disabled={isSaving}
                   className={fieldErrors.displayName ? 'input-field input-field--error' : 'input-field'}
                   placeholder="Your visible name"
                   aria-invalid={fieldErrors.displayName ? true : undefined}
@@ -287,6 +303,7 @@ export function ProfileEditLayout({ profile, email, onCancel, onSave }: ProfileE
                     setPhoneNumber(event.target.value);
                     clearFieldError('phoneNumber');
                   }}
+                  disabled={isSaving}
                   className={fieldErrors.phoneNumber ? 'input-field input-field--error' : 'input-field'}
                   placeholder="e.g. 081-234-5678"
                   aria-invalid={fieldErrors.phoneNumber ? true : undefined}
@@ -312,6 +329,7 @@ export function ProfileEditLayout({ profile, email, onCancel, onSave }: ProfileE
                   setLocation(event.target.value);
                   clearFieldError('location');
                 }}
+                disabled={isSaving}
                 className={fieldErrors.location ? 'input-field input-field--error' : 'input-field'}
                 placeholder="e.g. Bangkok, Thailand"
                 aria-invalid={fieldErrors.location ? true : undefined}

@@ -1,5 +1,5 @@
 /** @jest-environment jsdom */
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { Navbar } from './Navbar';
@@ -65,6 +65,12 @@ describe('Navbar Component', () => {
 
       expect(registerLink).toBeInTheDocument();
       expect(registerLink).toHaveAttribute('href', '/register');
+    });
+
+    it('does not fetch the profile for an unauthenticated visitor', () => {
+      renderNavbar();
+
+      expect(mockedUseCurrentProfile).toHaveBeenCalledWith({ enabled: false });
     });
 
     it('does NOT render protected links or Logout button for unauthenticated users', () => {
@@ -188,6 +194,29 @@ describe('Navbar Component', () => {
 
       const avatarImg = screen.getByRole('button', { name: /account menu/i }).querySelector('img');
       expect(avatarImg).toHaveAttribute('src', 'https://example.com/avatar.jpg');
+    });
+
+    it('falls back to initials if the profile photo fails to load', () => {
+      mockedUseCurrentProfile.mockReturnValue({
+        data: { photo_url: 'https://example.com/broken.jpg' },
+      } as unknown as ReturnType<typeof useCurrentProfile>);
+
+      renderNavbar();
+
+      const accountButton = screen.getByRole('button', { name: /account menu/i });
+      const avatarImg = accountButton.querySelector('img') as HTMLImageElement;
+      expect(avatarImg).toBeInTheDocument();
+
+      fireEvent.error(avatarImg);
+
+      expect(accountButton.querySelector('img')).not.toBeInTheDocument();
+      expect(accountButton).toHaveTextContent('LP');
+    });
+
+    it('fetches the profile only once authenticated', () => {
+      renderNavbar();
+
+      expect(mockedUseCurrentProfile).toHaveBeenCalledWith({ enabled: true });
     });
 
     it('does NOT render Log in or Register links when authenticated', () => {

@@ -1,15 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { getCurrentProfile, updateProfile, uploadAvatar, type ProfileUpdate } from '../lib/profileApi';
+import { deleteAvatar, getCurrentProfile, updateProfile, uploadAvatar, type ProfileUpdate } from '../lib/profileApi';
 
 export const profileKeys = {
   all: ['profiles'] as const,
   current: () => [...profileKeys.all, 'current'] as const,
 };
 
-export function useCurrentProfile() {
+export function useCurrentProfile(options: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: profileKeys.current(),
     queryFn: getCurrentProfile,
+    enabled: options.enabled ?? true,
   });
 }
 
@@ -31,5 +32,11 @@ export function useUpdateProfile() {
 export function useUploadAvatar() {
   return useMutation({
     mutationFn: (file: File) => uploadAvatar(file),
+  });
+}
+
+export function useDeleteAvatar() {
+  return useMutation({
+    mutationFn: () => deleteAvatar(),
   });
 }

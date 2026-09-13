@@ -26,7 +26,8 @@ const PROTECTED_NAV_ITEMS = [
 
 export function Navbar() {
   const { isAuthenticated, isLoading, user } = useAuth();
-  const { data: profile, isLoading: isProfileLoading } = useCurrentProfile();
+  const { data: profile, isLoading: isProfileLoading } = useCurrentProfile({ enabled: isAuthenticated });
+  const [photoFailed, setPhotoFailed] = useState(false);
   const { pathname } = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
@@ -39,6 +40,10 @@ export function Navbar() {
     setAccountMenuOpen(false);
     setMobileMenuOpen(false);
   }, [pathname]);
+
+  useEffect(() => {
+    setPhotoFailed(false);
+  }, [profile?.photo_url]);
 
   useEffect(() => {
     if (!accountMenuOpen) {
@@ -170,8 +175,13 @@ export function Navbar() {
                   />
                 ) : (
                   <span className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-brand-600 text-sm font-semibold text-white">
-                    {profile?.photo_url ? (
-                      <img src={profile.photo_url} alt="" className="h-full w-full object-cover" />
+                    {profile?.photo_url && !photoFailed ? (
+                      <img
+                        src={profile.photo_url}
+                        alt=""
+                        className="h-full w-full object-cover"
+                        onError={() => setPhotoFailed(true)}
+                      />
                     ) : (
                       userInitials || <User className="h-4 w-4" aria-hidden="true" />
                     )}
@@ -303,8 +313,13 @@ export function Navbar() {
                     <div className="h-8 w-8 shrink-0 animate-pulse rounded-full bg-gray-200" aria-hidden="true" />
                   ) : (
                     <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-brand-600 text-xs font-semibold text-white">
-                      {profile?.photo_url ? (
-                        <img src={profile.photo_url} alt="" className="h-full w-full object-cover" />
+                      {profile?.photo_url && !photoFailed ? (
+                        <img
+                          src={profile.photo_url}
+                          alt=""
+                          className="h-full w-full object-cover"
+                          onError={() => setPhotoFailed(true)}
+                        />
                       ) : (
                         userInitials || <User className="h-4 w-4" aria-hidden="true" />
                       )}

@@ -19,6 +19,10 @@ jest.mock('../hooks/useProfile', () => ({
     mutateAsync: jest.fn(),
     isPending: false,
   })),
+  useDeleteAvatar: jest.fn(() => ({
+    mutateAsync: jest.fn(),
+    isPending: false,
+  })),
 }));
 
 jest.mock('@/features/auth', () => ({
@@ -89,6 +93,30 @@ describe('ProfileScreen UI (View & Edit mode layout)', () => {
 
     const retryButton = screen.getByRole('button', { name: /try again/i });
     fireEvent.click(retryButton);
+    expect(refetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders an explicit missing-profile state instead of fabricated data when profile is null', () => {
+    const refetchMock = jest.fn();
+    mockUseCurrentProfile.mockReturnValue({
+      data: null,
+      isLoading: false,
+      isError: false,
+      refetch: refetchMock,
+    });
+
+    render(
+      <MemoryRouter>
+        <ProfileScreen />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+    expect(screen.getByText(/profile not found/i)).toBeInTheDocument();
+    expect(screen.queryByText(/alex rivera/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/alex_rivera/i)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /try again/i }));
     expect(refetchMock).toHaveBeenCalledTimes(1);
   });
 

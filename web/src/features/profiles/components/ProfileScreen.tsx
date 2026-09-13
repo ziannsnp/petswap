@@ -3,7 +3,6 @@ import { useAuth } from '@/features/auth';
 import { useCurrentProfile } from '../hooks/useProfile';
 import { ProfileViewCard } from './ProfileViewCard';
 import { ProfileEditLayout } from './ProfileEditLayout';
-import type { Profile } from '../lib/profileApi';
 
 function ProfileSkeleton() {
   return (
@@ -36,21 +35,7 @@ export function ProfileScreen() {
   const { data: profile, isLoading, isError, refetch } = useCurrentProfile();
   const [isEditing, setIsEditing] = useState(false);
 
-  const displayEmail = user?.email || 'alex.rivera@example.com';
-
-  // Fallback profile if data has not been seeded yet
-  const activeProfile: Profile = profile ?? {
-    id: user?.id ?? 'guest',
-    display_name: (user?.user_metadata?.display_name as string) || (user?.email ? user.email.split('@')[0] : 'Alex Rivera'),
-    username: (user?.user_metadata?.username as string) || (user?.email ? user.email.split('@')[0].toLowerCase() : 'alex_rivera'),
-    photo_url: null,
-    phone_number: user ? null : '081-234-5678',
-    location: user ? null : 'Bangkok, Thailand',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    consent_version: null,
-    consent_given_at: null,
-  };
+  const displayEmail = user?.email ?? '';
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
@@ -84,18 +69,38 @@ export function ProfileScreen() {
           </div>
         )}
 
+        {/* Missing Profile State: authenticated, but no profiles row exists */}
+        {!isLoading && !isError && !profile && (
+          <div
+            className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-center text-amber-800"
+            role="alert"
+          >
+            <h2 className="font-semibold text-lg mb-1">Profile not found</h2>
+            <p className="text-sm text-amber-700 mb-4">
+              We couldn't find your profile record. Please try again, or contact support if this keeps happening.
+            </p>
+            <button
+              type="button"
+              onClick={() => void refetch()}
+              className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 transition-colors cursor-pointer"
+            >
+              Try again
+            </button>
+          </div>
+        )}
+
         {/* Profile Content: View Mode or Edit Mode */}
-        {!isLoading && !isError && (
+        {!isLoading && !isError && profile && (
           <>
             {!isEditing ? (
               <ProfileViewCard
-                profile={activeProfile}
+                profile={profile}
                 email={displayEmail}
                 onEdit={() => setIsEditing(true)}
               />
             ) : (
               <ProfileEditLayout
-                profile={activeProfile}
+                profile={profile}
                 email={displayEmail}
                 onCancel={() => setIsEditing(false)}
                 onSave={() => setIsEditing(false)}

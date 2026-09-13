@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AtSign, Edit2, Mail, MapPin, Phone, User } from 'lucide-react';
 import { getInitials } from '@/shared/lib/initials';
 import type { Profile } from '../lib/profileApi';
@@ -16,6 +16,10 @@ export function ProfileViewCard({ profile, email, onEdit }: ProfileViewCardProps
   // card called out to ui-avatars.com, which produces different results).
   const initials = getInitials(profile.display_name || profile.username);
   const showPhoto = Boolean(profile.photo_url) && !photoFailed;
+
+  useEffect(() => {
+    setPhotoFailed(false);
+  }, [profile.photo_url]);
 
   return (
     <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xs">

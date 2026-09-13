@@ -13,6 +13,10 @@ export type ProfileUpdate = Pick<
 const AVATAR_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
 
 function avatarStoragePath(userId: string, file: Pick<File, 'type'>): string {
+  const normalizedType = file.type.trim().toLowerCase();
+  if (!AVATAR_MIME_TYPES.has(normalizedType)) {
+    throw new Error('Unsupported avatar type. Choose a JPG, PNG, WebP, or GIF image.');
+  }
   if (!AVATAR_MIME_TYPES.has(file.type)) {
     throw new Error('Unsupported avatar type. Choose a JPG, PNG, WebP, or GIF image.');
   }

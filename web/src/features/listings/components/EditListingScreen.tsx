@@ -11,7 +11,6 @@ import { FACILITY_OPTIONS, PET_TYPE_OPTIONS, parseFacilities, petSpeciesLabel } 
 import type { PetSpecies } from '../lib/listingOptions';
 import { partitionListingPhotos } from '../lib/listingPhotos';
 import type { RejectedListingPhoto } from '../lib/listingPhotos';
-import { ListingsNavigation } from './ListingsNavigation';
 
 const labelClassName = 'mb-2 block text-sm font-medium text-gray-700';
 

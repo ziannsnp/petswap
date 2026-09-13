@@ -2,12 +2,12 @@ import { ArrowLeft, Image } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 import { useListing } from '../hooks/useListings';
 import { petSpeciesLabel, parseFacilities } from '../lib/listingOptions';
-import { STATUS_STYLES } from './ListingsScreen';
+import { LISTING_STATUS_STYLES } from '../lib/listingStatus';
 
 export function ListingDetailScreen() {
   const { listingId = '' } = useParams();
   const { data: listing, isPending, isError } = useListing(listingId);
-  const status = listing ? STATUS_STYLES[listing.status] : null;
+  const status = listing ? LISTING_STATUS_STYLES[listing.status] : null;
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900">

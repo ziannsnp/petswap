@@ -90,7 +90,11 @@ export async function updateProfile(values: ProfileUpdate): Promise<Profile> {
  * Replaces the authenticated user's avatar and returns a cache-busted public URL.
  * Persist the result with updateProfile({ photo_url: publicUrl }).
  */
+export const AVATAR_MAX_BYTES = 10_485_760; // 10 MB limit matching Supabase Storage bucket
 export async function uploadAvatar(file: File): Promise<string> {
+  if (file.size > AVATAR_MAX_BYTES) {
+    throw new Error('Avatar image must be smaller than 10 MB.');
+  }
   const supabase = getSupabaseClient();
   const { data: userData, error: userError } = await supabase.auth.getUser();
 

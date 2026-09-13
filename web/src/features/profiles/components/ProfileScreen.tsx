@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuth } from '@/features/auth';
 import { useCurrentProfile } from '../hooks/useProfile';
 import { ProfileViewCard } from './ProfileViewCard';
@@ -35,7 +35,12 @@ export function ProfileScreen() {
   const { data: profile, isLoading, isError, refetch } = useCurrentProfile();
   const [isEditing, setIsEditing] = useState(false);
 
+  useEffect(() => {
+    setIsEditing(false);
+  }, [profile?.id]);
+
   const displayEmail = user?.email ?? '';
+  const isOwner = Boolean(user?.id && profile?.id && user.id === profile.id);
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
@@ -96,15 +101,38 @@ export function ProfileScreen() {
               <ProfileViewCard
                 profile={profile}
                 email={displayEmail}
-                onEdit={() => setIsEditing(true)}
+                onEdit={() => {
+                  if (isOwner) {
+                    setIsEditing(true);
+                  }
+                }}
+                canEdit={isOwner}
               />
-            ) : (
+            ) : isOwner ? (
               <ProfileEditLayout
                 profile={profile}
                 email={displayEmail}
                 onCancel={() => setIsEditing(false)}
                 onSave={() => setIsEditing(false)}
+                canEdit={isOwner}
               />
+            ) : (
+              <div
+                className="rounded-xl border border-red-200 bg-red-50 p-6 text-center text-red-700"
+                role="alert"
+              >
+                <h2 className="font-semibold text-lg mb-1">Unauthorized</h2>
+                <p className="text-sm text-red-600 mb-4">
+                  You cannot edit another user's profile.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setIsEditing(false)}
+                  className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 transition-colors cursor-pointer"
+                >
+                  Back to profile
+                </button>
+              </div>
             )}
           </>
         )}

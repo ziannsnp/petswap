@@ -109,6 +109,25 @@ describe('updateProfile', () => {
 
     await expect(updateProfile({ photo_url: 'https://example.com/avatar.jpg' })).rejects.toBe(error);
   });
+
+  it('rejects an update when targetProfileId does not match the authenticated user', async () => {
+    const { from } = mockClient({ user: { id: 'user-1' } });
+
+    await expect(
+      updateProfile({ display_name: 'Imposter' }, 'user-2'),
+    ).rejects.toThrow("You cannot edit another user's profile.");
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it('allows an update when targetProfileId matches the authenticated user', async () => {
+    const { from, update, updateEq } = mockClient({ user: { id: 'user-1' } });
+    const values = { display_name: 'Self' };
+
+    await expect(updateProfile(values, 'user-1')).resolves.toEqual(profile);
+    expect(from).toHaveBeenCalledWith('profiles');
+    expect(update).toHaveBeenCalledWith(values);
+    expect(updateEq).toHaveBeenCalledWith('id', 'user-1');
+  });
 });
 
 describe('uploadAvatar', () => {

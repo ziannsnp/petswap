@@ -10,6 +10,7 @@ interface ProfileEditLayoutProps {
   email?: string | null;
   onCancel: () => void;
   onSave?: () => void;
+  canEdit?: boolean;
 }
 
 const GENERIC_FAILURE_MESSAGE = "We couldn't save your changes. Please try again.";
@@ -22,7 +23,13 @@ const AVATAR_TOO_LARGE_MESSAGE = 'Photo must be 5MB or smaller.';
 const INVALID_AVATAR_TYPE_MESSAGE = 'Choose a JPG, PNG, or WebP image.';
 const AVATAR_UPLOAD_FAILURE_MESSAGE = "Couldn't upload your photo. Please try again.";
 
-export function ProfileEditLayout({ profile, email, onCancel, onSave }: ProfileEditLayoutProps) {
+export function ProfileEditLayout({
+  profile,
+  email,
+  onCancel,
+  onSave,
+  canEdit = false,
+}: ProfileEditLayoutProps) {
   const [displayName, setDisplayName] = useState(profile.display_name);
   const [phoneNumber, setPhoneNumber] = useState(profile.phone_number ?? '');
   const [location, setLocation] = useState(profile.location ?? '');
@@ -109,6 +116,10 @@ export function ProfileEditLayout({ profile, email, onCancel, onSave }: ProfileE
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
 
+    if (!canEdit) {
+      return;
+    }
+
     const result = validateProfileForm({ displayName, phoneNumber, location });
 
     if (!result.isValid) {
@@ -155,11 +166,20 @@ export function ProfileEditLayout({ profile, email, onCancel, onSave }: ProfileE
     }
   }
 
-  const requestError = updateProfileMutation.isError
-    ? updateProfileMutation.error instanceof Error
-      ? updateProfileMutation.error.message
-      : GENERIC_FAILURE_MESSAGE
-    : null;
+  const rawErrorMessage =
+    updateProfileMutation.error instanceof Error ? updateProfileMutation.error.message : '';
+  const isPermissionDenied =
+    rawErrorMessage.toLowerCase().includes('row-level security') ||
+    rawErrorMessage.toLowerCase().includes('permission denied') ||
+    rawErrorMessage.toLowerCase().includes('cannot edit another');
+
+  const requestError = !canEdit
+    ? 'You do not have permission to edit this profile.'
+    : updateProfileMutation.isError
+      ? isPermissionDenied
+        ? 'You do not have permission to edit this profile.'
+        : rawErrorMessage || GENERIC_FAILURE_MESSAGE
+      : null;
 
   return (
     <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xs">
@@ -209,7 +229,7 @@ export function ProfileEditLayout({ profile, email, onCancel, onSave }: ProfileE
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              disabled={isSaving}
+              disabled={isSaving || !canEdit}
               className="absolute bottom-0 right-0 rounded-full bg-brand-600 p-2 text-white shadow-md hover:bg-brand-700 transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
               aria-label="Change profile photo"
             >
@@ -220,7 +240,7 @@ export function ProfileEditLayout({ profile, email, onCancel, onSave }: ProfileE
               type="file"
               accept="image/jpeg,image/png,image/webp"
               onChange={handleAvatarChange}
-              disabled={isSaving}
+              disabled={isSaving || !canEdit}
               className="hidden"
               aria-label="Upload profile photo"
             />
@@ -234,7 +254,7 @@ export function ProfileEditLayout({ profile, email, onCancel, onSave }: ProfileE
               <button
                 type="button"
                 onClick={handleRemovePhoto}
-                disabled={isSaving}
+                disabled={isSaving || !canEdit}
                 className="mt-2 text-sm font-medium text-red-600 hover:text-red-700 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Remove photo
@@ -361,7 +381,7 @@ export function ProfileEditLayout({ profile, email, onCancel, onSave }: ProfileE
             </button>
             <button
               type="submit"
-              disabled={isSaving}
+              disabled={isSaving || !canEdit}
               className="btn-primary text-center cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isSaving ? 'Saving...' : 'Save changes'}

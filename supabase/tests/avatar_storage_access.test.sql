@@ -69,9 +69,29 @@ select set_config(
 );
 set local role authenticated;
 
-delete from storage.objects
-where bucket_id = 'avatars'
-  and name = '10000000-0000-4000-8000-000000000001/avatar.jpg';
+-- Storage rejects direct SQL deletes to prevent orphaned objects. A real client
+-- must use the Storage API, where the owner-only DELETE policy is enforced.
+do $$
+declare
+  deleted_rows integer;
+begin
+  begin
+    delete from storage.objects
+    where bucket_id = 'avatars'
+      and name = '10000000-0000-4000-8000-000000000001/avatar.jpg';
+
+    get diagnostics deleted_rows = row_count;
+    if deleted_rows <> 0 then
+      raise exception 'avatar access: a user deleted another user''s avatar';
+    end if;
+  exception
+    when raise_exception then
+      if SQLERRM not like 'Direct deletion from storage tables is not allowed%' then
+        raise;
+      end if;
+  end;
+end;
+$$;
 
 reset role;
 do $$

@@ -266,7 +266,7 @@ describe('RegisterScreen', () => {
     await user.click(screen.getByRole('checkbox'));
     await user.click(screen.getByRole('button', { name: /create account/i }));
 
-    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/profile', { replace: true }));
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/', { replace: true }));
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 

@@ -230,7 +230,7 @@ describe('AuthScreen', () => {
     await fillAndSubmit(user, { identifier: 'pat_sitter', password: 'Password1!' });
 
     await waitFor(() => {
-      expect(mockNavigate).toHaveBeenCalledWith('/profile', { replace: true });
+      expect(mockNavigate).toHaveBeenCalledWith('/', { replace: true });
     });
   });
 
@@ -361,13 +361,13 @@ describe('AuthScreen', () => {
     await fillAndSubmit(user, { identifier: 'pat_sitter', password: 'Password1!' });
 
     await waitFor(() => {
-      expect(mockNavigate).toHaveBeenCalledWith('/profile', { replace: true });
+      expect(mockNavigate).toHaveBeenCalledWith('/', { replace: true });
     });
   });
 
   // The character class after the leading slash requires something to follow it, so
   // the bare root path has nothing to match there and needs its own branch in the
-  // pattern -- otherwise a visitor sent here from '/' lands on '/profile' instead.
+  // pattern -- otherwise a visitor sent here from '/' lands on DEFAULT_DESTINATION instead.
   it('returns to the site root when that is the page that sent them here', async () => {
     const user = userEvent.setup();
     locationState = { from: { pathname: '/' } };
@@ -396,7 +396,7 @@ describe('AuthScreen', () => {
     await fillAndSubmit(user, { identifier: 'pat_sitter', password: 'Password1!' });
 
     await waitFor(() => {
-      expect(mockNavigate).toHaveBeenCalledWith('/profile', { replace: true });
+      expect(mockNavigate).toHaveBeenCalledWith('/', { replace: true });
     });
   });
 

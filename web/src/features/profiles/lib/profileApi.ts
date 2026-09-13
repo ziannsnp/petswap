@@ -30,6 +30,8 @@ function cacheBustedPublicUrl(publicUrl: string): string {
 export async function getProfile(): Promise<Profile | null> {
   const { data: userData, error: userError } = await getSupabaseClient().auth.getUser();
 
+  // A real auth failure (expired token, network error) is not the same as "no session" --
+  // folding it into the null case hid it from callers instead of letting them react to it.
   if (userError) {
     throw userError;
   }

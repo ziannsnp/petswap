@@ -1,4 +1,5 @@
 export { BookingsScreen } from './components/BookingsScreen';
+export { RequestBookingForm } from './components/RequestBookingForm';
 export { useCreateBookingRequest, useIncomingBookings, useOutgoingBookings, useUpdateBookingStatus } from './hooks/useBookings';
 export { createBookingRequest, listIncomingBookings, listOutgoingBookings, updateBookingStatus } from './lib/bookingApi';
 export { asUtcDay, assertValidWindow, hasBookingConflict, isValidBookingTransition } from './lib/bookingRules';

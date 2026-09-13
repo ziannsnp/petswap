@@ -61,6 +61,22 @@ begin
 end;
 $$;
 
+do $$
+begin
+  begin
+    insert into storage.objects (id, bucket_id, name)
+    values (
+      '50000000-0000-4000-8000-000000000012',
+      'avatars',
+      'anonymous/avatar.jpg'
+    );
+    raise exception 'avatar access: an anonymous user uploaded an avatar';
+  exception
+    when insufficient_privilege then null;
+  end;
+end;
+$$;
+
 reset role;
 select set_config(
   'request.jwt.claims',
@@ -69,9 +85,45 @@ select set_config(
 );
 set local role authenticated;
 
-delete from storage.objects
-where bucket_id = 'avatars'
-  and name = '10000000-0000-4000-8000-000000000001/avatar.jpg';
+do $$
+declare
+  updated_rows integer;
+begin
+  update storage.objects
+  set metadata = '{"malicious": "update"}'::jsonb
+  where bucket_id = 'avatars'
+    and name = '10000000-0000-4000-8000-000000000001/avatar.jpg';
+
+  get diagnostics updated_rows = row_count;
+  if updated_rows <> 0 then
+    raise exception 'avatar access: a user updated another user''s avatar';
+  end if;
+end;
+$$;
+
+-- Storage rejects direct SQL deletes to prevent orphaned objects. A real client
+-- must use the Storage API, where the owner-only DELETE policy is enforced.
+do $$
+declare
+  deleted_rows integer;
+begin
+  begin
+    delete from storage.objects
+    where bucket_id = 'avatars'
+      and name = '10000000-0000-4000-8000-000000000001/avatar.jpg';
+
+    get diagnostics deleted_rows = row_count;
+    if deleted_rows <> 0 then
+      raise exception 'avatar access: a user deleted another user''s avatar';
+    end if;
+  exception
+    when others then
+      if SQLERRM not like 'Direct deletion from storage tables is not allowed%' then
+        raise;
+      end if;
+  end;
+end;
+$$;
 
 reset role;
 do $$

@@ -13,6 +13,13 @@ on conflict (id) do update set
   file_size_limit = excluded.file_size_limit,
   allowed_mime_types = excluded.allowed_mime_types;
 
+-- These drops make the renamed migration safe for a local environment where the
+-- accidentally-versioned migration was already attempted before the collision was fixed.
+drop policy if exists "Public can read avatars" on storage.objects;
+drop policy if exists "Users upload own avatars" on storage.objects;
+drop policy if exists "Users update own avatars" on storage.objects;
+drop policy if exists "Users delete own avatars" on storage.objects;
+
 create policy "Public can read avatars"
 on storage.objects for select
 using (bucket_id = 'avatars');

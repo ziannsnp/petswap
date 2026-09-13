@@ -1,5 +1,5 @@
 import { getSupabaseClient, type AppSupabaseClient } from '@/shared/lib/supabase';
-import { getProfile, updateProfile, uploadAvatar } from './profileApi';
+import { AVATAR_MAX_BYTES, deleteAvatar, getProfile, updateProfile, uploadAvatar } from './profileApi';
 
 jest.mock('@/shared/lib/supabase', () => ({ getSupabaseClient: jest.fn() }));
 
@@ -95,6 +95,14 @@ describe('updateProfile', () => {
     expect(from).not.toHaveBeenCalled();
   });
 
+  it('propagates an authentication error', async () => {
+    const error = new Error('Auth unavailable');
+    const { from } = mockClient({ userError: error });
+
+    await expect(updateProfile({ location: 'Bangkok' })).rejects.toBe(error);
+    expect(from).not.toHaveBeenCalled();
+  });
+
   it('propagates a profile update error', async () => {
     const error = new Error('Update rejected');
     mockClient({ profileResult: { data: null, error } });
@@ -105,18 +113,21 @@ describe('updateProfile', () => {
 
 describe('uploadAvatar', () => {
   beforeEach(() => jest.clearAllMocks());
+  afterEach(() => jest.restoreAllMocks());
 
   function mockAvatarClient(options: {
     user?: { id: string } | null;
     userError?: Error | null;
     uploadError?: Error | null;
+    removeError?: Error | null;
     publicUrl?: string;
   }) {
     const upload = jest.fn().mockResolvedValue({ error: options.uploadError ?? null });
+    const remove = jest.fn().mockResolvedValue({ error: options.removeError ?? null });
     const getPublicUrl = jest.fn().mockReturnValue({
       data: { publicUrl: options.publicUrl ?? 'https://project.supabase.co/storage/v1/object/public/avatars/user-1/avatar' },
     });
-    const from = jest.fn().mockReturnValue({ upload, getPublicUrl });
+    const from = jest.fn().mockReturnValue({ upload, remove, getPublicUrl });
     const getUser = jest.fn().mockResolvedValue({
       data: { user: options.user === undefined ? { id: 'user-1' } : options.user },
       error: options.userError ?? null,
@@ -126,16 +137,17 @@ describe('uploadAvatar', () => {
       auth: { getUser },
       storage: { from },
     } as unknown as AppSupabaseClient);
-    return { from, upload, getPublicUrl };
+    return { from, upload, remove, getPublicUrl };
   }
 
   const jpegAvatar = { name: 'portrait.jpg', type: 'image/jpeg' } as File;
 
   it('uploads to the current user path, replaces an existing avatar, and returns its public URL', async () => {
     const { from, upload, getPublicUrl } = mockAvatarClient({});
+    jest.spyOn(Date, 'now').mockReturnValue(1_789_876_543_210);
 
     await expect(uploadAvatar(jpegAvatar)).resolves.toBe(
-      'https://project.supabase.co/storage/v1/object/public/avatars/user-1/avatar',
+      'https://project.supabase.co/storage/v1/object/public/avatars/user-1/avatar?v=1789876543210',
     );
     expect(from).toHaveBeenCalledWith('avatars');
     expect(upload).toHaveBeenCalledWith('user-1/avatar', jpegAvatar, {
@@ -150,6 +162,36 @@ describe('uploadAvatar', () => {
 
     await expect(uploadAvatar(jpegAvatar)).rejects.toThrow('You must be signed in to upload an avatar.');
     expect(from).not.toHaveBeenCalled();
+  });
+
+  it('propagates an authentication error', async () => {
+    const error = new Error('Auth unavailable');
+    const { from } = mockAvatarClient({ userError: error });
+
+    await expect(uploadAvatar(jpegAvatar)).rejects.toBe(error);
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it('accepts uppercase MIME types', async () => {
+    const { upload } = mockAvatarClient({});
+    const uppercaseJpeg = { name: 'portrait.jpg', type: 'image/JPEG', size: 1024 } as File;
+
+    await expect(uploadAvatar(uppercaseJpeg)).resolves.toContain('/avatars/user-1/avatar?v=');
+    expect(upload).toHaveBeenCalledWith('user-1/avatar', uppercaseJpeg, {
+      contentType: 'image/JPEG',
+      upsert: true,
+    });
+  });
+
+  it('rejects a file exceeding the 10 MB Storage limit before authenticating', async () => {
+    const oversizedJpeg = {
+      name: 'portrait.jpg',
+      type: 'image/jpeg',
+      size: AVATAR_MAX_BYTES + 1,
+    } as File;
+
+    await expect(uploadAvatar(oversizedJpeg)).rejects.toThrow('Avatar image must be smaller than 10 MB.');
+    expect(mockedGetSupabaseClient).not.toHaveBeenCalled();
   });
 
   it('rejects unsupported image types before uploading', async () => {
@@ -167,5 +209,50 @@ describe('uploadAvatar', () => {
 
     await expect(uploadAvatar(jpegAvatar)).rejects.toBe(error);
     expect(getPublicUrl).not.toHaveBeenCalled();
+  });
+});
+
+describe('deleteAvatar', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  function mockDeleteAvatarClient(options: {
+    user?: { id: string } | null;
+    userError?: Error | null;
+    removeError?: Error | null;
+  }) {
+    const remove = jest.fn().mockResolvedValue({ error: options.removeError ?? null });
+    const from = jest.fn().mockReturnValue({ remove });
+    const getUser = jest.fn().mockResolvedValue({
+      data: { user: options.user === undefined ? { id: 'user-1' } : options.user },
+      error: options.userError ?? null,
+    });
+
+    mockedGetSupabaseClient.mockReturnValue({
+      auth: { getUser },
+      storage: { from },
+    } as unknown as AppSupabaseClient);
+    return { from, remove };
+  }
+
+  it('removes the current user avatar through the Storage API', async () => {
+    const { from, remove } = mockDeleteAvatarClient({});
+
+    await expect(deleteAvatar()).resolves.toBeUndefined();
+    expect(from).toHaveBeenCalledWith('avatars');
+    expect(remove).toHaveBeenCalledWith(['user-1/avatar']);
+  });
+
+  it('rejects a delete without an authenticated user', async () => {
+    const { from } = mockDeleteAvatarClient({ user: null });
+
+    await expect(deleteAvatar()).rejects.toThrow('You must be signed in to delete an avatar.');
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it('propagates a Storage API delete error', async () => {
+    const error = new Error('Storage unavailable');
+    mockDeleteAvatarClient({ removeError: error });
+
+    await expect(deleteAvatar()).rejects.toBe(error);
   });
 });

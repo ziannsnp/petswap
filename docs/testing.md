@@ -101,7 +101,9 @@ npx supabase db reset
 
 Then inspect the local database in Studio at `http://127.0.0.1:54323` and verify the actor cases listed in [environments](environments.md).
 
-The SQL contract checks in `supabase/tests/` now run automatically: `database_contract.sql` (schema catalogue), `booking_rules.test.sql` (overlap-rule behaviour), `listing_rules.test.sql` (required accepted-pet behaviour), `listing_facility_migration.test.sql` (legacy facility-label backfill), `listing_photo_access.test.sql` (draft and published photo access), and `listing_edit_rules.test.sql` (valid, invalid, unauthorized, and photo-order edit behaviour). Run them locally after a reset, or let [`db-contract.yml`](ci-cd.md#database-contract-workflow) run them on every change under `supabase/`. They still read as a review checklist for a migration; see [`supabase/tests/README.md`](../supabase/tests/README.md).
+The SQL contract checks in `supabase/tests/` now run automatically: `database_contract.sql` (schema catalogue), `booking_rules.test.sql` (overlap-rule behaviour), `listing_rules.test.sql` (required accepted-pet behaviour), `listing_facility_migration.test.sql` (legacy facility-label backfill), `listing_photo_access.test.sql` (draft and published photo access), `listing_edit_rules.test.sql` (valid, invalid, unauthorized, and photo-order edit behaviour), and `avatar_storage_access.test.sql` (public avatar reads and owner-only writes). Run them locally after a reset, or let [`db-contract.yml`](ci-cd.md#database-contract-workflow) run them on every change under `supabase/`. They still read as a review checklist for a migration; see [`supabase/tests/README.md`](../supabase/tests/README.md). Actor-specific RLS cases not covered there still need Studio or JWT impersonation until the Playwright journey exists.
+
+The `avatars` bucket is public-read for profile photos; its Storage policies still limit uploads, replacements, and deletes to the authenticated user's own folder.
 
 The booking overlap rule is verified at both levels:
 
@@ -110,7 +112,9 @@ The booking overlap rule is verified at both levels:
 
 Playwright is wired up: [`web/playwright.config.ts`](../web/playwright.config.ts) starts `npm run dev` and runs `web/e2e/` on desktop and mobile Chromium. `e2e/smoke.spec.ts` covers the public shell (no auth or Supabase needed) and runs on every `web/**` change via the non-required [`e2e-smoke.yml`](ci-cd.md#e2e-smoke-workflow) workflow.
 
-`web/e2e/booking-flow.spec.ts` — the login → request → confirm journey — stays skipped until its screens are on `main`; the file itself documents how to enable it. Before a demo or release, run the [regression checklist](templates/regression-checklist.md) on desktop and mobile and link the filled copy from the release-readiness PR.
+`web/e2e/booking-flow.spec.ts` — the login → request → confirm journey — runs against the local Supabase stack (`npx supabase db reset`, then `npm run test:e2e`); it needs the `sign-in` Edge Function's local origin allowlist populated (`cp supabase/functions/.env.example supabase/functions/.env`) or username sign-in returns a 403. Before a demo or release, run the [regression checklist](templates/regression-checklist.md) on desktop and mobile and link the filled copy from the release-readiness PR.
+
+`web/e2e/navbar-account-menu.spec.ts` covers the account-menu dropdown and mobile-menu logout flow; it signs in as `alex@petswap.test`, so it needs the local Supabase stack (`supabase start`) the same way the manual journey below does. It is not part of the required `Quality` gate or the `e2e-smoke.yml` workflow (both only run `smoke.spec.ts`), so run it locally after touching the navbar or logout flow: `npm run test:e2e -- navbar-account-menu.spec.ts`.
 
 ## Manual listing journey
 

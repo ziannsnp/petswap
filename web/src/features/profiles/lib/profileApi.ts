@@ -4,7 +4,10 @@ import type { Database } from '@/shared/types/database.types';
 export type Profile = Database['public']['Tables']['profiles']['Row'];
 export type ProfileUpdate = Pick<
   Database['public']['Tables']['profiles']['Update'],
-  'display_name' | 'username' | 'phone_number' | 'location' | 'photo_url'
+export type ProfileUpdate = Pick<
+  Database['public']['Tables']['profiles']['Update'],
+  'display_name' | 'phone_number' | 'location' | 'photo_url'
+>;
 >;
 
 const AVATAR_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);

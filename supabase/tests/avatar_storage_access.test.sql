@@ -85,7 +85,7 @@ begin
       raise exception 'avatar access: a user deleted another user''s avatar';
     end if;
   exception
-    when raise_exception then
+    when others then
       if SQLERRM not like 'Direct deletion from storage tables is not allowed%' then
         raise;
       end if;

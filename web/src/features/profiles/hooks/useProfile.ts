@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { getCurrentProfile, updateProfile, type ProfileUpdate } from '../lib/profileApi';
+import { getCurrentProfile, updateProfile, uploadAvatar, type ProfileUpdate } from '../lib/profileApi';
 
 export const profileKeys = {
   all: ['profiles'] as const,
@@ -23,5 +23,13 @@ export function useUpdateProfile() {
     onSuccess: (profile) => {
       queryClient.setQueryData(profileKeys.current(), profile);
     },
+  });
+}
+
+// Returns the new avatar's public URL; the caller persists it via
+// useUpdateProfile so both fields save in a single profile update.
+export function useUploadAvatar() {
+  return useMutation({
+    mutationFn: (file: File) => uploadAvatar(file),
   });
 }

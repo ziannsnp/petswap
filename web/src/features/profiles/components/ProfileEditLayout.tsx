@@ -1,6 +1,6 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import { ArrowLeft, AtSign, Camera, Mail } from 'lucide-react';
-import { useUpdateProfile } from '../hooks/useProfile';
+import { useUpdateProfile, useUploadAvatar } from '../hooks/useProfile';
 import { validateProfileForm, type ProfileValidationErrors } from '../lib/profileValidation';
 import type { Profile } from '../lib/profileApi';
 
@@ -12,17 +12,45 @@ interface ProfileEditLayoutProps {
 }
 
 const GENERIC_FAILURE_MESSAGE = "We couldn't save your changes. Please try again.";
+const MAX_AVATAR_SIZE_BYTES = 5 * 1024 * 1024;
+// Deliberately narrower than profileApi's own AVATAR_MIME_TYPES (which also
+// accepts GIF for whatever was already uploaded before this UI existed): the
+// upload UI itself only ever offers these three, per the approved spec.
+const ACCEPTED_AVATAR_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+const AVATAR_TOO_LARGE_MESSAGE = 'Photo must be 5MB or smaller.';
+const INVALID_AVATAR_TYPE_MESSAGE = 'Choose a JPG, PNG, or WebP image.';
+const AVATAR_UPLOAD_FAILURE_MESSAGE = "Couldn't upload your photo. Please try again.";
 
 export function ProfileEditLayout({ profile, email, onCancel, onSave }: ProfileEditLayoutProps) {
   const [displayName, setDisplayName] = useState(profile.display_name);
   const [phoneNumber, setPhoneNumber] = useState(profile.phone_number ?? '');
   const [location, setLocation] = useState(profile.location ?? '');
   const [fieldErrors, setFieldErrors] = useState<ProfileValidationErrors>({});
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [avatarPreviewUrl, setAvatarPreviewUrl] = useState<string | null>(null);
+  const [removePhoto, setRemovePhoto] = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
   const updateProfileMutation = useUpdateProfile();
+  const uploadAvatarMutation = useUploadAvatar();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Revokes the previous blob URL whenever it's replaced, and on unmount.
+  useEffect(() => {
+    if (!avatarPreviewUrl) {
+      return;
+    }
+    return () => {
+      URL.revokeObjectURL(avatarPreviewUrl);
+    };
+  }, [avatarPreviewUrl]);
 
   const avatarFallback = `https://ui-avatars.com/api/?name=${encodeURIComponent(
     profile.display_name || profile.username || 'User',
   )}&background=0d9488&color=fff&size=160`;
+
+  const avatarSrc = avatarPreviewUrl ?? (removePhoto ? avatarFallback : profile.photo_url || avatarFallback);
+  const canRemovePhoto = !removePhoto && Boolean(avatarFile || profile.photo_url);
+  const isSaving = uploadAvatarMutation.isPending || updateProfileMutation.isPending;
 
   function clearFieldError(field: keyof ProfileValidationErrors) {
     setFieldErrors((previous) => {
@@ -35,15 +63,45 @@ export function ProfileEditLayout({ profile, email, onCancel, onSave }: ProfileE
     });
   }
 
+  function handleAvatarChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    // Reset now so choosing the same file again still fires this handler.
+    event.target.value = '';
+
+    if (!file) {
+      return;
+    }
+
+    if (file.size > MAX_AVATAR_SIZE_BYTES) {
+      setPhotoError(AVATAR_TOO_LARGE_MESSAGE);
+      return;
+    }
+
+    if (!ACCEPTED_AVATAR_TYPES.has(file.type)) {
+      setPhotoError(INVALID_AVATAR_TYPE_MESSAGE);
+      return;
+    }
+
+    setPhotoError(null);
+    setAvatarFile(file);
+    setAvatarPreviewUrl(URL.createObjectURL(file));
+    setRemovePhoto(false);
+  }
+
+  function handleRemovePhoto() {
+    setAvatarFile(null);
+    setAvatarPreviewUrl(null);
+    setRemovePhoto(true);
+    setPhotoError(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  }
+
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
 
-    const result = validateProfileForm({
-      displayName,
-      phoneNumber,
-      location,
-      photoUrl: profile.photo_url,
-    });
+    const result = validateProfileForm({ displayName, phoneNumber, location });
 
     if (!result.isValid) {
       setFieldErrors(result.errors);
@@ -51,13 +109,27 @@ export function ProfileEditLayout({ profile, email, onCancel, onSave }: ProfileE
     }
 
     setFieldErrors({});
+    setPhotoError(null);
+
+    let photoUrl = profile.photo_url;
+
+    if (avatarFile) {
+      try {
+        photoUrl = await uploadAvatarMutation.mutateAsync(avatarFile);
+      } catch (err) {
+        setPhotoError(err instanceof Error ? err.message : AVATAR_UPLOAD_FAILURE_MESSAGE);
+        return;
+      }
+    } else if (removePhoto) {
+      photoUrl = null;
+    }
 
     try {
       await updateProfileMutation.mutateAsync({
         display_name: result.sanitizedValues.displayName,
         phone_number: result.sanitizedValues.phoneNumber,
         location: result.sanitizedValues.location,
-        photo_url: result.sanitizedValues.photoUrl,
+        photo_url: photoUrl,
       });
       onSave?.();
     } catch {
@@ -80,7 +152,7 @@ export function ProfileEditLayout({ profile, email, onCancel, onSave }: ProfileE
             <button
               type="button"
               onClick={onCancel}
-              disabled={updateProfileMutation.isPending}
+              disabled={isSaving}
               className="inline-flex items-center justify-center rounded-lg p-1.5 text-gray-500 hover:bg-gray-200/70 hover:text-gray-900 transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
               aria-label="Back to profile view"
             >
@@ -99,25 +171,50 @@ export function ProfileEditLayout({ profile, email, onCancel, onSave }: ProfileE
         <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6 pb-6 border-b border-gray-100">
           <div className="relative group">
             <img
-              src={profile.photo_url || avatarFallback}
+              src={avatarSrc}
               alt={profile.display_name}
-              className="h-28 w-28 rounded-full border-2 border-gray-200 bg-gray-50 object-cover shadow-xs"
+              className="h-28 w-28 rounded-full border-2 border-gray-200 bg-gray-50 object-cover shadow-xs cursor-pointer"
+              onClick={() => fileInputRef.current?.click()}
               onError={(e) => {
                 (e.currentTarget as HTMLImageElement).src = avatarFallback;
               }}
             />
-            <div
-              className="absolute bottom-0 right-0 rounded-full bg-brand-600 p-2 text-white shadow-md hover:bg-brand-700 transition-colors"
-              title="Change profile photo"
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="absolute bottom-0 right-0 rounded-full bg-brand-600 p-2 text-white shadow-md hover:bg-brand-700 transition-colors cursor-pointer"
+              aria-label="Change profile photo"
             >
               <Camera className="h-4 w-4" aria-hidden="true" />
-            </div>
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              onChange={handleAvatarChange}
+              className="hidden"
+              aria-label="Upload profile photo"
+            />
           </div>
           <div className="text-center sm:text-left">
             <h2 className="text-base font-semibold text-gray-900">Profile Photo</h2>
             <p className="text-sm text-gray-500 mt-1 max-w-sm">
-              Your photo appears on your profile and booking requests. Recommended size: 400x400px (JPG, PNG, WebP).
+              Your photo appears on your profile and booking requests. JPG, PNG, or WebP, up to 5MB.
             </p>
+            {canRemovePhoto && (
+              <button
+                type="button"
+                onClick={handleRemovePhoto}
+                className="mt-2 text-sm font-medium text-red-600 hover:text-red-700 cursor-pointer"
+              >
+                Remove photo
+              </button>
+            )}
+            {photoError && (
+              <p role="alert" className="form-error mt-2">
+                {photoError}
+              </p>
+            )}
           </div>
         </div>
 
@@ -224,17 +321,17 @@ export function ProfileEditLayout({ profile, email, onCancel, onSave }: ProfileE
             <button
               type="button"
               onClick={onCancel}
-              disabled={updateProfileMutation.isPending}
+              disabled={isSaving}
               className="btn-secondary text-center cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               type="submit"
-              disabled={updateProfileMutation.isPending}
+              disabled={isSaving}
               className="btn-primary text-center cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {updateProfileMutation.isPending ? 'Saving...' : 'Save changes'}
+              {isSaving ? 'Saving...' : 'Save changes'}
             </button>
           </div>
         </div>

@@ -15,6 +15,10 @@ jest.mock('../hooks/useProfile', () => ({
     isError: false,
     error: null,
   })),
+  useUploadAvatar: jest.fn(() => ({
+    mutateAsync: jest.fn(),
+    isPending: false,
+  })),
 }));
 
 jest.mock('@/features/auth', () => ({

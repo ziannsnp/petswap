@@ -27,6 +27,16 @@ begin
       message = 'Only the listing owner can update a listing.';
   end if;
 
+  if exists (
+    select 1
+    from public.listings
+    where id = target_listing_id
+      and (status = 'deleted' or deleted_at is not null)
+  ) then
+    raise insufficient_privilege using
+      message = 'Deleted listings cannot be updated.';
+  end if;
+
   if retained_image_ids is null or new_images is null or ordered_image_ids is null
     or jsonb_typeof(new_images) <> 'array' then
     raise invalid_parameter_value using

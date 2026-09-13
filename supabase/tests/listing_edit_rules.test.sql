@@ -480,4 +480,45 @@ end;
 $$;
 
 reset role;
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"10000000-0000-4000-8000-000000000001","role":"authenticated"}',
+  true
+);
+set local role authenticated;
+
+update public.listings
+set status = 'deleted', deleted_at = '2026-09-13T00:00:00Z'::timestamptz
+where id = '30000000-0000-4000-8000-000000000002';
+
+do $$
+declare
+  rejected boolean := false;
+begin
+  begin
+    perform public.update_listing_with_images(
+      '30000000-0000-4000-8000-000000000002',
+      'Deleted listing update',
+      'Chiang Mai',
+      'Should not persist.',
+      2,
+      array['dog']::public.pet_species[],
+      null,
+      'published',
+      null,
+      array[]::uuid[],
+      '[]'::jsonb,
+      array[]::uuid[]
+    );
+  exception
+    when insufficient_privilege then rejected := true;
+  end;
+
+  if not rejected then
+    raise exception 'listing edit: owner updated a soft-deleted listing';
+  end if;
+end;
+$$;
+
+reset role;
 rollback;

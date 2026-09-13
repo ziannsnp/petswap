@@ -685,6 +685,55 @@ describe('updateListing', () => {
     }));
   });
 
+  it('preserves mixed existing and new photo order in the owner RPC payload', async () => {
+    const existingImage = {
+      id: 'img-existing',
+      listing_id: 'listing-1',
+      storage_path: 'listing-1/existing.jpg',
+      alt_text: null,
+      sort_order: 0,
+      created_at: '2026-09-07T00:00:00.000Z',
+    };
+    const listing = {
+      id: 'listing-1', owner_id: 'owner-123', title: 'Old home', location: 'Chiang Mai',
+      description: 'Old description.', capacity: 1, accepted_pet_types: ['dog'], facilities: null,
+      status: 'draft', deleted_at: null, published_at: null,
+      created_at: '2026-09-07T00:00:00.000Z', updated_at: '2026-09-07T00:00:00.000Z',
+      listing_images: [existingImage],
+    };
+    const savedListing = { ...listing, listing_images: [existingImage] };
+    const maybeSingle = jest.fn().mockResolvedValue({ data: listing, error: null });
+    const reloadSingle = jest.fn().mockResolvedValue({ data: savedListing, error: null });
+    const select = jest.fn()
+      .mockReturnValueOnce({ eq: jest.fn().mockReturnValue({ maybeSingle }) })
+      .mockReturnValueOnce({ eq: jest.fn().mockReturnValue({ single: reloadSingle }) });
+    const upload = jest.fn().mockResolvedValue({ error: null });
+    const storageFrom = jest.fn().mockReturnValue({
+      upload,
+      createSignedUrls: jest.fn().mockResolvedValue({
+        data: [{ path: existingImage.storage_path, signedUrl: 'https://example.test/existing.jpg' }],
+        error: null,
+      }),
+    });
+    const rpc = jest.fn().mockResolvedValue({ error: null });
+    const from = jest.fn().mockReturnValue({ select });
+    const getUser = jest.fn().mockResolvedValue({ data: { user: { id: 'owner-123' } }, error: null });
+    mockedGetSupabaseClient.mockReturnValue({ auth: { getUser }, from, rpc, storage: { from: storageFrom } } as never);
+
+    const newPhoto = new File(['photo'], 'new.jpg', { type: 'image/jpeg' });
+    await updateListing('listing-1', {
+      ...values,
+      photos: [{ kind: 'new', file: newPhoto }, { kind: 'existing', id: 'img-existing' }],
+    });
+
+    const rpcPayload = rpc.mock.calls[0][1];
+    expect(rpcPayload.ordered_image_ids).toHaveLength(2);
+    expect(rpcPayload.ordered_image_ids).toEqual([
+      rpcPayload.new_images[0].id,
+      'img-existing',
+    ]);
+  });
+
   it('rejects a listing owned by another user before uploading or updating', async () => {
     const listing = {
       id: 'listing-1',

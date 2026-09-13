@@ -145,7 +145,7 @@ function EditListingForm({ listing }: EditListingFormProps) {
     if (Object.keys(validateListingForm(values)).length > 0) return;
 
     try {
-      await updateListingMutation.mutateAsync({
+      const savedListing = await updateListingMutation.mutateAsync({
         listingId: listing.id,
         values: {
           title,
@@ -160,6 +160,16 @@ function EditListingForm({ listing }: EditListingFormProps) {
           publicationMode: listing.status === 'published' ? 'published' : 'draft',
         },
       });
+      setTitle(savedListing.title);
+      setLocation(savedListing.location);
+      setDescription(savedListing.description);
+      setCapacity(savedListing.capacity);
+      setAcceptedPetTypes(savedListing.accepted_pet_types);
+      setFacilities(parseFacilities(savedListing.facilities));
+      setPhotos(savedListing.listing_images.map((image) => ({ kind: 'existing', image })));
+      previewUrls.current.forEach((url) => URL.revokeObjectURL(url));
+      previewUrls.current = [];
+      setIsPristine(true);
       setIsChecked(true);
     } catch {
       setIsChecked(false);

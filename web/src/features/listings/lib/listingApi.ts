@@ -205,10 +205,14 @@ export async function updateListing(listingId: string, values: UpdateListingValu
 
   const uploadedPaths: string[] = [];
   const newImages: Array<{ id: string; storage_path: string; alt_text: null }> = [];
+  const orderedImageIds: string[] = [];
   let databaseCommitted = false;
   try {
     for (const photo of values.photos) {
-      if (photo.kind !== 'new') continue;
+      if (photo.kind === 'existing') {
+        orderedImageIds.push(photo.id);
+        continue;
+      }
 
       const storagePath = photoStoragePath(listingId, photo.file);
       const { error: uploadError } = await supabase.storage
@@ -217,17 +221,15 @@ export async function updateListing(listingId: string, values: UpdateListingValu
       if (uploadError) throw uploadError;
 
       uploadedPaths.push(storagePath);
-      newImages.push({ id: crypto.randomUUID(), storage_path: storagePath, alt_text: null });
+      const imageId = crypto.randomUUID();
+      newImages.push({ id: imageId, storage_path: storagePath, alt_text: null });
+      orderedImageIds.push(imageId);
     }
 
     const removedImageIds = currentImages
       .filter((image) => !requestedExistingIds.includes(image.id))
       .map((image) => image.id);
 
-    const orderedImageIds = [
-      ...requestedExistingIds,
-      ...newImages.map((image) => image.id),
-    ];
     const { error: updateError } = await supabase.rpc('update_listing_with_images', {
       target_listing_id: listingId,
       new_title: values.title.trim(),

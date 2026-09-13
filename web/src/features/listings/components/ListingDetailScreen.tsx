@@ -3,7 +3,6 @@ import { Link, useParams } from 'react-router-dom';
 import { RequestBookingForm } from '@/features/bookings';
 import { useListing } from '../hooks/useListings';
 import { petSpeciesLabel, parseFacilities } from '../lib/listingOptions';
-import { ListingsNavigation } from './ListingsNavigation';
 import { LISTING_STATUS_STYLES } from '../lib/listingStatus';
 
 export function ListingDetailScreen() {
@@ -13,7 +12,6 @@ export function ListingDetailScreen() {
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900">
-      <ListingsNavigation />
       <main className="page-container">
         <Link className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-brand-700" to="/listings">
           <ArrowLeft className="h-4 w-4" aria-hidden="true" /> Back to my listings

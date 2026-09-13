@@ -63,6 +63,7 @@ export function LogoutConfirmDialog({
         onClose();
       } else {
         await signOut();
+        onClose();
         void navigate(redirectTo, { replace: true });
       }
     } catch (err) {

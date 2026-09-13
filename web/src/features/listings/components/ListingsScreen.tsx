@@ -1,12 +1,15 @@
 import { Home, Image, Pencil, Plus } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
-import { useMyListings } from '../hooks/useListings';
+import { useMyListings, useSetListingPublicationStatus } from '../hooks/useListings';
 import { petSpeciesLabel } from '../lib/listingOptions';
 import { LISTING_STATUS_STYLES } from '../lib/listingStatus';
 import type { Listing } from '../lib/listingApi';
 
 function ListingCard({ listing }: { listing: Listing }) {
   const status = LISTING_STATUS_STYLES[listing.status];
+  const setPublicationStatus = useSetListingPublicationStatus();
+  const isPublished = listing.status === 'published';
+  const publicationActionLabel = isPublished ? 'Unpublish' : 'Publish';
 
   // The preview link and the edit link are siblings: an anchor cannot contain another
   // anchor, so the card body is one link and the owner action sits in its own footer.
@@ -43,15 +46,36 @@ function ListingCard({ listing }: { listing: Listing }) {
           </div>
         </div>
       </Link>
-      <div className="flex justify-end border-t border-gray-100 px-4 py-3">
-        <Link
-          className="btn-secondary inline-flex items-center gap-1.5 text-sm"
-          to={`/listings/${listing.id}/edit`}
-          aria-label={`Edit listing ${listing.id}`}
-        >
-          <Pencil className="h-4 w-4" aria-hidden="true" />
-          Edit
-        </Link>
+      <div className="border-t border-gray-100 px-4 py-3">
+        <div className="flex items-center justify-between gap-2">
+          <button
+            className="btn-secondary text-sm disabled:cursor-not-allowed disabled:opacity-60"
+            type="button"
+            onClick={() => setPublicationStatus.mutate({
+              listingId: listing.id,
+              status: isPublished ? 'draft' : 'published',
+            })}
+            disabled={setPublicationStatus.isPending}
+            aria-label={`${publicationActionLabel} listing ${listing.id}`}
+          >
+            {setPublicationStatus.isPending
+              ? (isPublished ? 'Unpublishing...' : 'Publishing...')
+              : publicationActionLabel}
+          </button>
+          <Link
+            className="btn-secondary inline-flex items-center gap-1.5 text-sm"
+            to={`/listings/${listing.id}/edit`}
+            aria-label={`Edit listing ${listing.id}`}
+          >
+            <Pencil className="h-4 w-4" aria-hidden="true" />
+            Edit
+          </Link>
+        </div>
+        {setPublicationStatus.isError && (
+          <p className="mt-2 text-xs text-red-700" role="alert">
+            {`We could not ${publicationActionLabel.toLowerCase()} this listing. Check your connection and try again.`}
+          </p>
+        )}
       </div>
     </article>
   );

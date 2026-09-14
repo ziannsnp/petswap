@@ -350,6 +350,22 @@ export async function getListing(listingId: string): Promise<Listing> {
   return addSignedPhotoUrls({ ...data, listing_images: data.listing_images ?? [] });
 }
 
+export async function setListingPublicationStatus(
+  listingId: string,
+  status: ListingPublicationMode,
+): Promise<Listing> {
+  const { data, error } = await getSupabaseClient()
+    .from('listings')
+    .update({ status })
+    .eq('id', listingId)
+    .select('*, listing_images(*)')
+    .single();
+
+  if (error) throw error;
+
+  return addSignedPhotoUrls({ ...data, listing_images: data.listing_images ?? [] });
+}
+
 export async function listMyListings(): Promise<Listing[]> {
   const supabase = getSupabaseClient();
   const { data: userData, error: userError } = await supabase.auth.getUser();

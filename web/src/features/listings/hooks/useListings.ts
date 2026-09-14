@@ -1,6 +1,7 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/features/auth';
-import { getListing, listMyListings, listPublishedListings } from '../lib/listingApi';
+import { getListing, listMyListings, listPublishedListings, setListingPublicationStatus } from '../lib/listingApi';
+import type { ListingPublicationMode } from '../lib/listingApi';
 
 export const listingKeys = {
   all: ['listings'] as const,
@@ -36,5 +37,20 @@ export function useListing(listingId: string) {
     queryKey: listingKeys.detail(listingId, user?.id ?? 'public'),
     queryFn: () => getListing(listingId),
     enabled: !isLoading && Boolean(listingId),
+  });
+}
+
+/** Toggles a listing between draft and published: unpublishing hides it from search and,
+ * via RLS, from every non-owner's detail view, which is what stops new booking requests. */
+export function useSetListingPublicationStatus() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ listingId, status }: { listingId: string; status: ListingPublicationMode }) => (
+      setListingPublicationStatus(listingId, status)
+    ),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: listingKeys.all });
+    },
   });
 }

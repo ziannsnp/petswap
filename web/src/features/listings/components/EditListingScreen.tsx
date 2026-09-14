@@ -1,13 +1,16 @@
-import { useRef, useState } from 'react';
-import type { FormEvent } from 'react';
-import { ArrowLeft, Home, Image } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import type { ChangeEvent, FormEvent } from 'react';
+import { ArrowDown, ArrowLeft, ArrowUp, Home, Image, ImagePlus, Trash2 } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMyListings } from '../hooks/useListings';
+import { useUpdateListing } from '../hooks/useUpdateListing';
 import type { Listing } from '../lib/listingApi';
 import { validateListingForm } from '../lib/listingForm';
 import type { ListingFormErrors } from '../lib/listingForm';
 import { FACILITY_OPTIONS, PET_TYPE_OPTIONS, parseFacilities, petSpeciesLabel } from '../lib/listingOptions';
 import type { PetSpecies } from '../lib/listingOptions';
+import { partitionListingPhotos } from '../lib/listingPhotos';
+import type { RejectedListingPhoto } from '../lib/listingPhotos';
 
 const labelClassName = 'mb-2 block text-sm font-medium text-gray-700';
 
@@ -23,6 +26,10 @@ interface EditListingFormProps {
   listing: Listing;
 }
 
+type EditablePhoto =
+  | { kind: 'existing'; image: Listing['listing_images'][number] }
+  | { kind: 'new'; file: File; previewUrl: string };
+
 function EditListingForm({ listing }: EditListingFormProps) {
   const navigate = useNavigate();
   const [title, setTitle] = useState(listing.title);
@@ -31,9 +38,13 @@ function EditListingForm({ listing }: EditListingFormProps) {
   const [capacity, setCapacity] = useState<number | ''>(listing.capacity);
   const [acceptedPetTypes, setAcceptedPetTypes] = useState<PetSpecies[]>(listing.accepted_pet_types);
   const [facilities, setFacilities] = useState<string[]>(() => parseFacilities(listing.facilities));
+  const [photos, setPhotos] = useState<EditablePhoto[]>(() => listing.listing_images.map((image) => ({ kind: 'existing', image })));
+  const [rejectedPhotos, setRejectedPhotos] = useState<RejectedListingPhoto[]>([]);
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [isChecked, setIsChecked] = useState(false);
   const [isPristine, setIsPristine] = useState(true);
+  const updateListingMutation = useUpdateListing();
+  const previewUrls = useRef<string[]>([]);
 
   // The list query is served from cache first and refetched in the background, so the
   // listing prop can change after this form has mounted without its id changing. Follow
@@ -48,7 +59,12 @@ function EditListingForm({ listing }: EditListingFormProps) {
     setCapacity(listing.capacity);
     setAcceptedPetTypes(listing.accepted_pet_types);
     setFacilities(parseFacilities(listing.facilities));
+    setPhotos(listing.listing_images.map((image) => ({ kind: 'existing', image })));
   }
+
+  useEffect(() => () => {
+    previewUrls.current.forEach((url) => URL.revokeObjectURL(url));
+  }, []);
 
   const edit = <T,>(update: (value: T) => void) => (value: T) => {
     setIsPristine(false);
@@ -60,6 +76,50 @@ function EditListingForm({ listing }: EditListingFormProps) {
   const editCapacity = edit(setCapacity);
   const editAcceptedPetTypes = edit(setAcceptedPetTypes);
   const editFacilities = edit(setFacilities);
+
+  const handlePhotoSelection = (event: ChangeEvent<HTMLInputElement>) => {
+    const { accepted, rejected } = partitionListingPhotos(
+      Array.from(event.target.files ?? []),
+      photos.length,
+    );
+    setRejectedPhotos(rejected);
+    if (accepted.length > 0) {
+      setIsPristine(false);
+      setPhotos((current) => [
+        ...current,
+        ...accepted.map((file) => {
+          const previewUrl = URL.createObjectURL(file);
+          previewUrls.current.push(previewUrl);
+          return { kind: 'new' as const, file, previewUrl };
+        }),
+      ]);
+    }
+    event.target.value = '';
+  };
+
+  const removePhoto = (index: number) => {
+    setIsPristine(false);
+    setPhotos((current) => {
+      const photo = current[index];
+      if (photo?.kind === 'new') {
+        URL.revokeObjectURL(photo.previewUrl);
+        previewUrls.current = previewUrls.current.filter((url) => url !== photo.previewUrl);
+      }
+      return current.filter((_, photoIndex) => photoIndex !== index);
+    });
+    setRejectedPhotos((current) => current.filter((rejected) => rejected.kind !== 'capacity'));
+  };
+
+  const movePhoto = (index: number, direction: -1 | 1) => {
+    const targetIndex = index + direction;
+    if (targetIndex < 0 || targetIndex >= photos.length) return;
+    setIsPristine(false);
+    setPhotos((current) => {
+      const next = [...current];
+      [next[index], next[targetIndex]] = [next[targetIndex], next[index]];
+      return next;
+    });
+  };
 
   const values = { title, location, description, capacity, acceptedPetTypes };
   const errors: ListingFormErrors = hasSubmitted ? validateListingForm(values) : {};
@@ -77,15 +137,43 @@ function EditListingForm({ listing }: EditListingFormProps) {
   const facilityOptions: readonly string[] = FACILITY_OPTIONS;
   const otherFacilities = facilities.filter((facility) => !facilityOptions.includes(facility));
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setHasSubmitted(true);
     setIsChecked(false);
 
     if (Object.keys(validateListingForm(values)).length > 0) return;
 
-    // TODO(T-2.2.2): call the owner-authorised update mutation once that API exists.
-    setIsChecked(true);
+    try {
+      const savedListing = await updateListingMutation.mutateAsync({
+        listingId: listing.id,
+        values: {
+          title,
+          location,
+          description,
+          capacity: capacity as number,
+          acceptedPetTypes,
+          facilities,
+          photos: photos.map((photo) => photo.kind === 'existing'
+            ? { kind: 'existing', id: photo.image.id }
+            : { kind: 'new', file: photo.file }),
+          publicationMode: listing.status === 'published' ? 'published' : 'draft',
+        },
+      });
+      setTitle(savedListing.title);
+      setLocation(savedListing.location);
+      setDescription(savedListing.description);
+      setCapacity(savedListing.capacity);
+      setAcceptedPetTypes(savedListing.accepted_pet_types);
+      setFacilities(parseFacilities(savedListing.facilities));
+      setPhotos(savedListing.listing_images.map((image) => ({ kind: 'existing', image })));
+      previewUrls.current.forEach((url) => URL.revokeObjectURL(url));
+      previewUrls.current = [];
+      setIsPristine(true);
+      setIsChecked(true);
+    } catch {
+      setIsChecked(false);
+    }
   };
 
   return (
@@ -199,20 +287,43 @@ function EditListingForm({ listing }: EditListingFormProps) {
 
       <div>
         <span className={labelClassName}>Photos</span>
-        {listing.listing_images.length === 0 ? (
+        <div className="mb-3 flex items-center gap-3">
+          <label className="btn-secondary inline-flex min-h-10 cursor-pointer items-center gap-2">
+            <ImagePlus className="h-4 w-4" aria-hidden="true" /> Add photos
+            <input className="sr-only" type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple onChange={handlePhotoSelection} />
+          </label>
+          <span className="text-xs text-gray-500">{photos.length}/10 photos</span>
+        </div>
+        {rejectedPhotos.length > 0 && (
+          <ul className="mb-3 space-y-1 text-xs text-red-700" role="alert">
+            {rejectedPhotos.map((photo) => <li key={`${photo.fileName}-${photo.reason}`}>{photo.fileName}: {photo.reason}</li>)}
+          </ul>
+        )}
+        {photos.length === 0 ? (
           <div className="flex min-h-32 flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-gray-300 text-sm text-gray-500">
             <Image className="h-7 w-7 text-gray-400" aria-hidden="true" />
             <span>No photos yet</span>
           </div>
         ) : (
           <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            {listing.listing_images.map((image, index) => (
-              <li className="aspect-4/3 overflow-hidden rounded-lg border border-gray-200" key={image.id}>
+            {photos.map((photo, index) => (
+              <li className="relative aspect-4/3 overflow-hidden rounded-lg border border-gray-200" key={photo.kind === 'existing' ? photo.image.id : photo.previewUrl}>
                 <img
                   className="h-full w-full object-cover"
-                  src={image.signed_url}
-                  alt={image.alt_text ?? `${listing.title} photo ${index + 1}`}
+                  src={photo.kind === 'existing' ? photo.image.signed_url : photo.previewUrl}
+                  alt={photo.kind === 'existing' ? (photo.image.alt_text ?? `${listing.title} photo ${index + 1}`) : `${listing.title} new photo ${index + 1}`}
                 />
+                <div className="absolute inset-x-1 bottom-1 flex justify-between gap-1">
+                  <button className="rounded bg-white/90 p-2 text-gray-700 shadow hover:bg-white disabled:opacity-40" type="button" aria-label={`Move photo ${index + 1} up`} onClick={() => movePhoto(index, -1)} disabled={index === 0}>
+                    <ArrowUp className="h-4 w-4" aria-hidden="true" />
+                  </button>
+                  <button className="rounded bg-white/90 p-2 text-gray-700 shadow hover:bg-white disabled:opacity-40" type="button" aria-label={`Remove photo ${index + 1}`} onClick={() => removePhoto(index)}>
+                    <Trash2 className="h-4 w-4" aria-hidden="true" />
+                  </button>
+                  <button className="rounded bg-white/90 p-2 text-gray-700 shadow hover:bg-white disabled:opacity-40" type="button" aria-label={`Move photo ${index + 1} down`} onClick={() => movePhoto(index, 1)} disabled={index === photos.length - 1}>
+                    <ArrowDown className="h-4 w-4" aria-hidden="true" />
+                  </button>
+                </div>
               </li>
             ))}
           </ul>
@@ -221,13 +332,21 @@ function EditListingForm({ listing }: EditListingFormProps) {
 
       {isChecked && (
         <p className="border-l-4 border-green-600 bg-green-50 px-4 py-3 text-sm text-green-700" role="status">
-          Changes checked successfully.
+          Changes saved successfully.
+        </p>
+      )}
+
+      {updateListingMutation.isError && (
+        <p className="border-l-4 border-red-600 bg-red-50 px-4 py-3 text-sm text-red-700" role="alert">
+          We could not save your changes. Check your connection and try again.
         </p>
       )}
 
       <div className="grid grid-cols-1 gap-3 pt-1 sm:grid-cols-2">
-        <button className="btn-secondary min-h-11" type="button" onClick={() => navigate('/listings')}>Cancel</button>
-        <button className="btn-primary order-first min-h-11 sm:order-none" type="submit">Save changes</button>
+        <button className="btn-secondary min-h-11" type="button" onClick={() => navigate('/listings')} disabled={updateListingMutation.isPending}>Cancel</button>
+        <button className="btn-primary order-first min-h-11 sm:order-none" type="submit" disabled={updateListingMutation.isPending}>
+          {updateListingMutation.isPending ? 'Saving changes...' : 'Save changes'}
+        </button>
       </div>
     </form>
   );

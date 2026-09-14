@@ -194,6 +194,70 @@ values
   ('50000000-0000-4000-8000-000000000002', '30000000-0000-4000-8000-000000000002', '30000000-0000-4000-8000-000000000002/two.jpg', 1),
   ('50000000-0000-4000-8000-000000000003', '30000000-0000-4000-8000-000000000002', '30000000-0000-4000-8000-000000000002/three.jpg', 2);
 
+select public.update_listing_with_images(
+  '30000000-0000-4000-8000-000000000002',
+  'Atomic update title',
+  'Chiang Mai',
+  'Atomic update description.',
+  3,
+  array['dog']::public.pet_species[],
+  E'Lawn\nSecurity cameras',
+  'published',
+  '2026-09-13T00:00:00Z'::timestamptz,
+  array[
+    '50000000-0000-4000-8000-000000000001',
+    '50000000-0000-4000-8000-000000000002',
+    '50000000-0000-4000-8000-000000000003'
+  ]::uuid[],
+  '[]'::jsonb,
+  array[
+    '50000000-0000-4000-8000-000000000003',
+    '50000000-0000-4000-8000-000000000001',
+    '50000000-0000-4000-8000-000000000002'
+  ]::uuid[]
+);
+
+do $$
+declare
+  rejected boolean := false;
+begin
+  begin
+    perform public.update_listing_with_images(
+      '30000000-0000-4000-8000-000000000002',
+      'Should roll back',
+      'Chiang Mai',
+      'This update must not persist.',
+      3,
+      array['dog']::public.pet_species[],
+      null,
+      'published',
+      null,
+      array[
+        '50000000-0000-4000-8000-000000000001',
+        '50000000-0000-4000-8000-000000000002',
+        '50000000-0000-4000-8000-000000000003'
+      ]::uuid[],
+      '[]'::jsonb,
+      array[
+        '50000000-0000-4000-8000-000000000001',
+        '50000000-0000-4000-8000-000000000002'
+      ]::uuid[]
+    );
+  exception
+    when invalid_parameter_value then rejected := true;
+  end;
+
+  if not rejected then
+    raise exception 'listing edit: invalid atomic update was accepted';
+  end if;
+
+  if (select title from public.listings where id = '30000000-0000-4000-8000-000000000002')
+    is distinct from 'Atomic update title' then
+    raise exception 'listing edit: failed atomic update changed listing fields';
+  end if;
+end;
+$$;
+
 do $$
 declare
   violated_constraint text;
@@ -235,6 +299,74 @@ begin
     limit 1
   ) is distinct from '50000000-0000-4000-8000-000000000003'::uuid then
     raise exception 'listing edit: main photo did not change atomically';
+  end if;
+end;
+$$;
+
+-- Test new-photo path: add a new image, retain two existing images, and drop one
+-- Verify: new image gets sort_order=0, dropped image is removed, and listing has exactly 3 images
+do $$
+declare
+  new_image_id uuid := gen_random_uuid();
+  image_count integer;
+  new_image_sort_order integer;
+  dropped_image_exists boolean;
+begin
+  perform public.update_listing_with_images(
+    '30000000-0000-4000-8000-000000000002',
+    'New photo test',
+    'Chiang Mai',
+    'Testing new photo insertion.',
+    3,
+    array['dog']::public.pet_species[],
+    'Lawn',
+    'published',
+    '2026-09-13T00:00:00Z'::timestamptz,
+    array[
+      '50000000-0000-4000-8000-000000000001',
+      '50000000-0000-4000-8000-000000000002'
+    ]::uuid[],
+    jsonb_build_array(
+      jsonb_build_object(
+        'id', new_image_id,
+        'storage_path', '30000000-0000-4000-8000-000000000002/four.jpg',
+        'alt_text', null
+      )
+    ),
+    array[
+      new_image_id,
+      '50000000-0000-4000-8000-000000000001',
+      '50000000-0000-4000-8000-000000000002'
+    ]::uuid[]
+  );
+
+  -- Assert new image has sort_order = 0
+  select sort_order into new_image_sort_order
+  from public.listing_images
+  where id = new_image_id;
+
+  if new_image_sort_order is distinct from 0 then
+    raise exception 'listing edit: new image has sort_order % instead of 0', new_image_sort_order;
+  end if;
+
+  -- Assert image ...003 no longer exists
+  select exists(
+    select 1
+    from public.listing_images
+    where id = '50000000-0000-4000-8000-000000000003'
+  ) into dropped_image_exists;
+
+  if dropped_image_exists then
+    raise exception 'listing edit: dropped image ...003 still exists';
+  end if;
+
+  -- Assert listing has exactly 3 images
+  select count(*) into image_count
+  from public.listing_images
+  where listing_id = '30000000-0000-4000-8000-000000000002';
+
+  if image_count is distinct from 3 then
+    raise exception 'listing edit: listing has % images instead of 3', image_count;
   end if;
 end;
 $$;
@@ -347,6 +479,7 @@ declare
   changed_rows integer;
   rejected_reorder boolean := false;
   rejected_image_insert boolean := false;
+  rejected_listing_update boolean := false;
 begin
   update public.listings
   set title = 'Unauthorized change'
@@ -356,6 +489,33 @@ begin
   if changed_rows <> 0 then
     raise exception 'listing edit: non-owner changed % listing rows', changed_rows;
   end if;
+
+  begin
+    perform public.update_listing_with_images(
+      '30000000-0000-4000-8000-000000000002',
+      'Unauthorized RPC update',
+      'Chiang Mai',
+      'Should not persist.',
+      2,
+      array['dog']::public.pet_species[],
+      null,
+      'published',
+      null,
+      array[
+        '50000000-0000-4000-8000-000000000003',
+        '50000000-0000-4000-8000-000000000001',
+        '50000000-0000-4000-8000-000000000002'
+      ]::uuid[],
+      '[]'::jsonb,
+      array[
+        '50000000-0000-4000-8000-000000000003',
+        '50000000-0000-4000-8000-000000000001',
+        '50000000-0000-4000-8000-000000000002'
+      ]::uuid[]
+    );
+  exception
+    when insufficient_privilege then rejected_listing_update := true;
+  end;
 
   begin
     perform public.reorder_listing_images(
@@ -381,8 +541,49 @@ begin
     when insufficient_privilege then rejected_image_insert := true;
   end;
 
-  if not rejected_reorder or not rejected_image_insert then
+  if not rejected_listing_update or not rejected_reorder or not rejected_image_insert then
     raise exception 'listing edit: non-owner photo mutation was accepted';
+  end if;
+end;
+$$;
+
+reset role;
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"10000000-0000-4000-8000-000000000001","role":"authenticated"}',
+  true
+);
+set local role authenticated;
+
+update public.listings
+set status = 'deleted', deleted_at = '2026-09-13T00:00:00Z'::timestamptz
+where id = '30000000-0000-4000-8000-000000000002';
+
+do $$
+declare
+  rejected boolean := false;
+begin
+  begin
+    perform public.update_listing_with_images(
+      '30000000-0000-4000-8000-000000000002',
+      'Deleted listing update',
+      'Chiang Mai',
+      'Should not persist.',
+      2,
+      array['dog']::public.pet_species[],
+      null,
+      'published',
+      null,
+      array[]::uuid[],
+      '[]'::jsonb,
+      array[]::uuid[]
+    );
+  exception
+    when insufficient_privilege then rejected := true;
+  end;
+
+  if not rejected then
+    raise exception 'listing edit: owner updated a soft-deleted listing';
   end if;
 end;
 $$;

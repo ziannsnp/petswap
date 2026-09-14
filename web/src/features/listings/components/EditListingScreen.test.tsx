@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { useMyListings } from '../hooks/useListings';
+import { useUpdateListing } from '../hooks/useUpdateListing';
 import type { Listing } from '../lib/listingApi';
 import { EditListingScreen } from './EditListingScreen';
 
@@ -10,7 +11,12 @@ jest.mock('../hooks/useListings', () => ({
   useMyListings: jest.fn(),
 }));
 
+jest.mock('../hooks/useUpdateListing', () => ({
+  useUpdateListing: jest.fn(),
+}));
+
 const mockedUseMyListings = jest.mocked(useMyListings);
+const mockedUseUpdateListing = jest.mocked(useUpdateListing);
 
 const sunnyRoom: Listing = {
   id: 'listing-1',
@@ -50,6 +56,19 @@ function renderAt(listingId: string) {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  Object.defineProperty(URL, 'createObjectURL', {
+    configurable: true,
+    value: jest.fn((file: File) => `blob:${file.name}`),
+  });
+  Object.defineProperty(URL, 'revokeObjectURL', {
+    configurable: true,
+    value: jest.fn(),
+  });
+  mockedUseUpdateListing.mockReturnValue({
+    isPending: false,
+    isError: false,
+    mutateAsync: jest.fn().mockResolvedValue(sunnyRoom),
+  } as never);
 });
 
 describe('EditListingScreen', () => {
@@ -168,14 +187,62 @@ describe('EditListingScreen', () => {
     expect(screen.getByRole('button', { name: 'Hamster' })).toHaveAttribute('aria-pressed', 'true');
   });
 
-  it('shows the existing photos without any way to change them', () => {
+  it('shows controls to add, remove, and reorder existing photos', () => {
     mockedUseMyListings.mockReturnValue(listingsQuery({ data: [sunnyRoom] }));
     renderAt('listing-1');
 
     expect(screen.getByRole('img', { name: 'Garden' })).toHaveAttribute('src', 'https://storage.test/signed/a.jpg');
     expect(screen.getByRole('img', { name: 'Sunny garden room photo 2' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /remove/i })).not.toBeInTheDocument();
-    expect(screen.queryByLabelText(/add/i)).not.toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /remove photo/i })).toHaveLength(2);
+    expect(screen.getByText('Add photos')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Move photo 1 down' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Move photo 1 up' })).toBeDisabled();
+  });
+
+  it('removes a photo from the update payload', async () => {
+    const user = userEvent.setup();
+    const mutateAsync = jest.fn().mockResolvedValue(sunnyRoom);
+    mockedUseUpdateListing.mockReturnValue({ isPending: false, isError: false, mutateAsync } as never);
+    mockedUseMyListings.mockReturnValue(listingsQuery({ data: [sunnyRoom] }));
+    renderAt('listing-1');
+
+    await user.click(screen.getByRole('button', { name: 'Remove photo 1' }));
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+
+    expect(mutateAsync).toHaveBeenCalledWith(expect.objectContaining({
+      values: expect.objectContaining({
+        photos: [{ kind: 'existing', id: 'img-2' }],
+      }),
+    }));
+  });
+
+  it('does not upload a newly added photo again on a consecutive save', async () => {
+    const user = userEvent.setup();
+    const persistedNewImage = {
+      ...sunnyRoom.listing_images[1],
+      id: 'img-new',
+      storage_path: 'listing-1/new-yard.jpg',
+      signed_url: 'https://storage.test/signed/new-yard.jpg',
+    };
+    const savedListing: Listing = {
+      ...sunnyRoom,
+      listing_images: [sunnyRoom.listing_images[0], persistedNewImage],
+    };
+    const mutateAsync = jest.fn().mockResolvedValue(savedListing);
+    mockedUseUpdateListing.mockReturnValue({ isPending: false, isError: false, mutateAsync } as never);
+    mockedUseMyListings.mockReturnValue(listingsQuery({ data: [sunnyRoom] }));
+    renderAt('listing-1');
+
+    const file = new File(['photo'], 'new-yard.jpg', { type: 'image/jpeg' });
+    await user.upload(screen.getByLabelText(/add photos/i), file);
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+
+    expect(mutateAsync).toHaveBeenCalledTimes(2);
+    expect(mutateAsync.mock.calls[1][0].values.photos).toEqual([
+      { kind: 'existing', id: 'img-1' },
+      { kind: 'existing', id: 'img-new' },
+    ]);
   });
 
   it('shows an empty photo state for a listing with no photos', () => {
@@ -224,7 +291,7 @@ describe('EditListingScreen', () => {
     await user.type(screen.getByLabelText(/listing title/i), 'Sunny garden room, renovated');
     await user.click(screen.getByRole('button', { name: /save changes/i }));
 
-    expect(screen.getByRole('status')).toHaveTextContent('Changes checked successfully.');
+    expect(screen.getByRole('status')).toHaveTextContent('Changes saved successfully.');
   });
 
   it('returns to My listings on cancel without saving', async () => {

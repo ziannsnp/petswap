@@ -1,5 +1,5 @@
 import { getSupabaseClient } from '../../../shared/lib/supabase';
-import { createListing, getListing, listMyListings, updateListing } from './listingApi';
+import { createListing, getListing, listMyListings, setListingPublicationStatus, updateListing } from './listingApi';
 import type { UpdateListingValues } from './listingApi';
 
 jest.mock('../../../shared/lib/supabase', () => ({

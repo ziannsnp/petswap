@@ -1,5 +1,5 @@
 import { getSupabaseClient } from '../../../shared/lib/supabase';
-import { createListing, getListing, listMyListings } from './listingApi';
+import { createListing, getListing, listMyListings, setListingPublicationStatus } from './listingApi';
 
 jest.mock('../../../shared/lib/supabase', () => ({
   getSupabaseClient: jest.fn(),
@@ -92,6 +92,60 @@ describe('getListing', () => {
       cover_photo_url: 'https://example.test/private-front.jpg',
       listing_images: [{ signed_url: 'https://example.test/private-front.jpg' }],
     });
+  });
+});
+
+describe('setListingPublicationStatus', () => {
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('unpublishes a listing by writing the draft status', async () => {
+    const listing = {
+      id: 'listing-1',
+      owner_id: 'owner-1',
+      title: 'A quiet home',
+      location: 'Chiang Mai',
+      description: 'A calm place for pets.',
+      capacity: 2,
+      accepted_pet_types: ['dog'],
+      facilities: null,
+      status: 'draft',
+      deleted_at: null,
+      published_at: null,
+      created_at: '2026-09-07T00:00:00.000Z',
+      updated_at: '2026-09-13T00:00:00.000Z',
+      listing_images: [],
+    };
+    const single = jest.fn().mockResolvedValue({ data: listing, error: null });
+    const select = jest.fn().mockReturnValue({ single });
+    const eq = jest.fn().mockReturnValue({ select });
+    const update = jest.fn().mockReturnValue({ eq });
+    const from = jest.fn().mockReturnValue({ update });
+
+    mockedGetSupabaseClient.mockReturnValue({ from } as never);
+
+    await expect(setListingPublicationStatus('listing-1', 'draft')).resolves.toMatchObject({
+      id: 'listing-1',
+      status: 'draft',
+    });
+
+    expect(from).toHaveBeenCalledWith('listings');
+    expect(update).toHaveBeenCalledWith({ status: 'draft' });
+    expect(eq).toHaveBeenCalledWith('id', 'listing-1');
+  });
+
+  it('surfaces the database error when the update is rejected', async () => {
+    const updateError = new Error('permission denied');
+    const single = jest.fn().mockResolvedValue({ data: null, error: updateError });
+    const select = jest.fn().mockReturnValue({ single });
+    const eq = jest.fn().mockReturnValue({ select });
+    const update = jest.fn().mockReturnValue({ eq });
+    const from = jest.fn().mockReturnValue({ update });
+
+    mockedGetSupabaseClient.mockReturnValue({ from } as never);
+
+    await expect(setListingPublicationStatus('listing-1', 'published')).rejects.toThrow('permission denied');
   });
 });
 

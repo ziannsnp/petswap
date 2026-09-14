@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { routes } from './support/routes';
 
 // Covers the account-menu / logout flow this branch changed: the desktop
-// avatar dropdown (Edit profile + Log out) and the mobile menu's Log out
+// avatar dropdown (View profile + Log out) and the mobile menu's Log out
 // button, which used to close the menu without ever calling signOut().
 //
 // Needs the local Supabase stack and a seeded account (supabase/seed.sql):
@@ -24,15 +24,15 @@ async function signIn(page: Page) {
 test.describe('desktop account menu', () => {
   test.use({ viewport: { width: 1280, height: 800 } });
 
-  test('opens Edit profile and Log out from the avatar dropdown, and logging out signs the user out', async ({
+  test('opens View profile and Log out from the avatar dropdown, and logging out signs the user out', async ({
     page,
   }) => {
     await signIn(page);
 
-    await expect(page.getByRole('menuitem', { name: /edit profile/i })).toHaveCount(0);
+    await expect(page.getByRole('menuitem', { name: /view profile/i })).toHaveCount(0);
     await page.getByRole('button', { name: /account menu/i }).click();
 
-    const profileLink = page.getByRole('menuitem', { name: /edit profile/i });
+    const profileLink = page.getByRole('menuitem', { name: /view profile/i });
     await expect(profileLink).toBeVisible();
     await expect(profileLink).toHaveAttribute('href', routes.profile);
 

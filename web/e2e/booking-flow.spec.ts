@@ -40,7 +40,7 @@ test.describe('booking request and confirmation', () => {
       await requesterPage.getByLabel(/email or username/i).fill('casey@petswap.test');
       await requesterPage.getByLabel(/^password$/i).fill(PASSWORD);
       await requesterPage.getByRole('button', { name: /sign in/i }).click();
-      await expect(requesterPage).toHaveURL(/\/profile$/);
+      await expect(requesterPage).toHaveURL(new RegExp(`${routes.search}$`));
 
       await requesterPage.goto(routes.listingDetail(LISTING_ID));
       await requesterPage.getByLabel('Pet', { exact: true }).selectOption({ label: 'Rocket (Dog)' });
@@ -54,7 +54,7 @@ test.describe('booking request and confirmation', () => {
       await ownerPage.getByLabel(/email or username/i).fill('alex@petswap.test');
       await ownerPage.getByLabel(/^password$/i).fill(PASSWORD);
       await ownerPage.getByRole('button', { name: /sign in/i }).click();
-      await expect(ownerPage).toHaveURL(/\/profile$/);
+      await expect(ownerPage).toHaveURL(new RegExp(`${routes.search}$`));
 
       await ownerPage.goto(routes.bookings);
       const incomingCard = ownerPage

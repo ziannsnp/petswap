@@ -30,6 +30,8 @@ function cacheBustedPublicUrl(publicUrl: string): string {
 export async function getProfile(): Promise<Profile | null> {
   const { data: userData, error: userError } = await getSupabaseClient().auth.getUser();
 
+  // A real auth failure (expired token, network error) is not the same as "no session" --
+  // folding it into the null case hid it from callers instead of letting them react to it.
   if (userError) {
     throw userError;
   }
@@ -53,9 +55,10 @@ export async function getProfile(): Promise<Profile | null> {
 
 /**
  * Updates only the authenticated user's profile. RLS remains the authorization boundary;
- * the id predicate keeps the client request scoped to that same user.
+ * the id predicate keeps the client request scoped to that same user. If targetProfileId
+ * is provided, client validation ensures callers cannot attempt to update another user's profile.
  */
-export async function updateProfile(values: ProfileUpdate): Promise<Profile> {
+export async function updateProfile(values: ProfileUpdate, targetProfileId?: string): Promise<Profile> {
   const supabase = getSupabaseClient();
   const { data: userData, error: userError } = await supabase.auth.getUser();
 
@@ -65,6 +68,10 @@ export async function updateProfile(values: ProfileUpdate): Promise<Profile> {
 
   if (!userData.user) {
     throw new Error('You must be signed in to update your profile.');
+  }
+
+  if (targetProfileId && targetProfileId !== userData.user.id) {
+    throw new Error("You cannot edit another user's profile.");
   }
 
   const { data, error } = await supabase

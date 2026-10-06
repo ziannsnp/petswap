@@ -172,6 +172,12 @@ insert into _contract (check_name, passed) values
     )
   ),
   (
+    'booking listing-lock helper cannot be called directly by API roles',
+    not has_function_privilege('anon', 'public.lock_listing_for_booking_insert()', 'EXECUTE')
+      and not has_function_privilege('authenticated', 'public.lock_listing_for_booking_insert()', 'EXECUTE')
+      and not has_function_privilege('service_role', 'public.lock_listing_for_booking_insert()', 'EXECUTE')
+  ),
+  (
     'the listing-photos storage bucket exists and is private',
     exists (
       select 1 from storage.buckets

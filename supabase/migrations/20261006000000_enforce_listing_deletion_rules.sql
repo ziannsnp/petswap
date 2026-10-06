@@ -4,11 +4,27 @@ language plpgsql
 security definer
 set search_path = public
 as $$
+declare
+  current_status public.listing_status;
+  current_deleted_at timestamptz;
 begin
   perform pg_advisory_xact_lock(hashtextextended(new.listing_id::text, 0));
+
+  select status, deleted_at
+  into current_status, current_deleted_at
+  from public.listings
+  where id = new.listing_id
+  for update;
+
+  if not found or current_status <> 'published' or current_deleted_at is not null then
+    raise exception 'booking listing must be published';
+  end if;
+
   return new;
 end;
 $$;
+
+revoke all on function public.lock_listing_for_booking_insert() from public, anon, authenticated, service_role;
 
 create trigger bookings_lock_listing_before_guard
 before insert on public.bookings

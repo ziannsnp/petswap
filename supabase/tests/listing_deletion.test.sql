@@ -229,4 +229,40 @@ end;
 $$;
 
 reset role;
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"10000000-0000-4000-8000-000000000002","role":"authenticated"}',
+  true
+);
+set local role authenticated;
+
+do $$
+declare
+  rejected boolean := false;
+  error_message text;
+begin
+  begin
+    insert into public.bookings (
+      listing_id, pet_id, requester_id, status, start_date, end_date
+    ) values (
+      '30000000-0000-4000-8000-000000000004',
+      '20000000-0000-4000-8000-000000000003',
+      '10000000-0000-4000-8000-000000000002',
+      'pending',
+      date '2026-11-01',
+      date '2026-11-04'
+    );
+  exception
+    when raise_exception then
+      get stacked diagnostics error_message = message_text;
+      rejected := error_message = 'booking listing must be published';
+  end;
+
+  if not rejected then
+    raise exception 'listing deletion: a new booking was accepted after soft deletion';
+  end if;
+end;
+$$;
+
+reset role;
 rollback;

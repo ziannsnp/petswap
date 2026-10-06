@@ -514,7 +514,10 @@ begin
 end;
 $$;
 
--- Verify photos remain intact and were not modified by unauthorized attempts
+-- Reset role to superuser to verify all photos persisted despite unauthorized attempts
+reset role;
+
+-- Verify photos remain intact and were not modified or deleted by unauthorized attempts
 do $$
 begin
   if not exists (
@@ -546,5 +549,4 @@ begin
 end;
 $$;
 
-reset role;
 rollback;

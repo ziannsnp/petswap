@@ -135,6 +135,43 @@ insert into _contract (check_name, passed) values
     )
   ),
   (
+    'listing deletion is exposed through an owner-checked security definer RPC',
+    exists (
+      select 1 from pg_proc
+      where oid = 'public.delete_listing_with_active_booking_check(uuid)'::regprocedure
+        and prosecdef
+    )
+  ),
+  (
+    'direct listing updates cannot bypass the soft-delete booking check',
+    exists (
+      select 1 from pg_policies
+      where schemaname = 'public'
+        and tablename = 'listings'
+        and policyname = 'Owners update own listings'
+        and cmd = 'UPDATE'
+        and with_check like '%status <>%deleted%'
+    )
+  ),
+  (
+    'listings cannot be hard-deleted through the authenticated API',
+    not exists (
+      select 1 from pg_policies
+      where schemaname = 'public'
+        and tablename = 'listings'
+        and cmd = 'DELETE'
+    )
+  ),
+  (
+    'booking inserts serialize against listing deletion',
+    exists (
+      select 1 from pg_trigger
+      where tgrelid = 'public.bookings'::regclass
+        and tgname = 'bookings_lock_listing_before_guard'
+        and not tgisinternal
+    )
+  ),
+  (
     'the listing-photos storage bucket exists and is private',
     exists (
       select 1 from storage.buckets

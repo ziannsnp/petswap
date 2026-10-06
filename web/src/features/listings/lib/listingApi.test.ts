@@ -1,5 +1,5 @@
 import { getSupabaseClient } from '../../../shared/lib/supabase';
-import { createListing, getListing, listMyListings, setListingPublicationStatus, updateListing } from './listingApi';
+import { createListing, deleteListing, getListing, listMyListings, setListingPublicationStatus, updateListing } from './listingApi';
 import type { UpdateListingValues } from './listingApi';
 
 jest.mock('../../../shared/lib/supabase', () => ({
@@ -147,6 +147,35 @@ describe('setListingPublicationStatus', () => {
     mockedGetSupabaseClient.mockReturnValue({ from } as never);
 
     await expect(setListingPublicationStatus('listing-1', 'published')).rejects.toThrow('permission denied');
+  });
+});
+
+describe('deleteListing', () => {
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('uses the transactional database operation to delete a listing', async () => {
+    const rpc = jest.fn().mockResolvedValue({ data: null, error: null });
+    mockedGetSupabaseClient.mockReturnValue({ rpc } as never);
+
+    await expect(deleteListing('listing-123')).resolves.toBeUndefined();
+
+    expect(rpc).toHaveBeenCalledWith('delete_listing_with_active_booking_check', {
+      target_listing_id: 'listing-123',
+    });
+  });
+
+  it('surfaces active-booking and authorization errors from the database', async () => {
+    const rpc = jest.fn().mockResolvedValue({
+      data: null,
+      error: new Error('Listing has active bookings and cannot be deleted.'),
+    });
+    mockedGetSupabaseClient.mockReturnValue({ rpc } as never);
+
+    await expect(deleteListing('listing-123')).rejects.toThrow(
+      'Listing has active bookings and cannot be deleted.',
+    );
   });
 });
 

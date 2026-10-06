@@ -366,6 +366,14 @@ export async function setListingPublicationStatus(
   return addSignedPhotoUrls({ ...data, listing_images: data.listing_images ?? [] });
 }
 
+export async function deleteListing(listingId: string): Promise<void> {
+  const { error } = await getSupabaseClient().rpc('delete_listing_with_active_booking_check', {
+    target_listing_id: listingId,
+  });
+
+  if (error) throw error;
+}
+
 export async function listMyListings(): Promise<Listing[]> {
   const supabase = getSupabaseClient();
   const { data: userData, error: userError } = await supabase.auth.getUser();

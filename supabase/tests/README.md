@@ -13,6 +13,7 @@ automated form of the database review points in
 | `listing_photo_access.test.sql` | Storage RLS behaviour: an owner can select draft photos for signing, other authenticated and anonymous users cannot read drafts, and anonymous users can select published photos for signing. | No (rolled back) |
 | `listing_edit_rules.test.sql` | US-2.2 behaviour: owners can edit valid listing fields, invalid updates fail, non-owners cannot edit listing data or photos, photo metadata stays under the correct listing path and ten-photo cap, and main-photo ordering changes atomically. | No (rolled back) |
 | `avatar_storage_access.test.sql` | Avatar storage behaviour: avatars are publicly readable; users may create and replace their own avatars but cannot upload into or delete another user's folder. | No (rolled back) |
+| `pet_photo_access.test.sql` | Pet photo storage behaviour: private bucket; pet owners have full CRUD over their pet photos; listing hosts with a booking for that pet can read photos; unrelated users and anonymous requests are blocked. | No (rolled back) |
 
 ## Run locally
 
@@ -32,6 +33,8 @@ psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" \
   -v ON_ERROR_STOP=1 -f supabase/tests/listing_edit_rules.test.sql
 psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" \
   -v ON_ERROR_STOP=1 -f supabase/tests/avatar_storage_access.test.sql
+psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" \
+  -v ON_ERROR_STOP=1 -f supabase/tests/pet_photo_access.test.sql
 ```
 
 No local `psql`? Run it inside the database container instead:

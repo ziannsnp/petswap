@@ -149,6 +149,29 @@ insert into _contract (check_name, passed) values
     )
   ),
   (
+    'the pet-photos storage bucket exists and is private',
+    exists (
+      select 1 from storage.buckets
+      where id = 'pet-photos' and not public
+    )
+  ),
+  (
+    'pet-photos storage policies are installed',
+    (
+      select count(*) = 5
+      from pg_policies
+      where schemaname = 'storage'
+        and tablename = 'objects'
+        and policyname in (
+          'Pet owners can read pet photos',
+          'Listing owners can read booked pet photos',
+          'Pet owners can upload pet photos',
+          'Pet owners can update pet photos',
+          'Pet owners can delete pet photos'
+        )
+    )
+  ),
+  (
     'avatars have public reads and owner-scoped writes',
     (
       select count(*) = 4

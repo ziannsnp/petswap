@@ -22,6 +22,9 @@ language plpgsql
 immutable
 as $$
 begin
+  if position('/' in coalesce(object_name, '')) = 0 then
+    return null;
+  end if;
   return split_part(object_name, '/', 1)::uuid;
 exception
   when invalid_text_representation then

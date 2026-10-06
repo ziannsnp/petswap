@@ -5,6 +5,7 @@
 -- 2. The pet owner has full CRUD access to their pet's photos.
 -- 3. A listing host with a booking for that pet can read (SELECT) the photo for signing.
 -- 4. Unrelated authenticated users and anonymous users have no read or write access.
+-- 5. Photos for pets without bookings are strictly readable only by their owner.
 
 \set ON_ERROR_STOP on
 
@@ -73,6 +74,7 @@ $$;
 -- ---------------------------------------------------------------------------
 -- 2. Booked Listing Owner (Alex)
 -- Alex owns listing 1 where Rocket has a booking -> Alex can read Rocket's photo
+-- Alex also owns Miso (unbooked pet) -> Alex can upload and read Miso's photo
 -- ---------------------------------------------------------------------------
 reset role;
 select set_config(
@@ -113,6 +115,29 @@ begin
 end;
 $$;
 
+-- Alex CANNOT delete Rocket's photo (not the pet owner)
+do $$
+declare
+  deleted_rows integer;
+begin
+  begin
+    delete from storage.objects
+    where bucket_id = 'pet-photos'
+      and name = '20000000-0000-4000-8000-000000000004/rocket.jpg';
+
+    get diagnostics deleted_rows = row_count;
+    if deleted_rows <> 0 then
+      raise exception 'pet photo access: booked listing host deleted pet photo';
+    end if;
+  exception
+    when others then
+      if SQLERRM not like 'Direct deletion from storage tables is not allowed%' then
+        raise;
+      end if;
+  end;
+end;
+$$;
+
 -- Alex CANNOT insert into Rocket's folder
 do $$
 begin
@@ -130,9 +155,31 @@ begin
 end;
 $$;
 
+-- Alex can upload and read their own pet Miso's photo
+insert into storage.objects (id, bucket_id, name)
+values (
+  '50000000-0000-4000-8000-000000000023',
+  'pet-photos',
+  '20000000-0000-4000-8000-000000000001/miso.jpg'
+);
+
+do $$
+begin
+  if not exists (
+    select 1
+    from storage.objects
+    where bucket_id = 'pet-photos'
+      and name = '20000000-0000-4000-8000-000000000001/miso.jpg'
+  ) then
+    raise exception 'pet photo access: owner Alex cannot read own pet Miso photo';
+  end if;
+end;
+$$;
+
 -- ---------------------------------------------------------------------------
 -- 3. Unrelated Authenticated User (Blair)
 -- Blair has no booking for Rocket and does not own Rocket
+-- Blair also has no booking for Miso and does not own Miso
 -- ---------------------------------------------------------------------------
 reset role;
 select set_config(
@@ -156,6 +203,20 @@ begin
 end;
 $$;
 
+-- Blair CANNOT read Miso's photo (Miso has no bookings)
+do $$
+begin
+  if exists (
+    select 1
+    from storage.objects
+    where bucket_id = 'pet-photos'
+      and name = '20000000-0000-4000-8000-000000000001/miso.jpg'
+  ) then
+    raise exception 'pet photo access: unrelated authenticated user was able to read unbooked pet photo';
+  end if;
+end;
+$$;
+
 -- Blair CANNOT update Rocket's photo
 do $$
 declare
@@ -173,13 +234,36 @@ begin
 end;
 $$;
 
+-- Blair CANNOT delete Rocket's photo
+do $$
+declare
+  deleted_rows integer;
+begin
+  begin
+    delete from storage.objects
+    where bucket_id = 'pet-photos'
+      and name = '20000000-0000-4000-8000-000000000004/rocket.jpg';
+
+    get diagnostics deleted_rows = row_count;
+    if deleted_rows <> 0 then
+      raise exception 'pet photo access: unrelated user deleted pet photo';
+    end if;
+  exception
+    when others then
+      if SQLERRM not like 'Direct deletion from storage tables is not allowed%' then
+        raise;
+      end if;
+  end;
+end;
+$$;
+
 -- Blair CANNOT insert into Rocket's folder
 do $$
 begin
   begin
     insert into storage.objects (id, bucket_id, name)
     values (
-      '50000000-0000-4000-8000-000000000023',
+      '50000000-0000-4000-8000-000000000024',
       'pet-photos',
       '20000000-0000-4000-8000-000000000004/blair-injected.jpg'
     );
@@ -191,7 +275,31 @@ end;
 $$;
 
 -- ---------------------------------------------------------------------------
--- 4. Anonymous User
+-- 4. Cross-check: Casey CANNOT read unbooked pet Miso
+-- ---------------------------------------------------------------------------
+reset role;
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"10000000-0000-4000-8000-000000000003","role":"authenticated"}',
+  true
+);
+set local role authenticated;
+
+do $$
+begin
+  if exists (
+    select 1
+    from storage.objects
+    where bucket_id = 'pet-photos'
+      and name = '20000000-0000-4000-8000-000000000001/miso.jpg'
+  ) then
+    raise exception 'pet photo access: Casey was able to read unbooked pet Miso photo';
+  end if;
+end;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- 5. Anonymous User
 -- ---------------------------------------------------------------------------
 reset role;
 select set_config('request.jwt.claims', '{"role":"anon"}', true);
@@ -204,7 +312,10 @@ begin
     select 1
     from storage.objects
     where bucket_id = 'pet-photos'
-      and name = '20000000-0000-4000-8000-000000000004/rocket.jpg'
+      and name in (
+        '20000000-0000-4000-8000-000000000004/rocket.jpg',
+        '20000000-0000-4000-8000-000000000001/miso.jpg'
+      )
   ) then
     raise exception 'pet photo access: anonymous user was able to read pet photo';
   end if;
@@ -217,7 +328,7 @@ begin
   begin
     insert into storage.objects (id, bucket_id, name)
     values (
-      '50000000-0000-4000-8000-000000000024',
+      '50000000-0000-4000-8000-000000000025',
       'pet-photos',
       '20000000-0000-4000-8000-000000000004/anon.jpg'
     );
@@ -229,7 +340,7 @@ end;
 $$;
 
 -- ---------------------------------------------------------------------------
--- 5. Malformed Path / Non-UUID Folder
+-- 6. Malformed Path / Non-UUID Folder / Root Upload Rejection
 -- ---------------------------------------------------------------------------
 reset role;
 select set_config(
@@ -239,12 +350,13 @@ select set_config(
 );
 set local role authenticated;
 
+-- Upload into non-UUID folder must fail
 do $$
 begin
   begin
     insert into storage.objects (id, bucket_id, name)
     values (
-      '50000000-0000-4000-8000-000000000025',
+      '50000000-0000-4000-8000-000000000026',
       'pet-photos',
       'not-a-uuid-folder/malicious.jpg'
     );
@@ -252,6 +364,37 @@ begin
   exception
     when insufficient_privilege then null;
   end;
+end;
+$$;
+
+-- Upload at root level without folder (e.g. named as UUID directly) must fail
+do $$
+begin
+  begin
+    insert into storage.objects (id, bucket_id, name)
+    values (
+      '50000000-0000-4000-8000-000000000027',
+      'pet-photos',
+      '20000000-0000-4000-8000-000000000004'
+    );
+    raise exception 'pet photo access: root-level upload without folder succeeded';
+  exception
+    when insufficient_privilege then null;
+  end;
+end;
+$$;
+
+-- Verify Rocket's photo was never compromised or deleted by unauthorized operations
+do $$
+begin
+  if not exists (
+    select 1
+    from storage.objects
+    where bucket_id = 'pet-photos'
+      and name = '20000000-0000-4000-8000-000000000004/rocket.jpg'
+  ) then
+    raise exception 'pet photo access: Rocket photo missing at end of test suite';
+  end if;
 end;
 $$;
 

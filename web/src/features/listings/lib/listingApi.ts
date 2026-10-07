@@ -141,11 +141,7 @@ export async function createListing(values: CreateListingValues): Promise<Listin
     }
 
     try {
-      const { error: listingCleanupError } = await supabase
-        .from('listings')
-        .delete()
-        .eq('id', listing.id);
-      if (listingCleanupError) throw listingCleanupError;
+      await deleteListing(listing.id);
     } catch (listingCleanupError) {
       cleanupErrors.push(`listing cleanup failed: ${listingCleanupError instanceof Error ? listingCleanupError.message : String(listingCleanupError)}`);
     }

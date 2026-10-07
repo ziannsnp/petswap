@@ -62,7 +62,7 @@ begin
     or deleted_at is null
     or updated_at is null
     or updated_at < deleted_at
-    or updated_at < previous_updated_at then
+    or updated_at <= previous_updated_at then
     raise exception 'listing deletion: status and audit timestamps were not persisted';
   end if;
 end;

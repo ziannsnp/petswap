@@ -427,11 +427,10 @@ describe('createListing', () => {
         select: jest.fn().mockReturnValue({ single: publicationSingle }),
       }),
     });
-    const listingDeleteEq = jest.fn().mockResolvedValue({ data: null, error: null });
-    const listingDelete = jest.fn().mockReturnValue({ eq: listingDeleteEq });
+    const rpc = jest.fn().mockResolvedValue({ data: null, error: null });
     const from = jest.fn((table: string) => {
       if (table === 'listings') {
-        return { insert: listingInsert, update: listingUpdate, delete: listingDelete };
+        return { insert: listingInsert, update: listingUpdate };
       }
       throw new Error(`Unexpected table: ${table}`);
     });
@@ -443,6 +442,7 @@ describe('createListing', () => {
     mockedGetSupabaseClient.mockReturnValue({
       auth: { getUser },
       from,
+      rpc,
       storage: { from: jest.fn() },
     } as never);
 
@@ -458,8 +458,9 @@ describe('createListing', () => {
     })).rejects.toThrow('publication failed');
 
     expect(listingUpdate).toHaveBeenCalledWith({ status: 'published' });
-    expect(listingDelete).toHaveBeenCalled();
-    expect(listingDeleteEq).toHaveBeenCalledWith('id', 'listing-123');
+    expect(rpc).toHaveBeenCalledWith('delete_listing_with_active_booking_check', {
+      target_listing_id: 'listing-123',
+    });
   });
 
   it('removes the listing and uploaded photos when image metadata fails', async () => {
@@ -486,9 +487,9 @@ describe('createListing', () => {
     const upload = jest.fn().mockResolvedValue({ data: { path: 'listing-123/photo.jpg' }, error: null });
     const remove = jest.fn().mockResolvedValue({ data: [], error: null });
     const storageFrom = jest.fn().mockReturnValue({ upload, remove });
-    const listingDeleteEq = jest.fn().mockResolvedValue({ data: null, error: null });
+    const rpc = jest.fn().mockResolvedValue({ data: null, error: null });
     const from = jest.fn((table: string) => {
-      if (table === 'listings') return { insert: listingInsert, delete: jest.fn().mockReturnValue({ eq: listingDeleteEq }) };
+      if (table === 'listings') return { insert: listingInsert };
       if (table === 'listing_images') return { insert: imageInsert };
       throw new Error(`Unexpected table: ${table}`);
     });
@@ -500,6 +501,7 @@ describe('createListing', () => {
     mockedGetSupabaseClient.mockReturnValue({
       auth: { getUser },
       from,
+      rpc,
       storage: { from: storageFrom },
     } as never);
 
@@ -516,7 +518,9 @@ describe('createListing', () => {
     })).rejects.toThrow('metadata failed');
 
     expect(remove).toHaveBeenCalledWith([expect.stringMatching(/^listing-123\/[0-9a-f-]+\.jpg$/)]);
-    expect(listingDeleteEq).toHaveBeenCalledWith('id', 'listing-123');
+    expect(rpc).toHaveBeenCalledWith('delete_listing_with_active_booking_check', {
+      target_listing_id: 'listing-123',
+    });
   });
 
   it('removes the listing when a photo upload fails', async () => {
@@ -540,10 +544,9 @@ describe('createListing', () => {
     const listingInsert = jest.fn().mockReturnValue({ select: listingSelect });
     const upload = jest.fn().mockResolvedValue({ data: null, error: new Error('upload failed') });
     const storageFrom = jest.fn().mockReturnValue({ upload });
-    const listingDeleteEq = jest.fn().mockResolvedValue({ data: null, error: null });
-    const listingDelete = jest.fn().mockReturnValue({ eq: listingDeleteEq });
+    const rpc = jest.fn().mockResolvedValue({ data: null, error: null });
     const from = jest.fn((table: string) => {
-      if (table === 'listings') return { insert: listingInsert, delete: listingDelete };
+      if (table === 'listings') return { insert: listingInsert };
       if (table === 'listing_images') return { insert: jest.fn() };
       throw new Error(`Unexpected table: ${table}`);
     });
@@ -555,6 +558,7 @@ describe('createListing', () => {
     mockedGetSupabaseClient.mockReturnValue({
       auth: { getUser },
       from,
+      rpc,
       storage: { from: storageFrom },
     } as never);
 
@@ -571,8 +575,9 @@ describe('createListing', () => {
     })).rejects.toThrow('upload failed');
 
     expect(upload).toHaveBeenCalled();
-    expect(listingDelete).toHaveBeenCalled();
-    expect(listingDeleteEq).toHaveBeenCalledWith('id', 'listing-123');
+    expect(rpc).toHaveBeenCalledWith('delete_listing_with_active_booking_check', {
+      target_listing_id: 'listing-123',
+    });
   });
 
   it('removes only previously uploaded photos when a later photo upload fails', async () => {
@@ -600,6 +605,7 @@ describe('createListing', () => {
       .mockResolvedValueOnce({ data: null, error: new Error('second upload failed') });
     const remove = jest.fn().mockResolvedValue({ data: [], error: null });
     const storageFrom = jest.fn().mockReturnValue({ upload, remove });
+    const rpc = jest.fn().mockResolvedValue({ data: null, error: null });
     const from = jest.fn((table: string) => {
       if (table === 'listings') return { insert: listingInsert };
       if (table === 'listing_images') return { insert: imageInsert };
@@ -613,6 +619,7 @@ describe('createListing', () => {
     mockedGetSupabaseClient.mockReturnValue({
       auth: { getUser },
       from,
+      rpc,
       storage: { from: storageFrom },
     } as never);
 
@@ -633,9 +640,12 @@ describe('createListing', () => {
     expect(remove.mock.calls[0][0]).not.toContain(upload.mock.calls[1]?.[0]);
     expect(imageInsert).not.toHaveBeenCalled();
     expect(listingInsert).toHaveBeenCalledWith(expect.objectContaining({ status: 'draft' }));
+    expect(rpc).toHaveBeenCalledWith('delete_listing_with_active_booking_check', {
+      target_listing_id: 'listing-123',
+    });
   });
 
-  it('reports a photo cleanup failure while leaving the listing as a draft', async () => {
+  it('soft-deletes the listing while reporting a photo cleanup failure', async () => {
     const listing = {
       id: 'listing-123',
       owner_id: 'owner-123',
@@ -659,6 +669,7 @@ describe('createListing', () => {
     const upload = jest.fn().mockResolvedValue({ data: { path: 'listing-123/photo.jpg' }, error: null });
     const remove = jest.fn().mockResolvedValue({ data: null, error: new Error('cleanup failed') });
     const storageFrom = jest.fn().mockReturnValue({ upload, remove });
+    const rpc = jest.fn().mockResolvedValue({ data: null, error: null });
     const from = jest.fn((table: string) => {
       if (table === 'listings') return { insert: listingInsert };
       if (table === 'listing_images') return { insert: imageInsert };
@@ -672,6 +683,7 @@ describe('createListing', () => {
     mockedGetSupabaseClient.mockReturnValue({
       auth: { getUser },
       from,
+      rpc,
       storage: { from: storageFrom },
     } as never);
 
@@ -688,6 +700,9 @@ describe('createListing', () => {
     })).rejects.toThrow('photo cleanup failed: cleanup failed');
 
     expect(remove).toHaveBeenCalled();
+    expect(rpc).toHaveBeenCalledWith('delete_listing_with_active_booking_check', {
+      target_listing_id: 'listing-123',
+    });
   });
 });
 

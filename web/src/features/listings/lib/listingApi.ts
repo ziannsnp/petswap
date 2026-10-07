@@ -141,11 +141,7 @@ export async function createListing(values: CreateListingValues): Promise<Listin
     }
 
     try {
-      const { error: listingCleanupError } = await supabase
-        .from('listings')
-        .delete()
-        .eq('id', listing.id);
-      if (listingCleanupError) throw listingCleanupError;
+      await deleteListing(listing.id);
     } catch (listingCleanupError) {
       cleanupErrors.push(`listing cleanup failed: ${listingCleanupError instanceof Error ? listingCleanupError.message : String(listingCleanupError)}`);
     }
@@ -364,6 +360,14 @@ export async function setListingPublicationStatus(
   if (error) throw error;
 
   return addSignedPhotoUrls({ ...data, listing_images: data.listing_images ?? [] });
+}
+
+export async function deleteListing(listingId: string): Promise<void> {
+  const { error } = await getSupabaseClient().rpc('delete_listing_with_active_booking_check', {
+    target_listing_id: listingId,
+  });
+
+  if (error) throw error;
 }
 
 export async function listMyListings(): Promise<Listing[]> {

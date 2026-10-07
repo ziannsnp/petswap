@@ -8,6 +8,8 @@ import { ListingsScreen } from './ListingsScreen';
 // declarations: jest only allows out-of-scope references whose name starts
 // with "mock", so this state must be named (and reset) accordingly.
 const mockMutate = jest.fn();
+const mockMutateAsync = jest.fn();
+const mockDeleteMutateAsync = jest.fn();
 const mockMutationState = { isPending: false, isError: false };
 const mockListingState = { status: 'published' as 'draft' | 'published' };
 
@@ -35,13 +37,20 @@ jest.mock('../hooks/useListings', () => ({
   }),
   useSetListingPublicationStatus: () => ({
     mutate: mockMutate,
+    mutateAsync: mockMutateAsync,
     isPending: mockMutationState.isPending,
     isError: mockMutationState.isError,
+  }),
+  useDeleteListing: () => ({
+    mutateAsync: mockDeleteMutateAsync,
+    isPending: mockMutationState.isPending,
   }),
 }));
 
 afterEach(() => {
   jest.clearAllMocks();
+  mockMutateAsync.mockResolvedValue(undefined);
+  mockDeleteMutateAsync.mockResolvedValue(undefined);
   mockMutationState.isPending = false;
   mockMutationState.isError = false;
   mockListingState.status = 'published';
@@ -73,7 +82,7 @@ describe('ListingsScreen', () => {
     );
   });
 
-  it('lets an owner unpublish a published listing to stop new booking requests', async () => {
+  it('requires confirmation before unpublishing a published listing', async () => {
     const user = userEvent.setup();
     render(
       <MemoryRouter initialEntries={['/listings']}>
@@ -82,8 +91,99 @@ describe('ListingsScreen', () => {
     );
 
     await user.click(screen.getByRole('button', { name: 'Unpublish listing listing-123' }));
+    expect(screen.getByRole('dialog')).toHaveTextContent('Existing bookings are not changed.');
+    expect(mockMutateAsync).not.toHaveBeenCalled();
 
-    expect(mockMutate).toHaveBeenCalledWith({ listingId: 'listing-123', status: 'draft' });
+    await user.click(screen.getByRole('button', { name: /^Unpublish$/ }));
+
+    expect(mockMutateAsync).toHaveBeenCalledWith({ listingId: 'listing-123', status: 'draft' });
+  });
+
+  it('cancels with Escape and restores focus to the action that opened the dialog', async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={['/listings']}>
+        <ListingsScreen />
+      </MemoryRouter>,
+    );
+    const trigger = screen.getByRole('button', { name: 'Unpublish listing listing-123' });
+
+    await user.click(trigger);
+    expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus();
+    await user.keyboard('{Escape}');
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+    expect(mockMutateAsync).not.toHaveBeenCalled();
+  });
+
+  it('cancels with the Cancel button and restores focus to the delete control', async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={['/listings']}>
+        <ListingsScreen />
+      </MemoryRouter>,
+    );
+    const trigger = screen.getByRole('button', { name: 'Delete listing listing-123' });
+
+    await user.click(trigger);
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+    expect(mockDeleteMutateAsync).not.toHaveBeenCalled();
+  });
+
+  it('keeps keyboard focus cycling inside the confirmation dialog', async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={['/listings']}>
+        <ListingsScreen />
+      </MemoryRouter>,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Delete listing listing-123' }));
+    const cancel = screen.getByRole('button', { name: 'Cancel' });
+    const confirm = screen.getByRole('button', { name: /^Delete$/ });
+
+    await user.tab({ shift: true });
+    expect(confirm).toHaveFocus();
+    await user.tab();
+    expect(cancel).toHaveFocus();
+  });
+
+  it('soft-deletes only after confirmation and moves focus to the page heading', async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={['/listings']}>
+        <ListingsScreen />
+      </MemoryRouter>,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Delete listing listing-123' }));
+    expect(screen.getByRole('dialog')).toHaveTextContent('pending or confirmed bookings cannot be deleted');
+    await user.click(screen.getByRole('button', { name: /^Delete$/ }));
+
+    expect(mockDeleteMutateAsync).toHaveBeenCalledWith('listing-123');
+    expect(await screen.findByRole('heading', { name: 'My listings' })).toHaveFocus();
+  });
+
+  it('keeps the delete confirmation open and explains active bookings', async () => {
+    const user = userEvent.setup();
+    mockDeleteMutateAsync.mockRejectedValueOnce(new Error('Listing has active bookings and cannot be deleted.'));
+    render(
+      <MemoryRouter initialEntries={['/listings']}>
+        <ListingsScreen />
+      </MemoryRouter>,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Delete listing listing-123' }));
+    await user.click(screen.getByRole('button', { name: /^Delete$/ }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'This listing has pending or confirmed bookings and cannot be deleted.',
+    );
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
 
   it('offers to republish a draft listing', () => {
@@ -98,8 +198,24 @@ describe('ListingsScreen', () => {
     expect(screen.getByRole('button', { name: 'Publish listing listing-123' })).toBeInTheDocument();
   });
 
-  it('shows an error when the publication toggle fails', () => {
-    mockMutationState.isError = true;
+  it('shows an error when publishing a draft fails', async () => {
+    const user = userEvent.setup();
+    mockListingState.status = 'draft';
+    mockMutateAsync.mockRejectedValueOnce(new Error('network failed'));
+    render(
+      <MemoryRouter initialEntries={['/listings']}>
+        <ListingsScreen />
+      </MemoryRouter>,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Publish listing listing-123' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('We could not publish this listing');
+  });
+
+  it('shows a publication error in the confirmation dialog and lets the owner retry', async () => {
+    const user = userEvent.setup();
+    mockMutateAsync.mockRejectedValueOnce(new Error('network failed'));
 
     render(
       <MemoryRouter initialEntries={['/listings']}>
@@ -107,6 +223,10 @@ describe('ListingsScreen', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole('alert')).toHaveTextContent('We could not unpublish this listing');
+    await user.click(screen.getByRole('button', { name: 'Unpublish listing listing-123' }));
+    await user.click(screen.getByRole('button', { name: /^Unpublish$/ }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('We could not unpublish this listing');
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
 });

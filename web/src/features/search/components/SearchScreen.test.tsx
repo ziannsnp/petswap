@@ -101,6 +101,16 @@ describe('SearchScreen', () => {
     expect(screen.getByLabelText('Location')).toHaveValue('Bangkok');
   });
 
+  it('tidies a URL with a blank or padded value when the same search is submitted', async () => {
+    const user = userEvent.setup();
+    renderSearchAt('/?location=%20Bangkok&keyword=');
+
+    await user.click(screen.getByRole('button', { name: 'Search' }));
+
+    expect(urlSearch()).toBe('?location=Bangkok');
+    expect(screen.getByTestId('navigation-type')).toHaveTextContent('REPLACE');
+  });
+
   it('clears both fields and the URL, then returns focus to the location field', async () => {
     const user = userEvent.setup();
     renderSearchAt('/?location=Bangkok&keyword=cat');

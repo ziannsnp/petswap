@@ -13,9 +13,11 @@ export function SearchScreen() {
   const { data: listings = [], isPending } = usePublishedListings();
 
   const search = (next: SearchCriteria) => {
-    // Submitting the search that is already applied would only add a duplicate history entry.
-    if (isSameSearch(next, criteria)) return;
-    setSearchParams(toSearchParams(next));
+    const nextParams = toSearchParams(next);
+    if (nextParams.toString() === searchParams.toString()) return;
+    // The same search reached through a URL with blank or padded values is tidied in place,
+    // not added to history as if it were a new search.
+    setSearchParams(nextParams, { replace: isSameSearch(next, criteria) });
   };
 
   return (

@@ -1,6 +1,7 @@
 /** @jest-environment jsdom */
 import { fireEvent, render, screen, within } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import userEvent from '@testing-library/user-event';
+import { MemoryRouter, Route, Routes, useParams } from 'react-router-dom';
 import type { Listing } from '@/features/listings';
 import { makeSearchResult } from '../testing/searchFixtures';
 import { SearchResultCard } from './SearchResultCard';
@@ -27,10 +28,18 @@ const secondPhoto = {
   signed_url: 'https://storage.test/signed/room.jpg',
 };
 
+function ListingPage() {
+  const { listingId } = useParams();
+  return <h1>Listing page {listingId}</h1>;
+}
+
 function renderCard(listing: Listing) {
   render(
     <MemoryRouter>
-      <SearchResultCard listing={listing} />
+      <Routes>
+        <Route path="/" element={<SearchResultCard listing={listing} />} />
+        <Route path="/listings/:listingId" element={<ListingPage />} />
+      </Routes>
     </MemoryRouter>,
   );
 }
@@ -52,10 +61,23 @@ describe('SearchResultCard', () => {
     expect(pets.map((item) => item.textContent)).toEqual(['Dog', 'Guinea pig', 'Up to 3 pets']);
   });
 
-  it('links the card to the listing detail page by its title', () => {
+  it('links the card to the listing detail page under the title alone', () => {
     renderCard(makeSearchResult({ id: 'listing-42' }));
 
     expect(screen.getByRole('link', { name: 'Sunny garden room' })).toHaveAttribute('href', '/listings/listing-42');
+  });
+
+  it('opens the listing when the photo, not the title, is clicked', async () => {
+    const user = userEvent.setup();
+    renderCard(makeSearchResult({
+      id: 'listing-42',
+      listing_images: [mainPhoto],
+      cover_photo_url: mainPhoto.signed_url,
+    }));
+
+    await user.click(screen.getByRole('img', { name: 'Lawn behind the house' }));
+
+    expect(screen.getByRole('heading', { name: 'Listing page listing-42' })).toBeInTheDocument();
   });
 
   it('shows a placeholder when the listing has no photo', () => {

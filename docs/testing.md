@@ -134,4 +134,11 @@ After `npx supabase db reset`, configure `web/.env.local` with the local API URL
 4. While signed in as `blair@petswap.test`, navigate directly to Alex's edit URL and attempt the corresponding API requests. The listing and its image order must remain unchanged.
 5. Simulate an upload or database failure. Newly uploaded objects must be cleaned up where possible, and existing photos must remain attached until replacement metadata has committed.
 
+## Manual listing unpublish and delete journey
+
+1. Open **My listings** as an owner and choose **Unpublish** on a published listing. Verify the confirmation can be cancelled with Cancel or Escape, focus returns to the action button, and confirming changes the listing to Draft without changing existing bookings.
+2. Choose **Delete** on a listing with a pending or confirmed booking. Confirm the action; the database must reject it, the dialog must remain open with an explanation, and the listing must remain published or draft as before.
+3. Choose **Delete** on a listing with no pending or confirmed bookings (terminal declined, cancelled, and completed bookings do not block deletion). Verify confirmation marks it deleted, sets `deleted_at`, advances `updated_at`, removes it from My Listings and public search, and moves focus to the My listings heading.
+4. Verify a non-owner cannot call the delete RPC for that listing, and direct API updates or deletes cannot restore or hard-delete it.
+
 Public listing details, host/owner profiles, search, pet profiles, and bookings belong to their separate user stories and are not acceptance evidence for US-2.2 listing editing.

@@ -555,9 +555,9 @@ select set_config(
 );
 set local role authenticated;
 
-update public.listings
-set status = 'deleted', deleted_at = '2026-09-13T00:00:00Z'::timestamptz
-where id = '30000000-0000-4000-8000-000000000002';
+select public.delete_listing_with_active_booking_check(
+  '30000000-0000-4000-8000-000000000002'
+);
 
 do $$
 declare

@@ -1,17 +1,8 @@
 import {
   FACILITY_OPTIONS,
   parseFacilities,
-  PET_TYPE_OPTIONS,
   serializeFacilities,
 } from './listingOptions';
-
-describe('pet type options', () => {
-  it('offers every pet species supported by the database vocabulary', () => {
-    expect(PET_TYPE_OPTIONS.map((option) => option.value)).toEqual([
-      'dog', 'cat', 'rabbit', 'hamster', 'guinea_pig', 'fish', 'reptile', 'exotic_mammal', 'bird', 'other',
-    ]);
-  });
-});
 
 describe('facility options', () => {
   it('matches the six optional choices in the approved prototype', () => {

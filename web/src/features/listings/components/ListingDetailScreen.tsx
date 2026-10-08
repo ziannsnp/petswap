@@ -2,7 +2,8 @@ import { ArrowLeft, Image } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 import { RequestBookingForm } from '@/features/bookings';
 import { useListing } from '../hooks/useListings';
-import { petSpeciesLabel, parseFacilities } from '../lib/listingOptions';
+import { parseFacilities } from '../lib/listingOptions';
+import { petSpeciesLabel } from '@/shared/lib/petSpecies';
 import { LISTING_STATUS_STYLES } from '../lib/listingStatus';
 
 export function ListingDetailScreen() {

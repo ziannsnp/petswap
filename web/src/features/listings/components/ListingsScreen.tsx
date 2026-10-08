@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Home, Image, Pencil, Plus, Trash2 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { useDeleteListing, useMyListings, useSetListingPublicationStatus } from '../hooks/useListings';
-import { petSpeciesLabel } from '../lib/listingOptions';
+import { petSpeciesLabel } from '@/shared/lib/petSpecies';
 import { LISTING_STATUS_STYLES } from '../lib/listingStatus';
 import type { Listing } from '../lib/listingApi';
 import { ListingActionDialog } from './ListingActionDialog';

@@ -11,6 +11,10 @@
 
 begin;
 
+-- Enable direct storage delete queries in this test transaction so DELETE statements
+-- reach Row Level Security (RLS) policies instead of being blocked by storage triggers.
+set local storage.allow_delete_query = 'true';
+
 -- Seed data reference:
 --   Users:
 --     Alex ('10000000-0000-4000-8000-000000000001') - hosts listings 1, 2, 4; owns pet Miso
@@ -58,6 +62,44 @@ update storage.objects
 set metadata = '{"version":"updated"}'::jsonb
 where bucket_id = 'pet-photos'
   and name = '20000000-0000-4000-8000-000000000004/rocket.jpg';
+
+-- Owner can upload a photo to be deleted to verify owner DELETE permissions
+insert into storage.objects (id, bucket_id, name)
+values (
+  '50000000-0000-4000-8000-000000000029',
+  'pet-photos',
+  '20000000-0000-4000-8000-000000000004/rocket-to-delete.jpg'
+);
+
+-- Owner CAN delete their own pet photo (deletes exactly 1 row)
+do $$
+declare
+  deleted_rows integer;
+begin
+  delete from storage.objects
+  where bucket_id = 'pet-photos'
+    and name = '20000000-0000-4000-8000-000000000004/rocket-to-delete.jpg';
+
+  get diagnostics deleted_rows = row_count;
+  if deleted_rows <> 1 then
+    raise exception 'pet photo access: owner Casey was unable to delete own pet photo (deleted % rows, expected 1)', deleted_rows;
+  end if;
+end;
+$$;
+
+-- Verify the deleted photo is truly gone
+do $$
+begin
+  if exists (
+    select 1
+    from storage.objects
+    where bucket_id = 'pet-photos'
+      and name = '20000000-0000-4000-8000-000000000004/rocket-to-delete.jpg'
+  ) then
+    raise exception 'pet photo access: owner-deleted photo still exists';
+  end if;
+end;
+$$;
 
 -- Owner cannot upload into another user's pet folder
 do $$
@@ -119,26 +161,19 @@ begin
 end;
 $$;
 
--- Alex CANNOT delete Rocket's photo
+-- Alex CANNOT delete Rocket's photo (deletes 0 rows under RLS)
 do $$
 declare
   deleted_rows integer;
 begin
-  begin
-    delete from storage.objects
-    where bucket_id = 'pet-photos'
-      and name = '20000000-0000-4000-8000-000000000004/rocket.jpg';
+  delete from storage.objects
+  where bucket_id = 'pet-photos'
+    and name = '20000000-0000-4000-8000-000000000004/rocket.jpg';
 
-    get diagnostics deleted_rows = row_count;
-    if deleted_rows <> 0 then
-      raise exception 'pet photo access: booked listing host Alex deleted pet photo';
-    end if;
-  exception
-    when others then
-      if SQLERRM not like 'Direct deletion from storage tables is not allowed%' then
-        raise;
-      end if;
-  end;
+  get diagnostics deleted_rows = row_count;
+  if deleted_rows <> 0 then
+    raise exception 'pet photo access: booked listing host Alex deleted pet photo (deleted % rows, expected 0)', deleted_rows;
+  end if;
 end;
 $$;
 
@@ -199,26 +234,19 @@ begin
 end;
 $$;
 
--- Blair CANNOT delete Rocket's photo
+-- Blair CANNOT delete Rocket's photo (deletes 0 rows under RLS)
 do $$
 declare
   deleted_rows integer;
 begin
-  begin
-    delete from storage.objects
-    where bucket_id = 'pet-photos'
-      and name = '20000000-0000-4000-8000-000000000004/rocket.jpg';
+  delete from storage.objects
+  where bucket_id = 'pet-photos'
+    and name = '20000000-0000-4000-8000-000000000004/rocket.jpg';
 
-    get diagnostics deleted_rows = row_count;
-    if deleted_rows <> 0 then
-      raise exception 'pet photo access: booked listing host Blair deleted pet photo';
-    end if;
-  exception
-    when others then
-      if SQLERRM not like 'Direct deletion from storage tables is not allowed%' then
-        raise;
-      end if;
-  end;
+  get diagnostics deleted_rows = row_count;
+  if deleted_rows <> 0 then
+    raise exception 'pet photo access: booked listing host Blair deleted pet photo (deleted % rows, expected 0)', deleted_rows;
+  end if;
 end;
 $$;
 
@@ -310,26 +338,19 @@ begin
 end;
 $$;
 
--- Casey CANNOT delete Pixel's photo
+-- Casey CANNOT delete Pixel's photo (deletes 0 rows under RLS)
 do $$
 declare
   deleted_rows integer;
 begin
-  begin
-    delete from storage.objects
-    where bucket_id = 'pet-photos'
-      and name = '20000000-0000-4000-8000-000000000003/pixel.jpg';
+  delete from storage.objects
+  where bucket_id = 'pet-photos'
+    and name = '20000000-0000-4000-8000-000000000003/pixel.jpg';
 
-    get diagnostics deleted_rows = row_count;
-    if deleted_rows <> 0 then
-      raise exception 'pet photo access: unrelated user Casey deleted Pixel photo';
-    end if;
-  exception
-    when others then
-      if SQLERRM not like 'Direct deletion from storage tables is not allowed%' then
-        raise;
-      end if;
-  end;
+  get diagnostics deleted_rows = row_count;
+  if deleted_rows <> 0 then
+    raise exception 'pet photo access: unrelated user Casey deleted Pixel photo (deleted % rows, expected 0)', deleted_rows;
+  end if;
 end;
 $$;
 
@@ -466,6 +487,22 @@ begin
   exception
     when insufficient_privilege then null;
   end;
+end;
+$$;
+
+-- Anonymous user CANNOT delete pet photos (deletes 0 rows under RLS)
+do $$
+declare
+  deleted_rows integer;
+begin
+  delete from storage.objects
+  where bucket_id = 'pet-photos'
+    and name = '20000000-0000-4000-8000-000000000004/rocket.jpg';
+
+  get diagnostics deleted_rows = row_count;
+  if deleted_rows <> 0 then
+    raise exception 'pet photo access: anonymous user deleted pet photo (deleted % rows, expected 0)', deleted_rows;
+  end if;
 end;
 $$;
 

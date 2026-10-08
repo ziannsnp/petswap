@@ -48,26 +48,11 @@ as $$
   );
 $$;
 
--- Helper to verify if a listing owner has a booking for the target pet
-create or replace function public.pet_is_booked_at_own_listing(target_pet_id uuid)
-returns boolean
-language sql
-stable
-security definer
-set search_path = public
-as $$
-  select exists (
-    select 1
-    from public.bookings b
-    join public.listings l on l.id = b.listing_id
-    where b.pet_id = target_pet_id
-      and l.owner_id = auth.uid()
-  );
-$$;
+-- Note: Policy 2 reuses the existing public.pet_is_booked_at_own_listing(uuid)
+-- defined in 20260831210233_allow_listing_owners_read_booked_pets.sql.
 
 grant execute on function public.storage_folder_pet_id(text) to authenticated, anon;
 grant execute on function public.current_user_owns_pet(uuid) to authenticated, anon;
-grant execute on function public.pet_is_booked_at_own_listing(uuid) to authenticated, anon;
 
 -- Clean up existing policies for idempotency
 drop policy if exists "Pet owners can read pet photos" on storage.objects;

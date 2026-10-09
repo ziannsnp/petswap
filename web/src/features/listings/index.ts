@@ -6,5 +6,4 @@ export { useCreateListing } from './hooks/useCreateListing';
 export { useUpdateListing } from './hooks/useUpdateListing';
 export { useListing, useMyListings, usePublishedListings } from './hooks/useListings';
 export { createListing, getListing, listMyListings, listPublishedListings, updateListing } from './lib/listingApi';
-export { petSpeciesLabel } from './lib/listingOptions';
 export type { CreateListingValues, Listing, ListingPhotoInput, UpdateListingValues } from './lib/listingApi';

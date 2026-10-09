@@ -1,6 +1,6 @@
 import type { Database } from '@/shared/types/database.types';
 import type { ListingFormErrors, ListingFormValues } from '../lib/listingForm';
-import type { PetSpecies } from '../lib/listingOptions';
+import type { PetSpecies } from '@/shared/lib/petSpecies';
 
 export type ListingQueryRow = Database['public']['Tables']['listings']['Row'] & {
   listing_images: Database['public']['Tables']['listing_images']['Row'][];

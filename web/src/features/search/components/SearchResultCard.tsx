@@ -1,8 +1,8 @@
 import { useId, useState } from 'react';
 import { Image, MapPin } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { petSpeciesLabel } from '@/features/listings';
 import type { Listing } from '@/features/listings';
+import { petSpeciesLabel } from '@/shared/lib/petSpecies';
 
 interface SearchResultCardProps {
   listing: Listing;

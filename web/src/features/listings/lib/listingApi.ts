@@ -1,7 +1,8 @@
 import { getSupabaseClient } from '@/shared/lib/supabase';
 import type { Database } from '@/shared/types/database.types';
 import { serializeFacilities } from './listingOptions';
-import type { Facility, PetSpecies } from './listingOptions';
+import type { Facility } from './listingOptions';
+import type { PetSpecies } from '@/shared/lib/petSpecies';
 import {
   LISTING_PHOTO_MAX_BYTES,
   LISTING_PHOTO_MAX_COUNT,

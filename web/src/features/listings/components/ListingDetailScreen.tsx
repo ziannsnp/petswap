@@ -5,7 +5,8 @@ import { RequestBookingForm } from '@/features/bookings';
 import { getInitials } from '@/shared/lib/initials';
 import { useListing } from '../hooks/useListings';
 import { listingErrorCode } from '../lib/listingErrors';
-import { petSpeciesLabel, parseFacilities } from '../lib/listingOptions';
+import { parseFacilities } from '../lib/listingOptions';
+import { petSpeciesLabel } from '@/shared/lib/petSpecies';
 import { LISTING_STATUS_STYLES } from '../lib/listingStatus';
 import { ListingPhotoGallery } from './ListingPhotoGallery';
 

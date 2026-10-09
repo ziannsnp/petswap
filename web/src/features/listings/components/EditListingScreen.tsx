@@ -7,8 +7,9 @@ import { useUpdateListing } from '../hooks/useUpdateListing';
 import type { Listing } from '../lib/listingApi';
 import { validateListingForm } from '../lib/listingForm';
 import type { ListingFormErrors } from '../lib/listingForm';
-import { FACILITY_OPTIONS, PET_TYPE_OPTIONS, parseFacilities, petSpeciesLabel } from '../lib/listingOptions';
-import type { PetSpecies } from '../lib/listingOptions';
+import { FACILITY_OPTIONS, parseFacilities } from '../lib/listingOptions';
+import { PET_SPECIES_OPTIONS, petSpeciesLabel } from '@/shared/lib/petSpecies';
+import type { PetSpecies } from '@/shared/lib/petSpecies';
 import { partitionListingPhotos } from '../lib/listingPhotos';
 import type { RejectedListingPhoto } from '../lib/listingPhotos';
 
@@ -128,10 +129,10 @@ function EditListingForm({ listing }: EditListingFormProps) {
   // as free text. Both are kept in state so a save cannot drop them, and shown so the
   // owner can see what the listing currently says.
   const extraPetTypes = acceptedPetTypes.filter(
-    (petType) => !PET_TYPE_OPTIONS.some((option) => option.value === petType),
+    (petType) => !PET_SPECIES_OPTIONS.some((option) => option.value === petType),
   );
   const petTypeOptions = [
-    ...PET_TYPE_OPTIONS,
+    ...PET_SPECIES_OPTIONS,
     ...extraPetTypes.map((value) => ({ value, label: petSpeciesLabel(value) })),
   ];
   const facilityOptions: readonly string[] = FACILITY_OPTIONS;

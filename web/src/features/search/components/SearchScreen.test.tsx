@@ -6,11 +6,10 @@ import { usePublishedListings } from '@/features/listings';
 import { makeSearchResult } from '../testing/searchFixtures';
 import { SearchScreen } from './SearchScreen';
 
-// Only the data hook is replaced. The label function is the real one, so the cards show
-// the same pet-type labels as the rest of the app.
+// Only the data hook is replaced. Pet-type labels come from @/shared/lib/petSpecies, which
+// is not mocked, so the cards show the same labels as the rest of the app.
 jest.mock('@/features/listings', () => ({
   usePublishedListings: jest.fn(),
-  petSpeciesLabel: jest.requireActual('@/features/listings/lib/listingOptions').petSpeciesLabel,
 }));
 
 const mockedUsePublishedListings = jest.mocked(usePublishedListings);

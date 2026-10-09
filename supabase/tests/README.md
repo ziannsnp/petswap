@@ -6,7 +6,7 @@ automated form of the database review points in
 
 | File | What it checks | Writes data? |
 | --- | --- | --- |
-| `database_contract.sql` | Catalogue checks: RLS is on, booking policies exist, the confirmed-overlap and consent-pair constraints exist, the listing accepted-pet contract and storage policies exist, the booking status enum and guard triggers are present, the listing-photo bucket is private, and the avatar bucket is public. | No |
+| `database_contract.sql` | Catalogue checks: RLS is on, booking policies exist, the confirmed-overlap and consent-pair constraints exist, the listing accepted-pet contract and storage policies exist, the booking status enum and guard triggers are present, the listing-photo and pet-photos buckets are private, and the avatar bucket is public. | No |
 | `booking_rules.test.sql` | Behaviour of the confirmed-overlap rule: overlap rejected, back-to-back allowed, non-confirmed and different-listing bookings allowed, zero-length window rejected. Runs in one transaction that is rolled back. | No (rolled back) |
 | `listing_rules.test.sql` | Behaviour of the required accepted-pet rule: an empty accepted-pet array is rejected by the named constraint. Runs in one transaction that is rolled back. | No (rolled back) |
 | `listing_facility_migration.test.sql` | Behaviour of the legacy facility-label backfill: old labels map to the prototype vocabulary, unknown values survive, and replacement duplicates are removed. | No (rolled back) |
@@ -14,6 +14,7 @@ automated form of the database review points in
 | `listing_edit_rules.test.sql` | US-2.2 behaviour: owners can edit valid listing fields, invalid updates fail, non-owners cannot edit listing data or photos, photo metadata stays under the correct listing path and ten-photo cap, and main-photo ordering changes atomically. | No (rolled back) |
 | `listing_deletion.test.sql` | Listing-owner deletion behaviour: active bookings block deletion, terminal bookings do not, only owners may delete, audit timestamps persist, and direct update/hard-delete bypasses are rejected. | No (rolled back) |
 | `avatar_storage_access.test.sql` | Avatar storage behaviour: avatars are publicly readable; users may create and replace their own avatars but cannot upload into or delete another user's folder. | No (rolled back) |
+| `pet_photo_access.test.sql` | Pet photo storage behaviour: private bucket; pet owners have full CRUD over their pet photos; listing hosts with a booking for that pet can read photos; unrelated users and anonymous requests are blocked. | No (rolled back) |
 
 ## Run locally
 
@@ -35,6 +36,8 @@ psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" \
   -v ON_ERROR_STOP=1 -f supabase/tests/listing_deletion.test.sql
 psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" \
   -v ON_ERROR_STOP=1 -f supabase/tests/avatar_storage_access.test.sql
+psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" \
+  -v ON_ERROR_STOP=1 -f supabase/tests/pet_photo_access.test.sql
 ```
 
 No local `psql`? Run it inside the database container instead:

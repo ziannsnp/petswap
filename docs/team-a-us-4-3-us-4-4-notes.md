@@ -10,6 +10,9 @@ The branch also implements US-5.1.3 and US-5.1.4 in the search screen: trimmed,
 case-insensitive literal matching for location/title/description, a published-only
 API predicate, and a defensive published-only client filter.
 
+For the complete done/partial/blocked matrix across US-4.3, US-4.4, and US-5.1,
+see [US implementation status](us-status-4-3-4-4-5-1.md).
+
 ## Scope order
 
 1. Finish the public listing-details experience first because search and booking both link to it.

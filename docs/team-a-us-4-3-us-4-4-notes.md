@@ -38,19 +38,20 @@ see [US implementation status](us-status-4-3-4-4-5-1.md).
 
 ### US-4.4 unpublish foundation
 
-- Added stable listing action error codes: `unauthenticated`, `forbidden`, `not_found`, `deleted`, `active_booking`, `network`, and `unknown`.
+- Added stable listing action error codes: `unauthorized`, `forbidden`, `not_found`, `deleted`, `active_booking`, `network`, and `unknown`.
 - Added safe translation for permission, missing-row, active-booking, and browser network failures.
 - Hardened publication-status changes to require an authenticated user, load the current row, verify ownership, reject deleted listings, and scope the update by both listing ID and owner ID.
+- Hardened deletion with the same authenticated-owner/missing/deleted checks before invoking the transactional database operation; database RPC failures are translated to the same stable codes.
 - Kept Supabase RLS as the authorization boundary; the client checks provide immediate and testable errors but do not replace RLS.
-- Confirmed the existing mutation refreshes the complete `['listings']` cache family after success, covering search/browse, My Listings, and detail queries.
+- Confirmed both owner-action mutations refresh the complete `['listings']` cache family after success, covering search/browse, My Listings, and detail queries.
 - Integrated the group's owner action dialog, delete mutation, soft-delete migration, active-booking guard, audit timestamps, and database contract tests from the newest `main`.
 
 ### Tests and compatibility
 
 - Added gallery tests for alt text, thumbnail selection, keyboard navigation, missing URLs, image load failure, and no-photo placeholders.
 - Added detail-screen tests for complete fields, host display, owner draft preview, safe unavailable responses, and network retry.
-- Added API tests for photo-signing degradation, deleted/missing visibility, successful unpublish, unauthenticated access, non-owner access, and repeated action protection for deleted rows.
-- Added error-contract tests and a cache-invalidation test.
+- Added API tests for photo-signing degradation, deleted/missing visibility, successful unpublish, unauthorized access, non-owner access, repeated action protection for deleted rows, and transactional delete error mapping.
+- Added error-contract tests and cache-invalidation tests for both owner actions.
 - Updated the edit-listing photo preview to accept the new nullable signed-URL contract.
 - Added search tests for location matching, keyword matching, case/space normalization, literal wildcard characters, and draft/deleted exclusion.
 
@@ -81,4 +82,4 @@ see [US implementation status](us-status-4-3-4-4-5-1.md).
 - `npm test -- --runInBand`
 - `npm run build`
 
-The pre-merge Team A slice passed on 30 September 2026. After merging the newest `origin/main`, the full web suite passed 36 suites / 422 tests on 9 October 2026. The production build requires running Vite outside the restricted filesystem sandbox so esbuild can resolve its local configuration.
+The pre-merge Team A slice passed on 30 September 2026. After merging the newest `origin/main` and completing US-4.4.3/4.4.4, the full web suite passed 36 suites / 434 tests on 9 October 2026. The production build requires running Vite outside the restricted filesystem sandbox so esbuild can resolve its local configuration.

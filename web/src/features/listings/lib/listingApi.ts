@@ -151,7 +151,7 @@ export async function createListing(values: CreateListingValues): Promise<Listin
     }
 
     try {
-      await deleteListing(listing.id);
+      await cleanupCreatedListing(listing.id);
     } catch (listingCleanupError) {
       cleanupErrors.push(`listing cleanup failed: ${listingCleanupError instanceof Error ? listingCleanupError.message : String(listingCleanupError)}`);
     }
@@ -389,7 +389,7 @@ export async function setListingPublicationStatus(
     const { data: userData, error: userError } = await supabase.auth.getUser();
     if (userError) throw userError;
     if (!userData.user) {
-      throw new ListingError('unauthenticated', 'You must be signed in to update a listing.');
+      throw new ListingError('unauthorized', 'You must be signed in to update a listing.');
     }
 
     const { data: currentListing, error: currentError } = await supabase
@@ -425,6 +425,42 @@ export async function setListingPublicationStatus(
 }
 
 export async function deleteListing(listingId: string): Promise<void> {
+  const supabase = getSupabaseClient();
+
+  try {
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    if (userError) throw userError;
+    if (!userData.user) {
+      throw new ListingError('unauthorized', 'You must be signed in to delete a listing.');
+    }
+
+    const { data: currentListing, error: currentError } = await supabase
+      .from('listings')
+      .select('id, owner_id, status, deleted_at')
+      .eq('id', listingId)
+      .maybeSingle();
+
+    if (currentError) throw currentError;
+    if (!currentListing) throw new ListingError('not_found', 'The listing could not be found.');
+    if (currentListing.owner_id !== userData.user.id) {
+      throw new ListingError('forbidden', 'Only the listing owner can delete this listing.');
+    }
+    if (currentListing.status === 'deleted' || currentListing.deleted_at) {
+      throw new ListingError('deleted', 'This listing is already deleted.');
+    }
+
+    const { error } = await supabase.rpc('delete_listing_with_active_booking_check', {
+      target_listing_id: listingId,
+    });
+
+    if (error) throw error;
+  } catch (error) {
+    throw toListingError(error);
+  }
+}
+
+/** Cleanup for a newly-created row when photo persistence fails before returning it. */
+async function cleanupCreatedListing(listingId: string): Promise<void> {
   const { error } = await getSupabaseClient().rpc('delete_listing_with_active_booking_check', {
     target_listing_id: listingId,
   });

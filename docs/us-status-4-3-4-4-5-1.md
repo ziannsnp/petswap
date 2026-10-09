@@ -2,7 +2,7 @@
 
 Status date: 9 October 2026  
 Branch: `feat/team-a-us-4-3-4-4`  
-Latest implementation commit: `ad20746`
+Latest implementation commit: see the branch `HEAD` after the US-4.4.3/4.4.4 implementation commit.
 
 Status labels:
 
@@ -38,8 +38,8 @@ Team A's frontend work is complete. The only material blocker is Team B's author
 | --- | --- | --- | --- |
 | US-4.4.1 Owner-only Unpublish/Delete controls | B | **Done** | Merged owner action controls are present. |
 | US-4.4.2 Confirmation, cancellation, keyboard, and focus behavior | B | **Done** | Dialog supports Escape, focus trapping, focus restoration, cancel, and pending states. |
-| US-4.4.3 Error codes for unauthorized/missing/deleted/active-booking cases | A | **Partial** | Typed codes exist and are used for unpublish; delete still exposes some raw RPC errors. |
-| US-4.4.4 Owner-authorized unpublish API and cache refresh | A | **Done** | Owner checks, deleted-row protection, scoped updates, and cache invalidation are implemented. |
+| US-4.4.3 Error codes for unauthorized/missing/deleted/active-booking cases | A | **Done** | Both unpublish and delete adapters expose stable typed codes and translate database/RPC failures without leaking backend details. |
+| US-4.4.4 Owner-authorized unpublish API and cache refresh | A | **Done** | Owner checks, deleted-row protection, scoped updates, and cache invalidation are implemented and covered by API/hook tests. |
 | US-4.4.5 Transactional soft deletion and active-booking checks | B | **Done** | Migration and database RPC are merged from the latest `main`. |
 | US-4.4.6 Status, deleted_at, and updated_at audit persistence | B | **Done** | Soft deletion persists all required audit information. |
 | US-4.4.7 Owner/non-owner/missing/already-deleted fixtures | C | **Partial** | SQL scenarios exist; a reusable UI fixture matrix is still needed. |
@@ -72,7 +72,7 @@ Team A's frontend work is complete. The only material blocker is Team B's author
 ## Verification
 
 - 36 Jest suites passed.
-- 429 tests passed.
+- 434 tests passed.
 - Lint passed.
 - Typecheck passed.
 - Production build passed.

@@ -2,8 +2,10 @@ import { ListingError, listingErrorCode, toListingError } from './listingErrors'
 
 describe('listing error contract', () => {
   it.each([
+    [{ code: '401', message: 'authentication required' }, 'unauthorized'],
     [{ code: '42501', message: 'permission denied' }, 'forbidden'],
     [{ code: 'PGRST116', message: 'JSON object requested, multiple (or no) rows returned' }, 'not_found'],
+    [{ code: 'P0001', message: 'Listing is already deleted.' }, 'deleted'],
     [{ message: 'listing has an active booking' }, 'active_booking'],
   ] as const)('maps a backend error to %s', (error, expectedCode) => {
     expect(listingErrorCode(error)).toBe(expectedCode);

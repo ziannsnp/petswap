@@ -1,5 +1,5 @@
 export type ListingErrorCode =
-  | 'unauthenticated'
+  | 'unauthorized'
   | 'forbidden'
   | 'not_found'
   | 'deleted'
@@ -7,7 +7,7 @@ export type ListingErrorCode =
   | 'network'
   | 'unknown';
 
-/** Stable listing error contract shared by details, unpublish, and the later delete flow. */
+/** Stable listing error contract shared by details and owner listing actions. */
 export class ListingError extends Error {
   constructor(
     public readonly code: ListingErrorCode,
@@ -40,14 +40,26 @@ export function toListingError(error: unknown): ListingError {
     const code = error.code;
     const message = error.message?.toLowerCase() ?? '';
 
-    if (code === '42501' || message.includes('permission denied') || message.includes('row-level security')) {
-      return new ListingError('forbidden', 'You do not have permission to perform this listing action.', { cause: error });
+    if (
+      code === '401' ||
+      message.includes('must be signed in') ||
+      message.includes('not authenticated') ||
+      message.includes('authentication required') ||
+      message.includes('session missing')
+    ) {
+      return new ListingError('unauthorized', 'You must be signed in to manage this listing.', { cause: error });
+    }
+    if (message.includes('already deleted') || message.includes('no longer available')) {
+      return new ListingError('deleted', 'This listing is no longer available.', { cause: error });
+    }
+    if (message.includes('active booking')) {
+      return new ListingError('active_booking', 'This listing has an active booking.', { cause: error });
     }
     if (code === 'PGRST116') {
       return new ListingError('not_found', 'The listing could not be found.', { cause: error });
     }
-    if (message.includes('active booking')) {
-      return new ListingError('active_booking', 'This listing has an active booking.', { cause: error });
+    if (code === '42501' || message.includes('permission denied') || message.includes('row-level security')) {
+      return new ListingError('forbidden', 'You do not have permission to perform this listing action.', { cause: error });
     }
   }
 

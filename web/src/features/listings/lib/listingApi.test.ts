@@ -231,7 +231,7 @@ describe('setListingPublicationStatus', () => {
     mockedGetSupabaseClient.mockReturnValue({ auth: { getUser }, from } as never);
 
     await expect(setListingPublicationStatus('listing-1', 'draft')).rejects.toMatchObject({
-      code: 'unauthenticated',
+      code: 'unauthorized',
     });
     expect(from).not.toHaveBeenCalled();
   });
@@ -278,7 +278,15 @@ describe('deleteListing', () => {
 
   it('uses the transactional database operation to delete a listing', async () => {
     const rpc = jest.fn().mockResolvedValue({ data: null, error: null });
-    mockedGetSupabaseClient.mockReturnValue({ rpc } as never);
+    const maybeSingle = jest.fn().mockResolvedValue({
+      data: { id: 'listing-123', owner_id: 'owner-1', status: 'published', deleted_at: null },
+      error: null,
+    });
+    const eq = jest.fn().mockReturnValue({ maybeSingle });
+    const select = jest.fn().mockReturnValue({ eq });
+    const from = jest.fn().mockReturnValue({ select });
+    const getUser = jest.fn().mockResolvedValue({ data: { user: { id: 'owner-1' } }, error: null });
+    mockedGetSupabaseClient.mockReturnValue({ auth: { getUser }, from, rpc } as never);
 
     await expect(deleteListing('listing-123')).resolves.toBeUndefined();
 
@@ -290,13 +298,64 @@ describe('deleteListing', () => {
   it('surfaces active-booking and authorization errors from the database', async () => {
     const rpc = jest.fn().mockResolvedValue({
       data: null,
-      error: new Error('Listing has active bookings and cannot be deleted.'),
+      error: { code: 'P0001', message: 'Listing has active bookings and cannot be deleted.' },
     });
-    mockedGetSupabaseClient.mockReturnValue({ rpc } as never);
+    const maybeSingle = jest.fn().mockResolvedValue({
+      data: { id: 'listing-123', owner_id: 'owner-1', status: 'published', deleted_at: null },
+      error: null,
+    });
+    const eq = jest.fn().mockReturnValue({ maybeSingle });
+    const select = jest.fn().mockReturnValue({ eq });
+    const from = jest.fn().mockReturnValue({ select });
+    const getUser = jest.fn().mockResolvedValue({ data: { user: { id: 'owner-1' } }, error: null });
+    mockedGetSupabaseClient.mockReturnValue({ auth: { getUser }, from, rpc } as never);
 
-    await expect(deleteListing('listing-123')).rejects.toThrow(
-      'Listing has active bookings and cannot be deleted.',
-    );
+    await expect(deleteListing('listing-123')).rejects.toMatchObject({ code: 'active_booking' });
+  });
+
+  it('returns stable unauthorized and missing codes before calling the database operation', async () => {
+    const getUser = jest.fn().mockResolvedValue({ data: { user: null }, error: null });
+    const from = jest.fn();
+    const rpc = jest.fn();
+    mockedGetSupabaseClient.mockReturnValue({ auth: { getUser }, from, rpc } as never);
+
+    await expect(deleteListing('listing-123')).rejects.toMatchObject({ code: 'unauthorized' });
+    expect(from).not.toHaveBeenCalled();
+    expect(rpc).not.toHaveBeenCalled();
+
+    const ownerGetUser = jest.fn().mockResolvedValue({ data: { user: { id: 'owner-1' } }, error: null });
+    const maybeSingle = jest.fn().mockResolvedValue({ data: null, error: null });
+    const eq = jest.fn().mockReturnValue({ maybeSingle });
+    const select = jest.fn().mockReturnValue({ eq });
+    const ownerFrom = jest.fn().mockReturnValue({ select });
+    mockedGetSupabaseClient.mockReturnValue({ auth: { getUser: ownerGetUser }, from: ownerFrom, rpc } as never);
+
+    await expect(deleteListing('listing-123')).rejects.toMatchObject({ code: 'not_found' });
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it('rejects non-owners and already-deleted listings without calling the delete operation', async () => {
+    const rpc = jest.fn();
+    const makeClient = (listing: unknown) => {
+      const getUser = jest.fn().mockResolvedValue({ data: { user: { id: 'owner-1' } }, error: null });
+      const maybeSingle = jest.fn().mockResolvedValue({ data: listing, error: null });
+      const eq = jest.fn().mockReturnValue({ maybeSingle });
+      const select = jest.fn().mockReturnValue({ eq });
+      const from = jest.fn().mockReturnValue({ select });
+      return { auth: { getUser }, from, rpc };
+    };
+
+    mockedGetSupabaseClient.mockReturnValue(makeClient({
+      id: 'listing-123', owner_id: 'other-owner', status: 'published', deleted_at: null,
+    }) as never);
+    await expect(deleteListing('listing-123')).rejects.toMatchObject({ code: 'forbidden' });
+    expect(rpc).not.toHaveBeenCalled();
+
+    mockedGetSupabaseClient.mockReturnValue(makeClient({
+      id: 'listing-123', owner_id: 'owner-1', status: 'deleted', deleted_at: '2026-09-13T00:00:00.000Z',
+    }) as never);
+    await expect(deleteListing('listing-123')).rejects.toMatchObject({ code: 'deleted' });
+    expect(rpc).not.toHaveBeenCalled();
   });
 });
 

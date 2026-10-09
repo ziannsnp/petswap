@@ -1,4 +1,4 @@
-import { useMyListings, useSetListingPublicationStatus } from './useListings';
+import { useDeleteListing, useMyListings, useSetListingPublicationStatus } from './useListings';
 import { listMyListings } from '../lib/listingApi';
 import { useAuth } from '@/features/auth';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -12,6 +12,7 @@ jest.mock('@tanstack/react-query', () => ({
 }));
 jest.mock('@/features/auth', () => ({ useAuth: jest.fn() }));
 jest.mock('../lib/listingApi', () => ({
+  deleteListing: jest.fn(),
   listMyListings: jest.fn(),
   listPublishedListings: jest.fn(),
 }));
@@ -56,6 +57,22 @@ describe('useSetListingPublicationStatus', () => {
 
   it('refreshes public, owner, and detail listing caches after a successful change', () => {
     useSetListingPublicationStatus();
+    const mutationOptions = mockedUseMutation.mock.calls[0][0];
+
+    mutationOptions.onSuccess?.(undefined as never, undefined as never, undefined as never, undefined as never);
+
+    expect(mockInvalidateQueries).toHaveBeenCalledWith({ queryKey: ['listings'] });
+  });
+});
+
+describe('useDeleteListing', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockedUseQueryClient.mockReturnValue({ invalidateQueries: mockInvalidateQueries } as never);
+  });
+
+  it('refreshes public, owner, and detail listing caches after a successful deletion', () => {
+    useDeleteListing();
     const mutationOptions = mockedUseMutation.mock.calls[0][0];
 
     mutationOptions.onSuccess?.(undefined as never, undefined as never, undefined as never, undefined as never);

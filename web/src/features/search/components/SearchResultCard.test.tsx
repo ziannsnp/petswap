@@ -6,10 +6,6 @@ import type { Listing } from '@/features/listings';
 import { makeSearchResult } from '../testing/searchFixtures';
 import { SearchResultCard } from './SearchResultCard';
 
-jest.mock('@/features/listings', () => ({
-  petSpeciesLabel: jest.requireActual('@/features/listings/lib/listingOptions').petSpeciesLabel,
-}));
-
 const mainPhoto = {
   id: 'img-1',
   listing_id: 'listing-1',

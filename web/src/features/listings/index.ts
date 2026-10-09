@@ -9,4 +9,4 @@ export { createListing, deleteListing, getListing, listMyListings, listPublished
 export type { CreateListingValues, Listing, ListingHost, ListingPhotoInput, UpdateListingValues } from './lib/listingApi';
 export { ListingError, listingErrorCode } from './lib/listingErrors';
 export type { ListingErrorCode } from './lib/listingErrors';
-export { petSpeciesLabel } from './lib/listingOptions';
+export { petSpeciesLabel } from '@/shared/lib/petSpecies';

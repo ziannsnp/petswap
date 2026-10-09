@@ -1,7 +1,10 @@
 # Team A implementation notes: US-4.3 and US-4.4
 
-Status date: 30 September 2026  
+Status date: 9 October 2026
 Working branch: `feat/team-a-us-4-3-4-4`
+
+The branch now includes the latest `origin/main` merge (`9331e67`), including the
+group's search result cards and transactional listing deletion work.
 
 ## Scope order
 
@@ -33,6 +36,7 @@ Working branch: `feat/team-a-us-4-3-4-4`
 - Hardened publication-status changes to require an authenticated user, load the current row, verify ownership, reject deleted listings, and scope the update by both listing ID and owner ID.
 - Kept Supabase RLS as the authorization boundary; the client checks provide immediate and testable errors but do not replace RLS.
 - Confirmed the existing mutation refreshes the complete `['listings']` cache family after success, covering search/browse, My Listings, and detail queries.
+- Integrated the group's owner action dialog, delete mutation, soft-delete migration, active-booking guard, audit timestamps, and database contract tests from the newest `main`.
 
 ### Tests and compatibility
 
@@ -48,14 +52,13 @@ Working branch: `feat/team-a-us-4-3-4-4`
 
 - Implement the listing-detail retrieval response that supplies the `ListingHost` projection without exposing private profile fields.
 - Generate the private signed photo URLs server-side/through the approved adapter while preserving nullable per-photo failures.
-- Add owner-only Unpublish/Delete controls and confirmation behavior.
-- Implement transactional soft deletion and active-booking checks, setting `status`, `deleted_at`, and `updated_at` atomically.
+- The delete controls and transactional deletion migration are now present from the merged group work. The remaining Team B dependency for US-4.3 is the authorized host-profile projection and retrieval API.
 
 ### Team C
 
 - Add the published, draft, deleted, missing, host, facility, multi-photo, no-photo, and failed-photo fixtures.
 - Add owner/non-owner/deleted and all booking-status fixtures for US-4.4.
-- Implement pending/success/error/retry UI states for delete and unpublish confirmations after Team B's controls are ready.
+- The merged action dialog covers confirmation, cancellation, keyboard focus, and pending/error states. Remaining C work is broader fixture expansion and release-level scenario coverage.
 
 ### Shared follow-up
 
@@ -70,4 +73,4 @@ Working branch: `feat/team-a-us-4-3-4-4`
 - `npm test -- --runInBand`
 - `npm run build`
 
-All checks passed for this slice on 30 September 2026. The production build required running Vite outside the restricted filesystem sandbox so esbuild could resolve its local configuration.
+The pre-merge Team A slice passed on 30 September 2026. After merging the newest `origin/main`, the full web suite passed 36 suites / 422 tests on 9 October 2026. The production build requires running Vite outside the restricted filesystem sandbox so esbuild can resolve its local configuration.

@@ -6,6 +6,10 @@ Working branch: `feat/team-a-us-4-3-4-4`
 The branch now includes the latest `origin/main` merge (`9331e67`), including the
 group's search result cards and transactional listing deletion work.
 
+The branch also implements US-5.1.3 and US-5.1.4 in the search screen: trimmed,
+case-insensitive literal matching for location/title/description, a published-only
+API predicate, and a defensive published-only client filter.
+
 ## Scope order
 
 1. Finish the public listing-details experience first because search and booking both link to it.
@@ -45,6 +49,7 @@ group's search result cards and transactional listing deletion work.
 - Added API tests for photo-signing degradation, deleted/missing visibility, successful unpublish, unauthenticated access, non-owner access, and repeated action protection for deleted rows.
 - Added error-contract tests and a cache-invalidation test.
 - Updated the edit-listing photo preview to accept the new nullable signed-URL contract.
+- Added search tests for location matching, keyword matching, case/space normalization, literal wildcard characters, and draft/deleted exclusion.
 
 ## Team handoffs and remaining work
 

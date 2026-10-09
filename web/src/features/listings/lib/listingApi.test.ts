@@ -1,5 +1,5 @@
 import { getSupabaseClient } from '../../../shared/lib/supabase';
-import { createListing, deleteListing, getListing, listMyListings, setListingPublicationStatus, updateListing } from './listingApi';
+import { createListing, deleteListing, getListing, listMyListings, listPublishedListings, setListingPublicationStatus, updateListing } from './listingApi';
 import type { UpdateListingValues } from './listingApi';
 
 jest.mock('../../../shared/lib/supabase', () => ({
@@ -42,6 +42,28 @@ describe('listMyListings', () => {
 
     await expect(listMyListings()).resolves.toEqual([]);
     expect(from).not.toHaveBeenCalled();
+  });
+});
+
+describe('listPublishedListings', () => {
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('queries only published listings that are not soft-deleted', async () => {
+    const order = jest.fn().mockResolvedValue({ data: [], error: null });
+    const isDeleted = jest.fn().mockReturnValue({ order });
+    const eq = jest.fn().mockReturnValue({ is: isDeleted });
+    const select = jest.fn().mockReturnValue({ eq });
+    const from = jest.fn().mockReturnValue({ select });
+    mockedGetSupabaseClient.mockReturnValue({ from } as never);
+
+    await expect(listPublishedListings()).resolves.toEqual([]);
+
+    expect(from).toHaveBeenCalledWith('listings');
+    expect(eq).toHaveBeenCalledWith('status', 'published');
+    expect(isDeleted).toHaveBeenCalledWith('deleted_at', null);
+    expect(order).toHaveBeenCalledWith('published_at', { ascending: false });
   });
 });
 

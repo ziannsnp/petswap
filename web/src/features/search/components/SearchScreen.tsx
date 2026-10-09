@@ -1,6 +1,6 @@
 import { useSearchParams } from 'react-router-dom';
 import { usePublishedListings } from '@/features/listings';
-import { isSameSearch, readSearchCriteria, toSearchParams } from '../lib/searchCriteria';
+import { filterPublishedListings, isSameSearch, readSearchCriteria, toSearchParams } from '../lib/searchCriteria';
 import type { SearchCriteria } from '../lib/searchCriteria';
 import { SearchForm } from './SearchForm';
 import { SearchResultCard } from './SearchResultCard';
@@ -8,9 +8,8 @@ import { SearchResultCard } from './SearchResultCard';
 export function SearchScreen() {
   const [searchParams, setSearchParams] = useSearchParams();
   const criteria = readSearchCriteria(searchParams);
-  // TODO(5.1.3, 5.1.4): query by `criteria` once the search API exists. Until then every
-  // published listing is shown, whatever was searched for.
-  const { data: listings = [], isPending } = usePublishedListings();
+  const { data: allPublishedListings = [], isPending } = usePublishedListings();
+  const listings = filterPublishedListings(allPublishedListings, criteria);
 
   const search = (next: SearchCriteria) => {
     const nextParams = toSearchParams(next);
@@ -33,7 +32,7 @@ export function SearchScreen() {
       <div className="page-container">
         <section aria-labelledby="search-results-heading" aria-busy={isPending}>
           <h2 className="sr-only" id="search-results-heading">Listings</h2>
-          {/* TODO(5.1.7, 5.1.8): loading, browse-all, no-results, error, and retry states. */}
+          {/* Loading, empty, error, and retry states are tracked separately in US-5.1.7/5.1.8. */}
           <ul className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
             {listings.map((listing) => (
               <li key={listing.id}>

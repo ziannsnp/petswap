@@ -61,6 +61,66 @@ describe('SearchScreen', () => {
     expect(within(results).getByRole('link', { name: 'Sunny garden room' })).toHaveAttribute('href', '/listings/listing-1');
   });
 
+  it('filters results by trimmed, case-insensitive location and keyword', async () => {
+    const user = userEvent.setup();
+    mockedUsePublishedListings.mockReturnValue({
+      data: [
+        makeSearchResult({ id: 'chiang-mai', location: 'Chiang Mai, Hang Dong', title: 'Quiet garden home' }),
+        makeSearchResult({ id: 'bangkok', location: 'Bangkok', title: 'City studio' }),
+      ],
+      isPending: false,
+      isError: false,
+    } as unknown as ReturnType<typeof usePublishedListings>);
+
+    renderSearchAt('/');
+    await user.type(screen.getByLabelText('Location'), '  CHIANG mai  ');
+    await user.click(screen.getByRole('button', { name: 'Search' }));
+
+    const results = screen.getByRole('region', { name: 'Listings' });
+    expect(within(results).getAllByRole('article')).toHaveLength(1);
+    expect(within(results).getByRole('link', { name: 'Quiet garden home' })).toBeInTheDocument();
+    expect(within(results).queryByRole('link', { name: 'City studio' })).not.toBeInTheDocument();
+  });
+
+  it('treats wildcard characters as literal keyword text', async () => {
+    const user = userEvent.setup();
+    mockedUsePublishedListings.mockReturnValue({
+      data: [
+        makeSearchResult({ id: 'literal', title: '100% safe (indoors)' }),
+        makeSearchResult({ id: 'ordinary', title: 'Garden home' }),
+      ],
+      isPending: false,
+      isError: false,
+    } as unknown as ReturnType<typeof usePublishedListings>);
+
+    renderSearchAt('/');
+    await user.type(screen.getByLabelText('Keyword'), '%');
+    await user.click(screen.getByRole('button', { name: 'Search' }));
+
+    const results = screen.getByRole('region', { name: 'Listings' });
+    expect(within(results).getAllByRole('article')).toHaveLength(1);
+    expect(within(results).getByRole('link', { name: '100% safe (indoors)' })).toBeInTheDocument();
+  });
+
+  it('never renders a draft or deleted row even if one reaches the search response', () => {
+    mockedUsePublishedListings.mockReturnValue({
+      data: [
+        makeSearchResult({ id: 'published' }),
+        makeSearchResult({ id: 'draft', title: 'Private draft', status: 'draft' }),
+        makeSearchResult({ id: 'deleted', title: 'Deleted place', status: 'deleted', deleted_at: '2026-10-01T00:00:00.000Z' }),
+      ],
+      isPending: false,
+      isError: false,
+    } as unknown as ReturnType<typeof usePublishedListings>);
+
+    renderSearchAt('/');
+
+    const results = screen.getByRole('region', { name: 'Listings' });
+    expect(within(results).getAllByRole('article')).toHaveLength(1);
+    expect(within(results).queryByText('Private draft')).not.toBeInTheDocument();
+    expect(within(results).queryByText('Deleted place')).not.toBeInTheDocument();
+  });
+
   it('fills the fields from the search in the URL', () => {
     renderSearchAt('/?location=Chiang%20Mai&keyword=garden');
 

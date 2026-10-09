@@ -13,6 +13,7 @@ jest.mock('@/features/listings', () => ({
 }));
 
 const mockedUsePublishedListings = jest.mocked(usePublishedListings);
+const mockRefetch = jest.fn();
 
 // Shows what the browser would: the URL's query string, how the last navigation happened,
 // and a back button.
@@ -48,10 +49,92 @@ beforeEach(() => {
     ],
     isPending: false,
     isError: false,
+    isFetching: false,
+    refetch: mockRefetch,
   } as unknown as ReturnType<typeof usePublishedListings>);
+  mockRefetch.mockReset();
 });
 
 describe('SearchScreen', () => {
+  it('shows an initial loading state before listings arrive', () => {
+    mockedUsePublishedListings.mockReturnValue({
+      data: undefined,
+      isPending: true,
+      isError: false,
+      isFetching: true,
+      refetch: mockRefetch,
+    } as unknown as ReturnType<typeof usePublishedListings>);
+
+    renderSearchAt('/');
+
+    expect(screen.getByRole('status', { name: 'Loading listings' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Listings' })).toHaveAttribute('aria-busy', 'true');
+  });
+
+  it('shows an active-search loading state while results are being refreshed', () => {
+    mockedUsePublishedListings.mockReturnValue({
+      data: [makeSearchResult()],
+      isPending: false,
+      isError: false,
+      isFetching: true,
+      refetch: mockRefetch,
+    } as unknown as ReturnType<typeof usePublishedListings>);
+
+    renderSearchAt('/?keyword=garden');
+
+    expect(screen.getByRole('status', { name: 'Updating search results' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Listings' })).toHaveAttribute('aria-busy', 'true');
+  });
+
+  it('shows a retryable error state when the listings API fails', async () => {
+    const user = userEvent.setup();
+    mockedUsePublishedListings.mockReturnValue({
+      data: undefined,
+      isPending: false,
+      isError: true,
+      isFetching: false,
+      refetch: mockRefetch,
+    } as unknown as ReturnType<typeof usePublishedListings>);
+
+    renderSearchAt('/?keyword=garden');
+    expect(screen.getByRole('alert')).toHaveTextContent('We could not load listings');
+
+    await user.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(mockRefetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows a browse-all empty state when no published listings exist', () => {
+    mockedUsePublishedListings.mockReturnValue({
+      data: [],
+      isPending: false,
+      isError: false,
+      isFetching: false,
+      refetch: mockRefetch,
+    } as unknown as ReturnType<typeof usePublishedListings>);
+
+    renderSearchAt('/');
+
+    expect(screen.getByRole('status', { name: 'No listings available' })).toHaveTextContent('No listings available yet');
+  });
+
+  it('shows a no-results state and clears the applied search', async () => {
+    const user = userEvent.setup();
+    mockedUsePublishedListings.mockReturnValue({
+      data: [makeSearchResult()],
+      isPending: false,
+      isError: false,
+      isFetching: false,
+      refetch: mockRefetch,
+    } as unknown as ReturnType<typeof usePublishedListings>);
+
+    renderSearchAt('/?keyword=does-not-exist');
+
+    expect(screen.getByRole('status', { name: 'No search results' })).toHaveTextContent('No listings match your search');
+    await user.click(screen.getByRole('button', { name: 'Clear search' }));
+
+    expect(urlSearch()).toBe('');
+  });
+
   it('shows a card for every published listing', () => {
     renderSearchAt('/');
 

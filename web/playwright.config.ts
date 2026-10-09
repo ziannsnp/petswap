@@ -30,6 +30,7 @@ export default defineConfig({
   projects: [
     { name: 'desktop-chromium', use: { ...devices['Desktop Chrome'] } },
     { name: 'mobile-chromium', use: { ...devices['Pixel 5'] } },
+    { name: 'desktop-firefox', use: {...devices['Desktop Firefox']}},
   ],
   webServer: process.env.PLAYWRIGHT_BASE_URL
     ? undefined

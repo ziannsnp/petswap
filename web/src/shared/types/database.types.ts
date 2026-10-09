@@ -260,6 +260,10 @@ export type Database = {
         };
         Returns: undefined;
       };
+      delete_listing_with_active_booking_check: {
+        Args: { target_listing_id: string };
+        Returns: undefined;
+      };
     };
     Enums: {
       booking_status: 'pending' | 'confirmed' | 'declined' | 'cancelled' | 'completed';

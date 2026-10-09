@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/features/auth';
-import { getListing, listMyListings, listPublishedListings, setListingPublicationStatus } from '../lib/listingApi';
+import { deleteListing, getListing, listMyListings, listPublishedListings, setListingPublicationStatus } from '../lib/listingApi';
 import type { ListingPublicationMode } from '../lib/listingApi';
 
 export const listingKeys = {
@@ -49,6 +49,17 @@ export function useSetListingPublicationStatus() {
     mutationFn: ({ listingId, status }: { listingId: string; status: ListingPublicationMode }) => (
       setListingPublicationStatus(listingId, status)
     ),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: listingKeys.all });
+    },
+  });
+}
+
+export function useDeleteListing() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (listingId: string) => deleteListing(listingId),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: listingKeys.all });
     },

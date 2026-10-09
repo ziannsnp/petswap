@@ -57,11 +57,22 @@ begin
 end;
 $$;
 
--- Owner can update their pet's photo
-update storage.objects
-set metadata = '{"version":"updated"}'::jsonb
-where bucket_id = 'pet-photos'
-  and name = '20000000-0000-4000-8000-000000000004/rocket.jpg';
+-- Owner can update their pet's photo (updates exactly 1 row)
+do $$
+declare
+  updated_rows integer;
+begin
+  update storage.objects
+  set metadata = '{"version":"updated"}'::jsonb
+  where bucket_id = 'pet-photos'
+    and name = '20000000-0000-4000-8000-000000000004/rocket.jpg';
+
+  get diagnostics updated_rows = row_count;
+  if updated_rows <> 1 then
+    raise exception 'pet photo access: owner Casey was unable to update own pet photo (updated % rows, expected 1)', updated_rows;
+  end if;
+end;
+$$;
 
 -- Owner can upload a photo to be deleted to verify owner DELETE permissions
 insert into storage.objects (id, bucket_id, name)

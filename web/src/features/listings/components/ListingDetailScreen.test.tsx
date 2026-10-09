@@ -1,5 +1,5 @@
 /** @jest-environment jsdom */
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { useAuth } from '@/features/auth';
@@ -85,6 +85,21 @@ describe('ListingDetailScreen', () => {
     expect(screen.getByText('Based in Chiang Mai')).toBeInTheDocument();
     expect(screen.getByText('Booking form for listing-1')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Back to listings' })).toHaveAttribute('href', '/');
+  });
+
+  it('falls back to host initials when the profile photo fails to load', () => {
+    mockedUseListing.mockReturnValue(listingQuery({
+      data: {
+        ...publishedListing,
+        host: { ...publishedListing.host!, photo_url: 'https://example.test/avatar.jpg' },
+      },
+    }));
+
+    renderDetail();
+    fireEvent.error(screen.getByRole('img', { name: "Alex Rivera's profile" }));
+
+    expect(screen.queryByRole('img', { name: "Alex Rivera's profile" })).not.toBeInTheDocument();
+    expect(screen.getByText('AR')).toBeInTheDocument();
   });
 
   it('labels a private owner preview and links back to My Listings', () => {

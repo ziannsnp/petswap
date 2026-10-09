@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { ArrowLeft, Check, Home, MapPin, PawPrint, UserRound } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '@/features/auth';
@@ -8,6 +9,7 @@ import { listingErrorCode } from '../lib/listingErrors';
 import { parseFacilities } from '../lib/listingOptions';
 import { petSpeciesLabel } from '@/shared/lib/petSpecies';
 import { LISTING_STATUS_STYLES } from '../lib/listingStatus';
+import type { ListingHost } from '../lib/listingApi';
 import { ListingPhotoGallery } from './ListingPhotoGallery';
 
 function ListingDetailLoading() {
@@ -42,6 +44,27 @@ function ListingUnavailable({ error, retry }: { readonly error: unknown; readonl
         <Link className="btn-secondary" to="/">Browse listings</Link>
       </div>
     </section>
+  );
+}
+
+function ListingHostAvatar({ host }: { readonly host: ListingHost | null }) {
+  const [imageFailed, setImageFailed] = useState(false);
+
+  if (host?.photo_url && !imageFailed) {
+    return (
+      <img
+        className="h-12 w-12 shrink-0 rounded-full object-cover"
+        src={host.photo_url}
+        alt={`${host.display_name}'s profile`}
+        onError={() => setImageFailed(true)}
+      />
+    );
+  }
+
+  return (
+    <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-brand-100 font-semibold text-brand-800" aria-hidden="true">
+      {host ? getInitials(host.display_name) : <UserRound className="h-6 w-6" />}
+    </span>
   );
 }
 
@@ -129,13 +152,10 @@ export function ListingDetailScreen() {
                   <section className="mt-7" aria-labelledby="listing-host-heading">
                     <h2 className="text-lg font-semibold" id="listing-host-heading">Your host</h2>
                     <div className="mt-3 flex items-center gap-3 rounded-lg bg-gray-50 p-4">
-                      {listing.host?.photo_url ? (
-                        <img className="h-12 w-12 rounded-full object-cover" src={listing.host.photo_url} alt={`${listing.host.display_name}'s profile`} />
-                      ) : (
-                        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-brand-100 font-semibold text-brand-800" aria-hidden="true">
-                          {listing.host ? getInitials(listing.host.display_name) : <UserRound className="h-6 w-6" />}
-                        </span>
-                      )}
+                      <ListingHostAvatar
+                        key={`${listing.host?.id ?? 'unavailable'}:${listing.host?.photo_url ?? ''}`}
+                        host={listing.host}
+                      />
                       <div className="min-w-0">
                         <p className="font-medium text-gray-900">{listing.host?.display_name ?? 'Host details unavailable'}</p>
                         {listing.host?.location && <p className="mt-0.5 text-sm text-gray-500">Based in {listing.host.location}</p>}

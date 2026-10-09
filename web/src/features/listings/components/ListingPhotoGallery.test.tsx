@@ -57,4 +57,24 @@ describe('ListingPhotoGallery', () => {
     expect(screen.getByRole('img', { name: 'Quiet home photo unavailable' })).toBeInTheDocument();
     expect(screen.queryByRole('tab')).not.toBeInTheDocument();
   });
+
+  it('clamps the selected photo when refreshed data removes later photos', async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <ListingPhotoGallery
+        listingTitle="Quiet home"
+        photos={[
+          photo('photo-1', 'https://example.test/one.jpg'),
+          photo('photo-2', 'https://example.test/two.jpg'),
+          photo('photo-3', 'https://example.test/three.jpg'),
+        ]}
+      />,
+    );
+
+    await user.click(screen.getByRole('tab', { name: 'Show photo 3 of 3' }));
+    rerender(<ListingPhotoGallery listingTitle="Quiet home" photos={[photo('photo-1', 'https://example.test/one.jpg')]} />);
+
+    expect(screen.getByRole('img', { name: 'Quiet home photo 1' })).toBeInTheDocument();
+    expect(screen.getByText('1 / 1')).toBeInTheDocument();
+  });
 });

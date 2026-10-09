@@ -1,4 +1,4 @@
-import { useState, type KeyboardEvent } from 'react';
+import { useEffect, useState, type KeyboardEvent } from 'react';
 import { ChevronLeft, ChevronRight, Image } from 'lucide-react';
 import type { ListingImage } from '../lib/listingApi';
 
@@ -16,6 +16,15 @@ export function ListingPhotoGallery({ listingTitle, photos }: ListingPhotoGaller
   const [failedPhotoIds, setFailedPhotoIds] = useState<ReadonlySet<string>>(new Set());
   const selectedPhoto = photos[selectedIndex];
   const hasMultiplePhotos = photos.length > 1;
+
+  useEffect(() => {
+    setSelectedIndex((current) => Math.min(current, Math.max(photos.length - 1, 0)));
+    setFailedPhotoIds((current) => {
+      const photoIds = new Set(photos.map((photo) => photo.id));
+      const next = new Set([...current].filter((photoId) => photoIds.has(photoId)));
+      return next.size === current.size ? current : next;
+    });
+  }, [photos]);
 
   const selectRelativePhoto = (offset: number) => {
     if (photos.length === 0) return;

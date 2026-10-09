@@ -1,0 +1,73 @@
+# Team A implementation notes: US-4.3 and US-4.4
+
+Status date: 30 September 2026  
+Working branch: `feat/team-a-us-4-3-4-4`
+
+## Scope order
+
+1. Finish the public listing-details experience first because search and booking both link to it.
+2. Lock down the visibility and safe-error contract before adding more owner actions.
+3. Implement Team A's owner-authorized unpublish adapter and cache refresh.
+4. Hand the stable detail/host and action-error contracts to Teams B and C for their assigned retrieval, delete, confirmation, and fixture work.
+
+## Changes made
+
+### US-4.3 listing details
+
+- Rebuilt `ListingDetailScreen` as a responsive two-column desktop layout that collapses to one column on smaller screens.
+- Added title, location, description, capacity, accepted pet types, facilities, host, and booking sections.
+- Added owner-preview messaging for draft listings. The existing database RLS remains the authority that allows owners to read drafts and prevents other viewers from doing so.
+- Added a safe unavailable state shared by missing, forbidden, unpublished-to-viewer, and deleted listings. This avoids confirming that a private listing exists.
+- Added a distinct retry state for network and unknown service failures.
+- Added loading skeletons so the route has an explicit pending state.
+- Added `ListingPhotoGallery` with a main image, thumbnails, previous/next controls, Arrow Left/Arrow Right/Home/End keyboard navigation, responsive sizing, and meaningful fallback alt text.
+- Added per-photo placeholders. A failed or missing signed photo URL no longer makes the listing's text details inaccessible.
+- Changed signed photo URLs to `string | null` so photo failure is represented explicitly instead of throwing away the whole detail response.
+- Added the minimal `ListingHost` UI contract (`id`, `display_name`, `photo_url`, and `location`). The adapter currently returns `host: null` until Team B adds the authorized host projection.
+- Blocked direct rendering of rows whose status is `deleted` or whose `deleted_at` value is set, including owner reads permitted by the current RLS policy.
+
+### US-4.4 unpublish foundation
+
+- Added stable listing action error codes: `unauthenticated`, `forbidden`, `not_found`, `deleted`, `active_booking`, `network`, and `unknown`.
+- Added safe translation for permission, missing-row, active-booking, and browser network failures.
+- Hardened publication-status changes to require an authenticated user, load the current row, verify ownership, reject deleted listings, and scope the update by both listing ID and owner ID.
+- Kept Supabase RLS as the authorization boundary; the client checks provide immediate and testable errors but do not replace RLS.
+- Confirmed the existing mutation refreshes the complete `['listings']` cache family after success, covering search/browse, My Listings, and detail queries.
+
+### Tests and compatibility
+
+- Added gallery tests for alt text, thumbnail selection, keyboard navigation, missing URLs, image load failure, and no-photo placeholders.
+- Added detail-screen tests for complete fields, host display, owner draft preview, safe unavailable responses, and network retry.
+- Added API tests for photo-signing degradation, deleted/missing visibility, successful unpublish, unauthenticated access, non-owner access, and repeated action protection for deleted rows.
+- Added error-contract tests and a cache-invalidation test.
+- Updated the edit-listing photo preview to accept the new nullable signed-URL contract.
+
+## Team handoffs and remaining work
+
+### Team B
+
+- Implement the listing-detail retrieval response that supplies the `ListingHost` projection without exposing private profile fields.
+- Generate the private signed photo URLs server-side/through the approved adapter while preserving nullable per-photo failures.
+- Add owner-only Unpublish/Delete controls and confirmation behavior.
+- Implement transactional soft deletion and active-booking checks, setting `status`, `deleted_at`, and `updated_at` atomically.
+
+### Team C
+
+- Add the published, draft, deleted, missing, host, facility, multi-photo, no-photo, and failed-photo fixtures.
+- Add owner/non-owner/deleted and all booking-status fixtures for US-4.4.
+- Implement pending/success/error/retry UI states for delete and unpublish confirmations after Team B's controls are ready.
+
+### Shared follow-up
+
+- Add integration coverage using real Supabase RLS for anonymous published access, owner draft preview, non-owner draft denial, and deleted direct access.
+- Add search and My Listings regression tests once US-5.1 cache behavior is implemented.
+- Add Playwright coverage for gallery keyboard behavior and cancelled/successful owner confirmations after the Team B/C UI lands.
+
+## Verification
+
+- `npm run lint`
+- `npm run typecheck`
+- `npm test -- --runInBand`
+- `npm run build`
+
+All checks passed for this slice on 30 September 2026. The production build required running Vite outside the restricted filesystem sandbox so esbuild could resolve its local configuration.

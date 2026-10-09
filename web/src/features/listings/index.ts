@@ -6,4 +6,6 @@ export { useCreateListing } from './hooks/useCreateListing';
 export { useUpdateListing } from './hooks/useUpdateListing';
 export { useListing, useMyListings, usePublishedListings } from './hooks/useListings';
 export { createListing, getListing, listMyListings, listPublishedListings, updateListing } from './lib/listingApi';
-export type { CreateListingValues, Listing, ListingPhotoInput, UpdateListingValues } from './lib/listingApi';
+export type { CreateListingValues, Listing, ListingHost, ListingPhotoInput, UpdateListingValues } from './lib/listingApi';
+export { ListingError, listingErrorCode } from './lib/listingErrors';
+export type { ListingErrorCode } from './lib/listingErrors';

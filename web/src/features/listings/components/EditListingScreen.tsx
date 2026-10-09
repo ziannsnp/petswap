@@ -310,7 +310,7 @@ function EditListingForm({ listing }: EditListingFormProps) {
               <li className="relative aspect-4/3 overflow-hidden rounded-lg border border-gray-200" key={photo.kind === 'existing' ? photo.image.id : photo.previewUrl}>
                 <img
                   className="h-full w-full object-cover"
-                  src={photo.kind === 'existing' ? photo.image.signed_url : photo.previewUrl}
+                  src={photo.kind === 'existing' ? (photo.image.signed_url ?? undefined) : photo.previewUrl}
                   alt={photo.kind === 'existing' ? (photo.image.alt_text ?? `${listing.title} photo ${index + 1}`) : `${listing.title} new photo ${index + 1}`}
                 />
                 <div className="absolute inset-x-1 bottom-1 flex justify-between gap-1">

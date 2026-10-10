@@ -2,6 +2,7 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
+import { ListingError } from '../lib/listingErrors';
 import { ListingsScreen } from './ListingsScreen';
 
 // Referenced from inside jest.mock below, which babel hoists above these
@@ -227,6 +228,28 @@ describe('ListingsScreen', () => {
     await user.click(screen.getByRole('button', { name: /^Unpublish$/ }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('We could not unpublish this listing');
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+  });
+
+  it.each([
+    ['unauthorized', 'Please sign in again before managing this listing.'],
+    ['forbidden', 'You cannot delete a listing you do not own.'],
+    ['not_found', 'This listing could not be found. Refresh your listings and try again.'],
+    ['deleted', 'This listing has already been deleted. Refresh your listings to continue.'],
+  ] as const)('maps a %s delete error to safe owner-facing copy', async (code, message) => {
+    const user = userEvent.setup();
+    mockDeleteMutateAsync.mockRejectedValueOnce(new ListingError(code, 'internal backend detail'));
+    render(
+      <MemoryRouter initialEntries={['/listings']}>
+        <ListingsScreen />
+      </MemoryRouter>,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Delete listing listing-123' }));
+    await user.click(screen.getByRole('button', { name: /^Delete$/ }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(message);
+    expect(screen.getByRole('alert')).not.toHaveTextContent('internal backend detail');
     expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
 });

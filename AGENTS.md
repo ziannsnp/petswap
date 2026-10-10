@@ -26,6 +26,7 @@ Before changing code, identify the relevant requirement and read only the docume
 | --- | --- |
 | `web/` | Vite + React + TypeScript SPA. Read `web/README.md` for local setup. |
 | `supabase/` | Placeholder for future config, migrations, and Edge Functions. Do not add an unreviewed schema. |
+| `docker-compose.yml`, `docker/` | Self-contained stack (web build + Supabase services) and its support files. Settings mirror `supabase/config.toml`; see `docs/environments.md`. |
 | `docs/` | Current project documentation, ADRs, and QA templates. |
 | `scripts/` | Idempotent maintenance scripts only. |
 

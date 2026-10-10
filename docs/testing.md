@@ -24,14 +24,27 @@ The result should be integration-heavy, with fewer focused unit tests and very f
 tests. "Fewer" never means leaving a high-risk contract — like the booking overlap rule —
 unprotected.
 
+## Who writes the tests
+
+The squad that builds a feature also builds its tests, at every layer the feature needs: Jest
+unit tests, component tests, SQL contract checks under `supabase/tests/`, Playwright journeys,
+and manual evidence. Tests ship in the same pull request as the behavior they protect.
+
+The QA / Scrum / Infra squad owns the standard, not per-feature coverage: this strategy and the
+quality contract below, the Jest and Playwright harnesses, the deterministic seed data in
+`supabase/seed.sql`, the CI gates, the evidence templates, and the cross-feature regression pass
+before a demo or release. QA may pair on or contribute tests for another squad's feature when
+asked or when a backlog card says so. That is help, not a transfer of ownership: the feature
+squad still owns those tests and keeps them passing.
+
 ## Test layers
 
 | Layer | Tool | Owner and expectation |
 | --- | --- | --- |
-| Pure business rules | Jest | Unit-test booking conflict and status-transition rules; add tests for validation and transformations. |
-| React components | Jest + React Testing Library | Cover form validation, empty/error states, and protected UI behaviour. |
-| End-to-end flow | Playwright | Cover login → booking request → confirmation → status verification once Supabase test data is available. |
-| Manual UI checks | Markdown evidence | Squad B records listing/search cases; QA records regressions using the template. |
+| Pure business rules | Jest | Feature squad. Unit-test booking conflict and status-transition rules; add tests for validation and transformations. |
+| React components | Jest + React Testing Library | Feature squad. Cover form validation, empty/error states, and protected UI behaviour. |
+| End-to-end flow | Playwright | Feature squad for its own journeys, on the harness and seed data QA maintains. Cover login → booking request → confirmation → status verification once Supabase test data is available. |
+| Manual UI checks | Markdown evidence | Feature squad records cases for its own features; QA records the cross-feature regression pass using the template. |
 
 [`RegisterScreen.test.tsx`](../web/src/features/auth/components/RegisterScreen.test.tsx) and
 [`ProtectedRoute.test.tsx`](../web/src/features/auth/components/ProtectedRoute.test.tsx) are the

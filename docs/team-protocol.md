@@ -7,7 +7,9 @@
 | A — Accounts & Pets | Pinn, Liger, Search | Auth/profiles; pet database/API and care information; profile/pet UI, validation, squad testing. Owns FR-1.1, FR-1.2, FR-2.1, FR-2.2. |
 | B — Listings & Search | Zian, Ice, Ooh | Listing database/API and permissions; creation/detail UI; search/filter UI and manual evidence. Owns FR-3.1, FR-3.2, FR-4.1, FR-4.2. |
 | C — Booking Management | Boeing, Tham, Pipe | Booking schema/API/lifecycle; booking UI; conflict logic, Jest, and Playwright integration. Owns FR-5.1–FR-5.4. |
-| QA / Scrum / Infra (Quality, Testing & Release) | Tonpai | Docker/local setup, deployment readiness, burndown support, QA templates, and regression testing. |
+| QA / Scrum / Infra (Quality, Testing & Release) | Tonpai | Docker/local setup, deployment readiness, and burndown support; the test standard (strategy, harnesses, seed data, CI gates, QA templates) and cross-feature regression testing. Helps squads with feature tests on request without taking them over. |
+
+Every squad tests what it builds — unit, component, database, end-to-end, and manual evidence alike. QA sets the standard those tests are held to; see [Who writes the tests](testing.md#who-writes-the-tests).
 
 Each squad appoints a mini Scrum Master, rotating if the squad prefers. The mini Scrum Master keeps the squad's Google Sheet cards current and escalates blockers.
 

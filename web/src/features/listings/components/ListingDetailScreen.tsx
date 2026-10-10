@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowLeft, Check, Home, MapPin, PawPrint, UserRound } from 'lucide-react';
+import { ArrowLeft, Check, Home, MapPin, PawPrint } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '@/features/auth';
 import { RequestBookingForm } from '@/features/bookings';
@@ -47,7 +47,7 @@ function ListingUnavailable({ error, retry }: { readonly error: unknown; readonl
   );
 }
 
-function ListingHostAvatar({ host }: { readonly host: ListingHost | null }) {
+function ListingHostAvatar({ host }: { readonly host: ListingHost }) {
   const [imageFailed, setImageFailed] = useState(false);
 
   if (host?.photo_url && !imageFailed) {
@@ -63,7 +63,7 @@ function ListingHostAvatar({ host }: { readonly host: ListingHost | null }) {
 
   return (
     <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-brand-100 font-semibold text-brand-800" aria-hidden="true">
-      {host ? getInitials(host.display_name) : <UserRound className="h-6 w-6" />}
+      {getInitials(host.display_name)}
     </span>
   );
 }
@@ -149,20 +149,21 @@ export function ListingDetailScreen() {
                     )}
                   </section>
 
-                  <section className="mt-7" aria-labelledby="listing-host-heading">
-                    <h2 className="text-lg font-semibold" id="listing-host-heading">Your host</h2>
-                    <div className="mt-3 flex items-center gap-3 rounded-lg bg-gray-50 p-4">
-                      <ListingHostAvatar
-                        key={`${listing.host?.id ?? 'unavailable'}:${listing.host?.photo_url ?? ''}`}
-                        host={listing.host}
-                      />
-                      <div className="min-w-0">
-                        <p className="font-medium text-gray-900">{listing.host?.display_name ?? 'Host details unavailable'}</p>
-                        {listing.host?.location && <p className="mt-0.5 text-sm text-gray-500">Based in {listing.host.location}</p>}
-                        {!listing.host && <p className="mt-0.5 text-sm text-gray-500">The host profile could not be loaded.</p>}
+                  {listing.host && (
+                    <section className="mt-7" aria-labelledby="listing-host-heading">
+                      <h2 className="text-lg font-semibold" id="listing-host-heading">Your host</h2>
+                      <div className="mt-3 flex items-center gap-3 rounded-lg bg-gray-50 p-4">
+                        <ListingHostAvatar
+                          key={`${listing.host.id}:${listing.host.photo_url ?? ''}`}
+                          host={listing.host}
+                        />
+                        <div className="min-w-0">
+                          <p className="font-medium text-gray-900">{listing.host.display_name}</p>
+                          {listing.host.location && <p className="mt-0.5 text-sm text-gray-500">Based in {listing.host.location}</p>}
+                        </div>
                       </div>
-                    </div>
-                  </section>
+                    </section>
+                  )}
                 </article>
               </div>
 

@@ -102,6 +102,18 @@ describe('ListingDetailScreen', () => {
     expect(screen.getByText('AR')).toBeInTheDocument();
   });
 
+  it('omits the host section while the host projection is unavailable', () => {
+    mockedUseListing.mockReturnValue(listingQuery({
+      data: { ...publishedListing, host: null },
+    }));
+
+    renderDetail();
+
+    expect(screen.queryByRole('heading', { name: 'Your host' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Host details unavailable')).not.toBeInTheDocument();
+    expect(screen.queryByText('The host profile could not be loaded.')).not.toBeInTheDocument();
+  });
+
   it('labels a private owner preview and links back to My Listings', () => {
     mockedUseAuth.mockReturnValue({ user: { id: 'owner-1' } } as ReturnType<typeof useAuth>);
     mockedUseListing.mockReturnValue(listingQuery({ data: { ...publishedListing, status: 'draft' } }));

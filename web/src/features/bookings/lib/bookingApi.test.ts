@@ -119,10 +119,12 @@ describe('updateBookingStatus', () => {
     const databaseError = { code: '23P01', message: 'conflicting key violates exclusion constraint' };
     const { builder, from } = mockAuthenticatedClient('owner-1', { data: null, error: databaseError });
 
-    await expect(updateBookingStatus('booking-1', 'confirmed')).rejects.toMatchObject({
-      name: 'BookingConflictError',
-      message: 'This request overlaps another confirmed booking on this listing. Choose different dates before confirming.',
-    });
+    const update = updateBookingStatus('booking-1', 'confirmed');
+
+    await expect(update).rejects.toBeInstanceOf(BookingConflictError);
+    await expect(update).rejects.toThrow(
+      'This request overlaps another confirmed booking on this listing. Choose different dates before confirming.',
+    );
 
     expect(from).toHaveBeenCalledWith('bookings');
     expect(builder.update).toHaveBeenCalledWith({ status: 'confirmed' });

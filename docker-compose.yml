@@ -1,0 +1,217 @@
+# Self-contained PetSwap stack: the built web app plus the Supabase services it
+# calls. Needs only Docker; no Node or Supabase CLI on the host.
+#
+#   sh scripts/stack-env.sh          # once: writes .env with generated secrets
+#   docker compose up -d --build
+#   sh scripts/stack-health.sh --wait 180
+#
+# Every setting comes from .env (documented in .env.example); a missing one
+# stops `docker compose` with the message below instead of starting half a stack.
+#
+# This runs the same service images as `supabase start` but is a separate stack
+# on the same ports, so run one or the other. Auth, API, and storage settings
+# here mirror supabase/config.toml; change both together. Realtime, Studio, the
+# mail catcher, and image transforms are left out because the app does not use
+# them. See docs/decisions/0008-docker-compose-stack.md.
+
+name: petswap
+
+services:
+  db:
+    image: public.ecr.aws/supabase/postgres:15.8.1.085
+    restart: unless-stopped
+    command: ['postgres', '-c', 'config_file=/etc/postgresql/postgresql.conf', '-c', 'log_min_messages=fatal']
+    environment:
+      POSTGRES_HOST: /var/run/postgresql
+      PGPORT: 5432
+      POSTGRES_PORT: 5432
+      PGDATABASE: postgres
+      POSTGRES_DB: postgres
+      PGPASSWORD: ${POSTGRES_PASSWORD:?Set it in .env (run `sh scripts/stack-env.sh`; see .env.example)}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET:?Set it in .env (run `sh scripts/stack-env.sh`; see .env.example)}
+      JWT_EXP: 3600
+    ports:
+      - '${BIND_ADDRESS:?Set it in .env (see .env.example)}:${DB_PORT:?Set it in .env (see .env.example)}:5432'
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - db-config:/etc/postgresql-custom
+      - ./docker/db/roles.sql:/docker-entrypoint-initdb.d/init-scripts/99-roles.sql:ro
+      - ./docker/db/jwt.sql:/docker-entrypoint-initdb.d/init-scripts/99-jwt.sql:ro
+    healthcheck:
+      test: ['CMD', 'pg_isready', '-U', 'postgres', '-h', 'localhost']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  auth:
+    image: public.ecr.aws/supabase/gotrue:v2.189.0
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      GOTRUE_API_HOST: 0.0.0.0
+      GOTRUE_API_PORT: 9999
+      API_EXTERNAL_URL: ${API_EXTERNAL_URL:?Set it in .env (see .env.example)}
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_DB_DATABASE_URL: postgres://supabase_auth_admin:${POSTGRES_PASSWORD}@db:5432/postgres
+      GOTRUE_SITE_URL: ${SITE_URL:?Set it in .env (see .env.example)}
+      GOTRUE_URI_ALLOW_LIST: ${ADDITIONAL_REDIRECT_URLS?Set it in .env, empty is allowed (see .env.example)}
+      GOTRUE_JWT_SECRET: ${JWT_SECRET}
+      GOTRUE_JWT_EXP: 3600
+      GOTRUE_JWT_AUD: authenticated
+      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
+      GOTRUE_JWT_ADMIN_ROLES: service_role
+      GOTRUE_JWT_ISSUER: ${API_EXTERNAL_URL}/auth/v1
+      # supabase/config.toml [auth] and [auth.email]
+      GOTRUE_DISABLE_SIGNUP: 'false'
+      GOTRUE_EXTERNAL_EMAIL_ENABLED: 'true'
+      GOTRUE_EXTERNAL_ANONYMOUS_USERS_ENABLED: 'false'
+      GOTRUE_MAILER_AUTOCONFIRM: 'true'
+      GOTRUE_MAILER_SECURE_EMAIL_CHANGE_ENABLED: 'true'
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:9999/health']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  rest:
+    image: public.ecr.aws/supabase/postgrest:v14.10
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGRST_DB_URI: postgres://authenticator:${POSTGRES_PASSWORD}@db:5432/postgres
+      # supabase/config.toml [api]
+      PGRST_DB_SCHEMAS: public,storage,graphql_public
+      PGRST_DB_EXTRA_SEARCH_PATH: public,extensions
+      PGRST_DB_MAX_ROWS: 1000
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_JWT_SECRET: ${JWT_SECRET}
+      PGRST_DB_USE_LEGACY_GUCS: 'false'
+      PGRST_APP_SETTINGS_JWT_SECRET: ${JWT_SECRET}
+      PGRST_APP_SETTINGS_JWT_EXP: 3600
+
+  storage:
+    image: public.ecr.aws/supabase/storage-api:v1.60.4
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      rest:
+        condition: service_started
+    environment:
+      ANON_KEY: ${ANON_KEY:?Set it in .env (run `sh scripts/stack-env.sh`; see .env.example)}
+      SERVICE_KEY: ${SERVICE_ROLE_KEY:?Set it in .env (run `sh scripts/stack-env.sh`; see .env.example)}
+      POSTGREST_URL: http://rest:3000
+      PGRST_JWT_SECRET: ${JWT_SECRET}
+      AUTH_JWT_SECRET: ${JWT_SECRET}
+      DATABASE_URL: postgres://supabase_storage_admin:${POSTGRES_PASSWORD}@db:5432/postgres
+      # supabase/config.toml [storage] file_size_limit = 10MiB
+      FILE_SIZE_LIMIT: 10485760
+      STORAGE_BACKEND: file
+      FILE_STORAGE_BACKEND_PATH: /var/lib/storage
+      TENANT_ID: stub
+      REGION: stub
+      GLOBAL_S3_BUCKET: stub
+      ENABLE_IMAGE_TRANSFORMATION: 'false'
+    volumes:
+      - storage-data:/var/lib/storage
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:5000/status']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  functions:
+    image: public.ecr.aws/supabase/edge-runtime:v1.73.13
+    restart: unless-stopped
+    command: ['start', '--main-service', '/home/deno/main']
+    environment:
+      SUPABASE_URL: http://kong:8000
+      SUPABASE_ANON_KEY: ${ANON_KEY}
+      SUPABASE_SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
+      SIGN_IN_ALLOWED_ORIGINS: ${SIGN_IN_ALLOWED_ORIGINS:?Set it in .env (see .env.example)}
+      SIGN_IN_PREVIEW_HOSTNAME_SUFFIX: ${SIGN_IN_PREVIEW_HOSTNAME_SUFFIX?Set it in .env, empty is allowed (see .env.example)}
+    volumes:
+      - ./supabase/functions:/home/deno/functions:ro
+      - ./docker/functions/main:/home/deno/main:ro
+
+  # API gateway: the single address the browser and the Edge Function call.
+  kong:
+    image: public.ecr.aws/supabase/kong:2.8.1
+    restart: unless-stopped
+    # kong.yml has no native env substitution, so expand the two keys on start.
+    entrypoint: bash -c 'eval "echo \"$$(cat ~/temp.yml)\"" > ~/kong.yml && /docker-entrypoint.sh kong docker-start'
+    environment:
+      KONG_DATABASE: 'off'
+      KONG_DECLARATIVE_CONFIG: /home/kong/kong.yml
+      KONG_DNS_ORDER: LAST,A,CNAME
+      KONG_PLUGINS: request-transformer,cors,key-auth,acl
+      KONG_NGINX_PROXY_PROXY_BUFFER_SIZE: 160k
+      KONG_NGINX_PROXY_PROXY_BUFFERS: 64 160k
+      SUPABASE_ANON_KEY: ${ANON_KEY}
+      SUPABASE_SERVICE_KEY: ${SERVICE_ROLE_KEY}
+    ports:
+      - '${BIND_ADDRESS}:${API_PORT:?Set it in .env (see .env.example)}:8000'
+    volumes:
+      - ./docker/kong.yml:/home/kong/temp.yml:ro
+    healthcheck:
+      test: ['CMD', 'kong', 'health']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  # One-shot: applies supabase/migrations/ (and the seed on a new database), then
+  # exits. Waits for auth and storage because they create the schemas the
+  # migrations reference.
+  migrate:
+    image: public.ecr.aws/supabase/postgres:15.8.1.085
+    restart: 'no'
+    depends_on:
+      db:
+        condition: service_healthy
+      auth:
+        condition: service_healthy
+      storage:
+        condition: service_healthy
+    entrypoint: ['sh', '/migrate.sh']
+    environment:
+      PGHOST: db
+      PGPORT: 5432
+      PGUSER: postgres
+      PGDATABASE: postgres
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      SEED_DEMO_DATA: ${SEED_DEMO_DATA:?Set it in .env (see .env.example)}
+    volumes:
+      - ./docker/migrate.sh:/migrate.sh:ro
+      - ./supabase/migrations:/migrations:ro
+      - ./supabase/seed.sql:/seed.sql:ro
+
+  web:
+    build:
+      context: ./web
+      dockerfile: ../docker/web/Dockerfile
+      args:
+        VITE_SUPABASE_URL: ${API_EXTERNAL_URL}
+        VITE_SUPABASE_PUBLISHABLE_KEY: ${ANON_KEY}
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      kong:
+        condition: service_healthy
+    ports:
+      - '${BIND_ADDRESS}:${WEB_PORT:?Set it in .env (see .env.example)}:80'
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '--spider', 'http://127.0.0.1/']
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+volumes:
+  db-data:
+  db-config:
+  storage-data:

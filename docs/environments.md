@@ -101,6 +101,33 @@ Do not deploy the `sign-in` Edge Function to the shared hosted project yourself.
 
 In the hosted Supabase Dashboard, configure Auth password security with a minimum length of 8 and require lowercase letters, uppercase letters, digits, and symbols. The browser additionally limits passwords to printable ASCII without spaces. Browser validation is user feedback only; enforce every policy supported by hosted Auth in the Supabase Dashboard.
 
+## Docker Compose stack
+
+`docker-compose.yml` runs the whole app from Docker alone: the production build of the web app plus the Supabase services it calls, with migrations and seed applied. Use it to get a known-good PetSwap on a machine without Node or the Supabase CLI, or to recover one. Keep using `supabase start` for writing migrations, regenerating types, and Studio; see [ADR 0008](decisions/0008-docker-compose-stack.md).
+
+From the repository root:
+
+```bash
+sh scripts/stack-env.sh                  # once: writes .env with generated secrets
+docker compose up -d --build
+sh scripts/stack-health.sh --wait 180    # exits non-zero and names what is wrong
+```
+
+Then open `http://127.0.0.1:5173` and sign in with a [seeded test account](../supabase/README.md). The stack uses the same ports as `supabase start`, so stop that first with `npx supabase stop`.
+
+| To | Run |
+| --- | --- |
+| Stop, keeping data | `docker compose down` |
+| Start again, or pick up a new migration | `docker compose up -d --build` |
+| Rebuild from nothing (same seeded state every time) | `docker compose down -v`, then `docker compose up -d --build` |
+| Start over with new secrets | `docker compose down -v`, delete `.env`, then the three commands above |
+
+Every setting lives in `.env`, and `.env.example` documents each one. `docker compose` refuses to start when one is missing, and `scripts/stack-health.sh` checks the rest: the keys are signed with `JWT_SECRET`, `SIGN_IN_ALLOWED_ORIGINS` covers the web origin, every service is up, and the web bundle was built from the current `.env`. `API_EXTERNAL_URL` and `ANON_KEY` are compiled into the web bundle, so changing either needs `--build`. Changing `POSTGRES_PASSWORD` or `JWT_SECRET` after the first start needs the volumes removed, because the database keeps the values it was created with.
+
+Service settings in `docker-compose.yml` mirror `supabase/config.toml`; change both in the same pull request. Realtime, Studio, the mail catcher, and image transforms are not part of this stack.
+
+The defaults are for one machine: ports bind to `127.0.0.1` and `SEED_DEMO_DATA=true` creates accounts with a published password. Do not expose the stack to a network without setting `SEED_DEMO_DATA=false` on a new database and putting TLS in front of it.
+
 ## Daily commands
 
 Create a migration:

@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { useIncomingBookings, useOutgoingBookings, useUpdateBookingStatus } from '../hooks/useBookings';
-import { BookingConflictError, type BookingWithDetails } from '../lib/bookingApi';
+import { BookingConflictError } from '../lib/bookingErrors';
+import type { BookingWithDetails } from '../lib/bookingApi';
 import type { Database } from '@/shared/types/database.types';
 
 type BookingStatus = Database['public']['Enums']['booking_status'];

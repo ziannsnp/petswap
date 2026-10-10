@@ -1,18 +1,14 @@
 import { getSupabaseClient } from '@/shared/lib/supabase';
 import type { Database } from '@/shared/types/database.types';
+import { BookingConflictError } from './bookingErrors';
+
+export { BookingConflictError };
 
 export type Booking = Database['public']['Tables']['bookings']['Row'];
 export type BookingInsert = Database['public']['Tables']['bookings']['Insert'];
 
 export type BookingPetSummary = Pick<Database['public']['Tables']['pets']['Row'], 'id' | 'name' | 'species' | 'photo_url'>;
 export type BookingListingSummary = Pick<Database['public']['Tables']['listings']['Row'], 'id' | 'title' | 'location'>;
-
-export class BookingConflictError extends Error {
-  constructor() {
-    super('This request overlaps another confirmed booking on this listing. Choose different dates before confirming.');
-    this.name = 'BookingConflictError';
-  }
-}
 
 /** A booking plus enough pet/listing context to render FR-5.3's outgoing/incoming lists. */
 export type BookingWithDetails = Booking & {

@@ -1,5 +1,6 @@
 import { getSupabaseClient, type AppSupabaseClient } from '@/shared/lib/supabase';
-import { listIncomingBookings, listOutgoingBookings } from './bookingApi';
+import { BookingConflictError } from './bookingErrors';
+import { listIncomingBookings, listOutgoingBookings, updateBookingStatus } from './bookingApi';
 
 // Explicit factory so the real module (and its Vite-only `import.meta.env` usage) never loads under Jest.
 jest.mock('@/shared/lib/supabase', () => ({ getSupabaseClient: jest.fn() }));
@@ -16,10 +17,14 @@ function createQueryBuilder(result: QueryResult) {
     select: jest.fn(),
     eq: jest.fn(),
     order: jest.fn(),
+    update: jest.fn(),
+    single: jest.fn(),
   };
   builder.select.mockReturnValue(builder);
   builder.eq.mockReturnValue(builder);
   builder.order.mockResolvedValue(result);
+  builder.update.mockReturnValue(builder);
+  builder.single.mockResolvedValue(result);
   return builder;
 }
 
@@ -106,5 +111,28 @@ describe('listIncomingBookings', () => {
     mockUnauthenticatedClient();
 
     await expect(listIncomingBookings()).rejects.toThrow('You must be signed in to view bookings.');
+  });
+});
+
+describe('updateBookingStatus', () => {
+  it('explains that confirmation failed because another confirmed booking overlaps', async () => {
+    const databaseError = { code: '23P01', message: 'conflicting key violates exclusion constraint' };
+    const { builder, from } = mockAuthenticatedClient('owner-1', { data: null, error: databaseError });
+
+    await expect(updateBookingStatus('booking-1', 'confirmed')).rejects.toMatchObject({
+      name: 'BookingConflictError',
+      message: 'This request overlaps another confirmed booking on this listing. Choose different dates before confirming.',
+    });
+
+    expect(from).toHaveBeenCalledWith('bookings');
+    expect(builder.update).toHaveBeenCalledWith({ status: 'confirmed' });
+    expect(builder.eq).toHaveBeenCalledWith('id', 'booking-1');
+  });
+
+  it('keeps overlap constraint errors unchanged when declining', async () => {
+    const databaseError = { code: '23P01', message: 'conflicting key violates exclusion constraint' };
+    mockAuthenticatedClient('owner-1', { data: null, error: databaseError });
+
+    await expect(updateBookingStatus('booking-1', 'declined')).rejects.toBe(databaseError);
   });
 });

@@ -4,6 +4,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { BookingsScreen } from './BookingsScreen';
 import { useIncomingBookings, useOutgoingBookings, useUpdateBookingStatus } from '../hooks/useBookings';
+import { BookingConflictError } from '../lib/bookingErrors';
 import type { BookingWithDetails } from '../lib/bookingApi';
 
 // Explicit factory so the real hooks module (and its supabase/import.meta.env chain) never loads under Jest.
@@ -241,4 +242,18 @@ it('shows an error on the affected card when a status update fails', async () =>
   fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
 
   expect(await screen.findByRole('alert')).toHaveTextContent(/could not update this booking/i);
+});
+
+it('shows an overlap conflict on the booking card when its owner cannot confirm', async () => {
+  const mutateAsync = jest.fn().mockRejectedValue(new BookingConflictError());
+  mockUseUpdateBookingStatus.mockReturnValue({ mutateAsync });
+  mockUseOutgoingBookings.mockReturnValue(successResult([]));
+  mockUseIncomingBookings.mockReturnValue(successResult([makeBooking({ id: 'in-1', status: 'pending' })]));
+
+  render(<BookingsScreen />);
+  fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'This request overlaps another confirmed booking on this listing. Choose different dates before confirming.',
+  );
 });

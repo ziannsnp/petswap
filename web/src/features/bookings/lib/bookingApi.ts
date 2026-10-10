@@ -7,6 +7,13 @@ export type BookingInsert = Database['public']['Tables']['bookings']['Insert'];
 export type BookingPetSummary = Pick<Database['public']['Tables']['pets']['Row'], 'id' | 'name' | 'species' | 'photo_url'>;
 export type BookingListingSummary = Pick<Database['public']['Tables']['listings']['Row'], 'id' | 'title' | 'location'>;
 
+export class BookingConflictError extends Error {
+  constructor() {
+    super('This request overlaps another confirmed booking on this listing. Choose different dates before confirming.');
+    this.name = 'BookingConflictError';
+  }
+}
+
 /** A booking plus enough pet/listing context to render FR-5.3's outgoing/incoming lists. */
 export type BookingWithDetails = Booking & {
   pet: BookingPetSummary;
@@ -92,6 +99,11 @@ export async function updateBookingStatus(
     .single();
 
   if (error) {
+    // The database exclusion constraint is the authoritative, concurrency-safe overlap check.
+    if (status === 'confirmed' && error.code === '23P01') {
+      throw new BookingConflictError();
+    }
+
     throw error;
   }
 

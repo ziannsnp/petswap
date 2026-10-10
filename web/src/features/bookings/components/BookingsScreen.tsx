@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { useIncomingBookings, useOutgoingBookings, useUpdateBookingStatus } from '../hooks/useBookings';
-import type { BookingWithDetails } from '../lib/bookingApi';
+import { BookingConflictError, type BookingWithDetails } from '../lib/bookingApi';
 import type { Database } from '@/shared/types/database.types';
 
 type BookingStatus = Database['public']['Enums']['booking_status'];
@@ -190,8 +190,11 @@ export function BookingsScreen() {
     setResponseError(null);
     try {
       await updateStatus.mutateAsync({ bookingId, status });
-    } catch {
-      setResponseError({ bookingId, message: 'Could not update this booking. Please try again.' });
+    } catch (error) {
+      const message = error instanceof BookingConflictError
+        ? error.message
+        : 'Could not update this booking. Please try again.';
+      setResponseError({ bookingId, message });
     } finally {
       setRespondingId(null);
     }

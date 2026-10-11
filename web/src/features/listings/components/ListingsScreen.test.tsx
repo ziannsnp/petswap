@@ -10,7 +10,11 @@ import { ListingsScreen } from './ListingsScreen';
 const mockMutate = jest.fn();
 const mockMutateAsync = jest.fn();
 const mockDeleteMutateAsync = jest.fn();
-const mockMutationState = { isPending: false, isError: false };
+const mockMutationState = {
+  isPending: false,
+  isError: false,
+  variables: undefined as { listingId: string; status: 'draft' | 'published' } | undefined,
+};
 const mockListingState = { status: 'published' as 'draft' | 'published' };
 
 jest.mock('../hooks/useListings', () => ({
@@ -40,6 +44,7 @@ jest.mock('../hooks/useListings', () => ({
     mutateAsync: mockMutateAsync,
     isPending: mockMutationState.isPending,
     isError: mockMutationState.isError,
+    variables: mockMutationState.variables,
   }),
   useDeleteListing: () => ({
     mutateAsync: mockDeleteMutateAsync,
@@ -53,8 +58,17 @@ afterEach(() => {
   mockDeleteMutateAsync.mockResolvedValue(undefined);
   mockMutationState.isPending = false;
   mockMutationState.isError = false;
+  mockMutationState.variables = undefined;
   mockListingState.status = 'published';
 });
+
+function renderListings() {
+  return render(
+    <MemoryRouter initialEntries={['/listings']}>
+      <ListingsScreen />
+    </MemoryRouter>,
+  );
+}
 
 describe('ListingsScreen', () => {
   it('confirms that a newly published listing is discoverable', () => {
@@ -166,6 +180,74 @@ describe('ListingsScreen', () => {
 
     expect(mockDeleteMutateAsync).toHaveBeenCalledWith('listing-123');
     expect(await screen.findByRole('heading', { name: 'My listings' })).toHaveFocus();
+  });
+
+  it.each([
+    ['unpublish', 'Unpublish', '"Quiet home" is now unpublished. It no longer appears in search, and existing bookings are unchanged.'],
+    ['delete', 'Delete', '"Quiet home" was deleted. It no longer appears in search or in your listings.'],
+  ])('confirms a successful %s by the listing name', async (_, action, confirmation) => {
+    const user = userEvent.setup();
+    renderListings();
+
+    await user.click(screen.getByRole('button', { name: `${action} listing listing-123` }));
+    await user.click(screen.getByRole('button', { name: new RegExp(`^${action}$`) }));
+
+    expect(await screen.findByRole('status')).toHaveTextContent(confirmation);
+  });
+
+  it('confirms that a published draft is back in search', async () => {
+    const user = userEvent.setup();
+    mockListingState.status = 'draft';
+    renderListings();
+
+    await user.click(screen.getByRole('button', { name: 'Publish listing listing-123' }));
+
+    expect(await screen.findByRole('status')).toHaveTextContent('"Quiet home" is now published. Pet owners can find it in search.');
+  });
+
+  it('clears the last confirmation when the next action starts', async () => {
+    const user = userEvent.setup();
+    renderListings();
+
+    await user.click(screen.getByRole('button', { name: 'Unpublish listing listing-123' }));
+    await user.click(screen.getByRole('button', { name: /^Unpublish$/ }));
+    expect(await screen.findByRole('status')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Delete listing listing-123' }));
+
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['Unpublish', 'Unpublishing...'],
+    ['Delete', 'Deleting...'],
+  ])('says what is happening while a confirmed %s runs', async (action, pendingLabel) => {
+    const user = userEvent.setup();
+    mockMutateAsync.mockReturnValue(new Promise(() => {}));
+    mockDeleteMutateAsync.mockReturnValue(new Promise(() => {}));
+    const view = renderListings();
+
+    await user.click(screen.getByRole('button', { name: `${action} listing listing-123` }));
+    await user.click(screen.getByRole('button', { name: new RegExp(`^${action}$`) }));
+    mockMutationState.isPending = true;
+    view.rerender(
+      <MemoryRouter initialEntries={['/listings']}>
+        <ListingsScreen />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('button', { name: pendingLabel })).toBeDisabled();
+  });
+
+  it('shows which draft is being published', () => {
+    mockListingState.status = 'draft';
+    mockMutationState.isPending = true;
+    mockMutationState.variables = { listingId: 'listing-123', status: 'published' };
+    renderListings();
+
+    const publishButton = screen.getByRole('button', { name: 'Publish listing listing-123' });
+    expect(publishButton).toHaveTextContent('Publishing...');
+    expect(publishButton).toBeDisabled();
   });
 
   it('keeps the delete confirmation open and explains active bookings', async () => {

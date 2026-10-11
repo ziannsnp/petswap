@@ -17,12 +17,13 @@ interface PendingListingAction {
 interface ListingCardProps {
   listing: Listing;
   isPending: boolean;
+  isPublishing: boolean;
   publishError: boolean;
   onRequestAction: (action: ListingAction, listing: Listing) => void;
-  onPublish: (listingId: string) => void;
+  onPublish: () => void;
 }
 
-function ListingCard({ listing, isPending, publishError, onRequestAction, onPublish }: ListingCardProps) {
+function ListingCard({ listing, isPending, isPublishing, publishError, onRequestAction, onPublish }: ListingCardProps) {
   const status = LISTING_STATUS_STYLES[listing.status];
   const isPublished = listing.status === 'published';
 
@@ -68,11 +69,11 @@ function ListingCard({ listing, isPending, publishError, onRequestAction, onPubl
             type="button"
             onClick={() => isPublished
               ? onRequestAction('unpublish', listing)
-              : onPublish(listing.id)}
+              : onPublish()}
             disabled={isPending}
             aria-label={`${isPublished ? 'Unpublish' : 'Publish'} listing ${listing.id}`}
           >
-            {isPublished ? 'Unpublish' : 'Publish'}
+            {isPublishing ? 'Publishing...' : (isPublished ? 'Unpublish' : 'Publish')}
           </button>
           <Link
             className="btn-secondary inline-flex items-center gap-1.5 text-sm"
@@ -110,11 +111,15 @@ export function ListingsScreen() {
   const deleteMutation = useDeleteListing();
   const [pendingAction, setPendingAction] = useState<PendingListingAction | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const [deletedListingId, setDeletedListingId] = useState<string | null>(null);
   const [publishErrorListingId, setPublishErrorListingId] = useState<string | null>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const activeListings = listings.filter((listing) => listing.status !== 'deleted');
   const isActionPending = publicationMutation.isPending || deleteMutation.isPending;
+  const publishingListingId = publicationMutation.isPending && publicationMutation.variables?.status === 'published'
+    ? publicationMutation.variables.listingId
+    : null;
   const listingSaved = location.state?.listingSaved === 'draft' || location.state?.listingSaved === 'published'
     ? location.state.listingSaved
     : null;
@@ -127,15 +132,18 @@ export function ListingsScreen() {
 
   const requestAction = (action: ListingAction, listing: Listing) => {
     setActionError(null);
+    setActionSuccess(null);
     setPendingAction({ action, listing });
   };
 
-  const publishListing = async (listingId: string) => {
+  const publishListing = async (listing: Listing) => {
     setPublishErrorListingId(null);
+    setActionSuccess(null);
     try {
-      await publicationMutation.mutateAsync({ listingId, status: 'published' });
+      await publicationMutation.mutateAsync({ listingId: listing.id, status: 'published' });
+      setActionSuccess(`"${listing.title}" is now published. Pet owners can find it in search.`);
     } catch {
-      setPublishErrorListingId(listingId);
+      setPublishErrorListingId(listing.id);
     }
   };
 
@@ -148,11 +156,14 @@ export function ListingsScreen() {
     if (!pendingAction) return;
     setActionError(null);
     try {
+      const { listing } = pendingAction;
       if (pendingAction.action === 'unpublish') {
-        await publicationMutation.mutateAsync({ listingId: pendingAction.listing.id, status: 'draft' });
+        await publicationMutation.mutateAsync({ listingId: listing.id, status: 'draft' });
+        setActionSuccess(`"${listing.title}" is now unpublished. It no longer appears in search, and existing bookings are unchanged.`);
       } else {
-        await deleteMutation.mutateAsync(pendingAction.listing.id);
-        setDeletedListingId(pendingAction.listing.id);
+        await deleteMutation.mutateAsync(listing.id);
+        setDeletedListingId(listing.id);
+        setActionSuccess(`"${listing.title}" was deleted. It no longer appears in search or in your listings.`);
       }
       setPendingAction(null);
     } catch (error) {
@@ -180,7 +191,13 @@ export function ListingsScreen() {
           </Link>
         </div>
 
-        {listingSaved && (
+        {actionSuccess && (
+          <p className="mb-6 border-l-4 border-green-600 bg-green-50 px-4 py-3 text-sm text-green-700" role="status">
+            {actionSuccess}
+          </p>
+        )}
+
+        {listingSaved && !actionSuccess && (
           <p className="mb-6 border-l-4 border-green-600 bg-green-50 px-4 py-3 text-sm text-green-700" role="status">
             {listingSaved === 'published'
               ? 'Listing published successfully. Pet owners can now discover it.'
@@ -220,9 +237,10 @@ export function ListingsScreen() {
                 key={listing.id}
                 listing={listing}
                 isPending={isActionPending}
+                isPublishing={publishingListingId === listing.id}
                 publishError={publishErrorListingId === listing.id}
                 onRequestAction={requestAction}
-                onPublish={(listingId) => { void publishListing(listingId); }}
+                onPublish={() => { void publishListing(listing); }}
               />
             ))}
           </div>
@@ -235,6 +253,7 @@ export function ListingsScreen() {
           ? 'This listing will no longer appear in search and new booking requests will stop. Existing bookings are not changed.'
           : 'This listing will be removed from search and marked as deleted. Listings with pending or confirmed bookings cannot be deleted.'}
         confirmLabel={actionName}
+        pendingLabel={pendingAction?.action === 'unpublish' ? 'Unpublishing...' : 'Deleting...'}
         isPending={isActionPending}
         errorMessage={actionError}
         onCancel={cancelAction}

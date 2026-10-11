@@ -29,7 +29,7 @@ export function makeListingRow(overrides: Partial<ListingQueryRow> = {}): Listin
 
 /** A listing as the API adapters hand it to screens: signed photo URLs, main photo first. */
 export function makeListing(overrides: Partial<Listing> = {}): Listing {
-  return { ...makeListingRow(), listing_images: [], cover_photo_url: null, ...overrides };
+  return { ...makeListingRow(), listing_images: [], cover_photo_url: null, host: null, ...overrides };
 }
 
 export const LISTING_OWNER_ID = 'owner-1';

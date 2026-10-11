@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Home, Image, Pencil, Plus, Trash2 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { useDeleteListing, useMyListings, useSetListingPublicationStatus } from '../hooks/useListings';
+import { listingErrorCode } from '../lib/listingErrors';
 import { petSpeciesLabel } from '@/shared/lib/petSpecies';
 import { LISTING_STATUS_STYLES } from '../lib/listingStatus';
 import type { Listing } from '../lib/listingApi';
@@ -156,10 +157,20 @@ export function ListingsScreen() {
       }
       setPendingAction(null);
     } catch (error) {
-      const message = error instanceof Error ? error.message : '';
-      setActionError(message.includes('active bookings')
-        ? 'This listing has pending or confirmed bookings and cannot be deleted.'
-        : `We could not ${pendingAction.action} this listing. Check your connection and try again.`);
+      const code = listingErrorCode(error);
+      if (code === 'active_booking') {
+        setActionError('This listing has pending or confirmed bookings and cannot be deleted.');
+      } else if (code === 'unauthorized') {
+        setActionError('Please sign in again before managing this listing.');
+      } else if (code === 'forbidden') {
+        setActionError(`You cannot ${pendingAction.action} a listing you do not own.`);
+      } else if (code === 'not_found') {
+        setActionError('This listing could not be found. Refresh your listings and try again.');
+      } else if (code === 'deleted') {
+        setActionError('This listing has already been deleted. Refresh your listings to continue.');
+      } else {
+        setActionError(`We could not ${pendingAction.action} this listing. Check your connection and try again.`);
+      }
     }
   };
 

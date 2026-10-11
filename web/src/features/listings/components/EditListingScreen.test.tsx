@@ -37,6 +37,7 @@ const sunnyRoom: Listing = {
     { id: 'img-2', listing_id: 'listing-1', storage_path: 'listing-1/b.jpg', alt_text: null, sort_order: 1, created_at: '2026-09-01T00:00:00.000Z', signed_url: 'https://storage.test/signed/b.jpg' },
   ],
   cover_photo_url: 'https://storage.test/signed/a.jpg',
+  host: null,
 };
 
 function listingsQuery(overrides: Partial<ReturnType<typeof useMyListings>>) {

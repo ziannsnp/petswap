@@ -18,6 +18,7 @@ export function makeSearchResult(overrides: Partial<Listing> = {}): Listing {
     updated_at: '2026-10-01T00:00:00.000Z',
     listing_images: [],
     cover_photo_url: null,
+    host: null,
     ...overrides,
   };
 }

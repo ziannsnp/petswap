@@ -67,3 +67,11 @@ This sequence is not a database transaction across Postgres and Storage. Closing
 Listing edits upload new objects first, then call the owner-authorized `update_listing_with_images` RPC. The RPC validates the complete intended image set and commits listing fields, metadata replacement, and ordering in one database transaction. The database validates required listing fields and ownership, limits image metadata to ten rows per listing, requires every storage path to live under that listing's UUID folder, and gives each image one non-negative position. Position zero is the main photo. Replaced storage objects are removed best-effort after the database transaction commits; a failed removal leaves an orphan for operational cleanup rather than breaking the listing.
 
 Storage and Postgres still cannot share one transaction. An edit adapter must validate the complete intended result before mutation, upload new objects first, commit listing fields and image metadata second, and remove replaced objects last. If the database step fails, it must best-effort remove only objects uploaded by that attempt; it must never delete an existing object before its metadata replacement commits. A failed final object removal leaves an inaccessible orphan to clean up, rather than a broken listing. The server constraints remain authoritative if browser validation is bypassed.
+
+## Listing detail and action contracts
+
+The listing detail adapter exposes a minimal public `ListingHost` projection: `id`, `display_name`, `photo_url`, and `location`. The projection is nullable while the authorized host retrieval is unavailable; `host: null` is not itself a listing-load failure, so host-only UI must be omitted or presented with neutral copy. Private profile fields must not be added to this contract.
+
+Photo signing is best-effort per image. A missing or failed signed URL is represented by `signed_url: null` and must not prevent the listing's text and metadata from rendering; `cover_photo_url` may also be `null`.
+
+Listing adapters expose stable `ListingErrorCode` values — `unauthorized`, `forbidden`, `not_found`, `deleted`, `active_booking`, `network`, and `unknown`. UI maps these codes to safe user-facing messages and must not expose raw backend or database error details.

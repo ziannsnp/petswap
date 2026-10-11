@@ -4,6 +4,14 @@ import { useAuth } from '@/features/auth';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 const mockInvalidateQueries = jest.fn();
+// The mutations also prune the hidden listing from cached data (covered with a real
+// QueryClient in useListingActions.test.tsx); here they only need to exist.
+const mockQueryClient = {
+  invalidateQueries: mockInvalidateQueries,
+  setQueryData: jest.fn(),
+  setQueriesData: jest.fn(),
+  removeQueries: jest.fn(),
+};
 
 jest.mock('@tanstack/react-query', () => ({
   useQuery: jest.fn((options) => options),
@@ -55,14 +63,19 @@ describe('useMyListings', () => {
 describe('useSetListingPublicationStatus', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockedUseQueryClient.mockReturnValue({ invalidateQueries: mockInvalidateQueries } as never);
+    mockedUseQueryClient.mockReturnValue(mockQueryClient as never);
   });
 
   it('refreshes public, owner, and detail listing caches after a successful change', () => {
     useSetListingPublicationStatus();
     const mutationOptions = mockedUseMutation.mock.calls[0][0];
 
-    mutationOptions.onSuccess?.(undefined as never, undefined as never, undefined as never, undefined as never);
+    mutationOptions.onSuccess?.(
+      undefined as never,
+      { listingId: 'listing-123', status: 'draft' },
+      undefined as never,
+      undefined as never,
+    );
 
     expect(mockInvalidateQueries).toHaveBeenCalledWith({ queryKey: ['listings'] });
   });
@@ -81,14 +94,14 @@ describe('useSetListingPublicationStatus', () => {
 describe('useDeleteListing', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockedUseQueryClient.mockReturnValue({ invalidateQueries: mockInvalidateQueries } as never);
+    mockedUseQueryClient.mockReturnValue(mockQueryClient as never);
   });
 
   it('refreshes public, owner, and detail listing caches after a successful deletion', () => {
     useDeleteListing();
     const mutationOptions = mockedUseMutation.mock.calls[0][0];
 
-    mutationOptions.onSuccess?.(undefined as never, undefined as never, undefined as never, undefined as never);
+    mutationOptions.onSuccess?.(undefined as never, 'listing-123', undefined as never, undefined as never);
 
     expect(mockInvalidateQueries).toHaveBeenCalledWith({ queryKey: ['listings'] });
   });

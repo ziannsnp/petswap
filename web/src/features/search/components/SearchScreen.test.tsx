@@ -13,6 +13,7 @@ jest.mock('@/features/listings', () => ({
 }));
 
 const mockedUsePublishedListings = jest.mocked(usePublishedListings);
+const mockRefetch = jest.fn();
 
 // Shows what the browser would: the URL's query string, how the last navigation happened,
 // and a back button.
@@ -48,16 +49,158 @@ beforeEach(() => {
     ],
     isPending: false,
     isError: false,
+    isFetching: false,
+    refetch: mockRefetch,
   } as unknown as ReturnType<typeof usePublishedListings>);
+  mockRefetch.mockReset();
 });
 
 describe('SearchScreen', () => {
+  it('shows an initial loading state before listings arrive', () => {
+    mockedUsePublishedListings.mockReturnValue({
+      data: undefined,
+      isPending: true,
+      isError: false,
+      isFetching: true,
+      refetch: mockRefetch,
+    } as unknown as ReturnType<typeof usePublishedListings>);
+
+    renderSearchAt('/');
+
+    expect(screen.getByRole('status', { name: 'Loading listings' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Listings' })).toHaveAttribute('aria-busy', 'true');
+  });
+
+  it('shows an active-search loading state while results are being refreshed', () => {
+    mockedUsePublishedListings.mockReturnValue({
+      data: [makeSearchResult()],
+      isPending: false,
+      isError: false,
+      isFetching: true,
+      refetch: mockRefetch,
+    } as unknown as ReturnType<typeof usePublishedListings>);
+
+    renderSearchAt('/?keyword=garden');
+
+    expect(screen.getByRole('status', { name: 'Updating search results' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Listings' })).toHaveAttribute('aria-busy', 'true');
+  });
+
+  it('shows a retryable error state when the listings API fails', async () => {
+    const user = userEvent.setup();
+    mockedUsePublishedListings.mockReturnValue({
+      data: undefined,
+      isPending: false,
+      isError: true,
+      isFetching: false,
+      refetch: mockRefetch,
+    } as unknown as ReturnType<typeof usePublishedListings>);
+
+    renderSearchAt('/?keyword=garden');
+    expect(screen.getByRole('alert')).toHaveTextContent('We could not load listings');
+
+    await user.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(mockRefetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows a browse-all empty state when no published listings exist', () => {
+    mockedUsePublishedListings.mockReturnValue({
+      data: [],
+      isPending: false,
+      isError: false,
+      isFetching: false,
+      refetch: mockRefetch,
+    } as unknown as ReturnType<typeof usePublishedListings>);
+
+    renderSearchAt('/');
+
+    expect(screen.getByRole('status', { name: 'No listings available' })).toHaveTextContent('No listings available yet');
+  });
+
+  it('shows a no-results state and clears the applied search', async () => {
+    const user = userEvent.setup();
+    mockedUsePublishedListings.mockReturnValue({
+      data: [makeSearchResult()],
+      isPending: false,
+      isError: false,
+      isFetching: false,
+      refetch: mockRefetch,
+    } as unknown as ReturnType<typeof usePublishedListings>);
+
+    renderSearchAt('/?keyword=does-not-exist');
+
+    expect(screen.getByRole('status', { name: 'No search results' })).toHaveTextContent('No listings match your search');
+    await user.click(screen.getByRole('button', { name: 'Clear search' }));
+
+    expect(urlSearch()).toBe('');
+  });
+
   it('shows a card for every published listing', () => {
     renderSearchAt('/');
 
     const results = screen.getByRole('region', { name: 'Listings' });
     expect(within(results).getAllByRole('article')).toHaveLength(2);
     expect(within(results).getByRole('link', { name: 'Sunny garden room' })).toHaveAttribute('href', '/listings/listing-1');
+  });
+
+  it('filters results by trimmed, case-insensitive location and keyword', async () => {
+    const user = userEvent.setup();
+    mockedUsePublishedListings.mockReturnValue({
+      data: [
+        makeSearchResult({ id: 'chiang-mai', location: 'Chiang Mai, Hang Dong', title: 'Quiet garden home' }),
+        makeSearchResult({ id: 'bangkok', location: 'Bangkok', title: 'City studio' }),
+      ],
+      isPending: false,
+      isError: false,
+    } as unknown as ReturnType<typeof usePublishedListings>);
+
+    renderSearchAt('/');
+    await user.type(screen.getByLabelText('Location'), '  CHIANG mai  ');
+    await user.click(screen.getByRole('button', { name: 'Search' }));
+
+    const results = screen.getByRole('region', { name: 'Listings' });
+    expect(within(results).getAllByRole('article')).toHaveLength(1);
+    expect(within(results).getByRole('link', { name: 'Quiet garden home' })).toBeInTheDocument();
+    expect(within(results).queryByRole('link', { name: 'City studio' })).not.toBeInTheDocument();
+  });
+
+  it('treats wildcard characters as literal keyword text', async () => {
+    const user = userEvent.setup();
+    mockedUsePublishedListings.mockReturnValue({
+      data: [
+        makeSearchResult({ id: 'literal', title: '100% safe (indoors)' }),
+        makeSearchResult({ id: 'ordinary', title: 'Garden home' }),
+      ],
+      isPending: false,
+      isError: false,
+    } as unknown as ReturnType<typeof usePublishedListings>);
+
+    renderSearchAt('/');
+    await user.type(screen.getByLabelText('Keyword'), '%');
+    await user.click(screen.getByRole('button', { name: 'Search' }));
+
+    const results = screen.getByRole('region', { name: 'Listings' });
+    expect(within(results).getAllByRole('article')).toHaveLength(1);
+    expect(within(results).getByRole('link', { name: '100% safe (indoors)' })).toBeInTheDocument();
+  });
+
+  it('never renders a draft or deleted row even if one reaches the search response', () => {
+    mockedUsePublishedListings.mockReturnValue({
+      data: [
+        makeSearchResult({ id: 'published' }),
+        makeSearchResult({ id: 'draft', title: 'Private draft', status: 'draft' }),
+        makeSearchResult({ id: 'deleted', title: 'Deleted place', status: 'deleted', deleted_at: '2026-10-01T00:00:00.000Z' }),
+      ],
+      isPending: false,
+      isError: false,
+    } as unknown as ReturnType<typeof usePublishedListings>);
+
+    renderSearchAt('/');
+
+    const results = screen.getByRole('region', { name: 'Listings' });
+    expect(within(results).getAllByRole('article')).toHaveLength(1);
+    expect(within(results).queryByText('Private draft')).not.toBeInTheDocument();
+    expect(within(results).queryByText('Deleted place')).not.toBeInTheDocument();
   });
 
   it('fills the fields from the search in the URL', () => {

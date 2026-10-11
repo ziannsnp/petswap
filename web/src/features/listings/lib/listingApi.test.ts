@@ -1,5 +1,5 @@
 import { getSupabaseClient } from '../../../shared/lib/supabase';
-import { createListing, deleteListing, getListing, listMyListings, setListingPublicationStatus, updateListing } from './listingApi';
+import { createListing, deleteListing, getListing, listMyListings, listPublishedListings, setListingPublicationStatus, updateListing } from './listingApi';
 import type { UpdateListingValues } from './listingApi';
 
 jest.mock('../../../shared/lib/supabase', () => ({
@@ -42,6 +42,28 @@ describe('listMyListings', () => {
 
     await expect(listMyListings()).resolves.toEqual([]);
     expect(from).not.toHaveBeenCalled();
+  });
+});
+
+describe('listPublishedListings', () => {
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('queries only published listings that are not soft-deleted', async () => {
+    const order = jest.fn().mockResolvedValue({ data: [], error: null });
+    const isDeleted = jest.fn().mockReturnValue({ order });
+    const eq = jest.fn().mockReturnValue({ is: isDeleted });
+    const select = jest.fn().mockReturnValue({ eq });
+    const from = jest.fn().mockReturnValue({ select });
+    mockedGetSupabaseClient.mockReturnValue({ from } as never);
+
+    await expect(listPublishedListings()).resolves.toEqual([]);
+
+    expect(from).toHaveBeenCalledWith('listings');
+    expect(eq).toHaveBeenCalledWith('status', 'published');
+    expect(isDeleted).toHaveBeenCalledWith('deleted_at', null);
+    expect(order).toHaveBeenCalledWith('published_at', { ascending: false });
   });
 });
 
@@ -94,6 +116,60 @@ describe('getListing', () => {
       listing_images: [{ signed_url: 'https://example.test/private-front.jpg' }],
     });
   });
+
+  it('keeps listing details available when private photo signing fails', async () => {
+    const image = {
+      id: 'image-1', listing_id: 'listing-1', storage_path: 'listing-1/missing.jpg', alt_text: null,
+      sort_order: 0, created_at: '2026-09-07T00:00:00.000Z',
+    };
+    const listing = {
+      id: 'listing-1', owner_id: 'owner-1', title: 'A quiet home', location: 'Chiang Mai',
+      description: 'A calm place for pets.', capacity: 2, accepted_pet_types: ['dog'], facilities: null,
+      status: 'published', deleted_at: null, published_at: '2026-09-07T00:00:00.000Z',
+      created_at: '2026-09-07T00:00:00.000Z', updated_at: '2026-09-07T00:00:00.000Z', listing_images: [image],
+    };
+    const maybeSingle = jest.fn().mockResolvedValue({ data: listing, error: null });
+    const from = jest.fn().mockReturnValue({
+      select: jest.fn().mockReturnValue({ eq: jest.fn().mockReturnValue({ maybeSingle }) }),
+    });
+    const createSignedUrls = jest.fn().mockResolvedValue({ data: null, error: new Error('storage unavailable') });
+    mockedGetSupabaseClient.mockReturnValue({
+      from,
+      storage: { from: jest.fn().mockReturnValue({ createSignedUrls }) },
+    } as never);
+
+    await expect(getListing('listing-1')).resolves.toMatchObject({
+      title: 'A quiet home',
+      cover_photo_url: null,
+      listing_images: [{ signed_url: null }],
+    });
+  });
+
+  it('does not expose a soft-deleted listing even to a viewer allowed by RLS', async () => {
+    const listing = {
+      id: 'listing-1', owner_id: 'owner-1', title: 'Deleted home', location: 'Chiang Mai',
+      description: 'No longer available.', capacity: 1, accepted_pet_types: ['dog'], facilities: null,
+      status: 'deleted', deleted_at: '2026-09-07T00:00:00.000Z', published_at: null,
+      created_at: '2026-09-01T00:00:00.000Z', updated_at: '2026-09-07T00:00:00.000Z', listing_images: [],
+    };
+    const maybeSingle = jest.fn().mockResolvedValue({ data: listing, error: null });
+    const from = jest.fn().mockReturnValue({
+      select: jest.fn().mockReturnValue({ eq: jest.fn().mockReturnValue({ maybeSingle }) }),
+    });
+    mockedGetSupabaseClient.mockReturnValue({ from } as never);
+
+    await expect(getListing('listing-1')).rejects.toMatchObject({ code: 'deleted' });
+  });
+
+  it('maps an RLS-hidden or missing listing to the safe not-found contract', async () => {
+    const maybeSingle = jest.fn().mockResolvedValue({ data: null, error: null });
+    const from = jest.fn().mockReturnValue({
+      select: jest.fn().mockReturnValue({ eq: jest.fn().mockReturnValue({ maybeSingle }) }),
+    });
+    mockedGetSupabaseClient.mockReturnValue({ from } as never);
+
+    await expect(getListing('private-listing')).rejects.toMatchObject({ code: 'not_found' });
+  });
 });
 
 describe('setListingPublicationStatus', () => {
@@ -118,13 +194,24 @@ describe('setListingPublicationStatus', () => {
       updated_at: '2026-09-13T00:00:00.000Z',
       listing_images: [],
     };
+    const currentMaybeSingle = jest.fn().mockResolvedValue({
+      data: { id: listing.id, owner_id: listing.owner_id, status: 'published', deleted_at: null },
+      error: null,
+    });
     const single = jest.fn().mockResolvedValue({ data: listing, error: null });
-    const select = jest.fn().mockReturnValue({ single });
-    const eq = jest.fn().mockReturnValue({ select });
-    const update = jest.fn().mockReturnValue({ eq });
-    const from = jest.fn().mockReturnValue({ update });
+    const finalSelect = jest.fn().mockReturnValue({ single });
+    const isDeleted = jest.fn().mockReturnValue({ select: finalSelect });
+    const ownerEq = jest.fn().mockReturnValue({ is: isDeleted });
+    const idEqAfterUpdate = jest.fn().mockReturnValue({ eq: ownerEq });
+    const update = jest.fn().mockReturnValue({ eq: idEqAfterUpdate });
+    const currentIdEq = jest.fn().mockReturnValue({ maybeSingle: currentMaybeSingle });
+    const currentSelect = jest.fn().mockReturnValue({ eq: currentIdEq });
+    const from = jest.fn()
+      .mockReturnValueOnce({ select: currentSelect })
+      .mockReturnValueOnce({ update });
+    const getUser = jest.fn().mockResolvedValue({ data: { user: { id: 'owner-1' } }, error: null });
 
-    mockedGetSupabaseClient.mockReturnValue({ from } as never);
+    mockedGetSupabaseClient.mockReturnValue({ auth: { getUser }, from } as never);
 
     await expect(setListingPublicationStatus('listing-1', 'draft')).resolves.toMatchObject({
       id: 'listing-1',
@@ -133,20 +220,54 @@ describe('setListingPublicationStatus', () => {
 
     expect(from).toHaveBeenCalledWith('listings');
     expect(update).toHaveBeenCalledWith({ status: 'draft' });
-    expect(eq).toHaveBeenCalledWith('id', 'listing-1');
+    expect(idEqAfterUpdate).toHaveBeenCalledWith('id', 'listing-1');
+    expect(ownerEq).toHaveBeenCalledWith('owner_id', 'owner-1');
+    expect(isDeleted).toHaveBeenCalledWith('deleted_at', null);
   });
 
-  it('surfaces the database error when the update is rejected', async () => {
-    const updateError = new Error('permission denied');
-    const single = jest.fn().mockResolvedValue({ data: null, error: updateError });
-    const select = jest.fn().mockReturnValue({ single });
-    const eq = jest.fn().mockReturnValue({ select });
-    const update = jest.fn().mockReturnValue({ eq });
-    const from = jest.fn().mockReturnValue({ update });
+  it('rejects an unauthenticated caller before reading or updating a listing', async () => {
+    const from = jest.fn();
+    const getUser = jest.fn().mockResolvedValue({ data: { user: null }, error: null });
+    mockedGetSupabaseClient.mockReturnValue({ auth: { getUser }, from } as never);
 
-    mockedGetSupabaseClient.mockReturnValue({ from } as never);
+    await expect(setListingPublicationStatus('listing-1', 'draft')).rejects.toMatchObject({
+      code: 'unauthorized',
+    });
+    expect(from).not.toHaveBeenCalled();
+  });
 
-    await expect(setListingPublicationStatus('listing-1', 'published')).rejects.toThrow('permission denied');
+  it('rejects a non-owner without sending an update', async () => {
+    const maybeSingle = jest.fn().mockResolvedValue({
+      data: { id: 'listing-1', owner_id: 'owner-1', status: 'published', deleted_at: null },
+      error: null,
+    });
+    const eq = jest.fn().mockReturnValue({ maybeSingle });
+    const select = jest.fn().mockReturnValue({ eq });
+    const update = jest.fn();
+    const from = jest.fn().mockReturnValue({ select, update });
+    const getUser = jest.fn().mockResolvedValue({ data: { user: { id: 'other-user' } }, error: null });
+    mockedGetSupabaseClient.mockReturnValue({ auth: { getUser }, from } as never);
+
+    await expect(setListingPublicationStatus('listing-1', 'draft')).rejects.toMatchObject({
+      code: 'forbidden',
+    });
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('rejects an already deleted listing without sending an update', async () => {
+    const maybeSingle = jest.fn().mockResolvedValue({
+      data: { id: 'listing-1', owner_id: 'owner-1', status: 'deleted', deleted_at: '2026-09-13T00:00:00.000Z' },
+      error: null,
+    });
+    const eq = jest.fn().mockReturnValue({ maybeSingle });
+    const select = jest.fn().mockReturnValue({ eq });
+    const update = jest.fn();
+    const from = jest.fn().mockReturnValue({ select, update });
+    const getUser = jest.fn().mockResolvedValue({ data: { user: { id: 'owner-1' } }, error: null });
+    mockedGetSupabaseClient.mockReturnValue({ auth: { getUser }, from } as never);
+
+    await expect(setListingPublicationStatus('listing-1', 'draft')).rejects.toMatchObject({ code: 'deleted' });
+    expect(update).not.toHaveBeenCalled();
   });
 });
 
@@ -157,7 +278,15 @@ describe('deleteListing', () => {
 
   it('uses the transactional database operation to delete a listing', async () => {
     const rpc = jest.fn().mockResolvedValue({ data: null, error: null });
-    mockedGetSupabaseClient.mockReturnValue({ rpc } as never);
+    const maybeSingle = jest.fn().mockResolvedValue({
+      data: { id: 'listing-123', owner_id: 'owner-1', status: 'published', deleted_at: null },
+      error: null,
+    });
+    const eq = jest.fn().mockReturnValue({ maybeSingle });
+    const select = jest.fn().mockReturnValue({ eq });
+    const from = jest.fn().mockReturnValue({ select });
+    const getUser = jest.fn().mockResolvedValue({ data: { user: { id: 'owner-1' } }, error: null });
+    mockedGetSupabaseClient.mockReturnValue({ auth: { getUser }, from, rpc } as never);
 
     await expect(deleteListing('listing-123')).resolves.toBeUndefined();
 
@@ -169,13 +298,64 @@ describe('deleteListing', () => {
   it('surfaces active-booking and authorization errors from the database', async () => {
     const rpc = jest.fn().mockResolvedValue({
       data: null,
-      error: new Error('Listing has active bookings and cannot be deleted.'),
+      error: { code: 'P0001', message: 'Listing has active bookings and cannot be deleted.' },
     });
-    mockedGetSupabaseClient.mockReturnValue({ rpc } as never);
+    const maybeSingle = jest.fn().mockResolvedValue({
+      data: { id: 'listing-123', owner_id: 'owner-1', status: 'published', deleted_at: null },
+      error: null,
+    });
+    const eq = jest.fn().mockReturnValue({ maybeSingle });
+    const select = jest.fn().mockReturnValue({ eq });
+    const from = jest.fn().mockReturnValue({ select });
+    const getUser = jest.fn().mockResolvedValue({ data: { user: { id: 'owner-1' } }, error: null });
+    mockedGetSupabaseClient.mockReturnValue({ auth: { getUser }, from, rpc } as never);
 
-    await expect(deleteListing('listing-123')).rejects.toThrow(
-      'Listing has active bookings and cannot be deleted.',
-    );
+    await expect(deleteListing('listing-123')).rejects.toMatchObject({ code: 'active_booking' });
+  });
+
+  it('returns stable unauthorized and missing codes before calling the database operation', async () => {
+    const getUser = jest.fn().mockResolvedValue({ data: { user: null }, error: null });
+    const from = jest.fn();
+    const rpc = jest.fn();
+    mockedGetSupabaseClient.mockReturnValue({ auth: { getUser }, from, rpc } as never);
+
+    await expect(deleteListing('listing-123')).rejects.toMatchObject({ code: 'unauthorized' });
+    expect(from).not.toHaveBeenCalled();
+    expect(rpc).not.toHaveBeenCalled();
+
+    const ownerGetUser = jest.fn().mockResolvedValue({ data: { user: { id: 'owner-1' } }, error: null });
+    const maybeSingle = jest.fn().mockResolvedValue({ data: null, error: null });
+    const eq = jest.fn().mockReturnValue({ maybeSingle });
+    const select = jest.fn().mockReturnValue({ eq });
+    const ownerFrom = jest.fn().mockReturnValue({ select });
+    mockedGetSupabaseClient.mockReturnValue({ auth: { getUser: ownerGetUser }, from: ownerFrom, rpc } as never);
+
+    await expect(deleteListing('listing-123')).rejects.toMatchObject({ code: 'not_found' });
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it('rejects non-owners and already-deleted listings without calling the delete operation', async () => {
+    const rpc = jest.fn();
+    const makeClient = (listing: unknown) => {
+      const getUser = jest.fn().mockResolvedValue({ data: { user: { id: 'owner-1' } }, error: null });
+      const maybeSingle = jest.fn().mockResolvedValue({ data: listing, error: null });
+      const eq = jest.fn().mockReturnValue({ maybeSingle });
+      const select = jest.fn().mockReturnValue({ eq });
+      const from = jest.fn().mockReturnValue({ select });
+      return { auth: { getUser }, from, rpc };
+    };
+
+    mockedGetSupabaseClient.mockReturnValue(makeClient({
+      id: 'listing-123', owner_id: 'other-owner', status: 'published', deleted_at: null,
+    }) as never);
+    await expect(deleteListing('listing-123')).rejects.toMatchObject({ code: 'forbidden' });
+    expect(rpc).not.toHaveBeenCalled();
+
+    mockedGetSupabaseClient.mockReturnValue(makeClient({
+      id: 'listing-123', owner_id: 'owner-1', status: 'deleted', deleted_at: '2026-09-13T00:00:00.000Z',
+    }) as never);
+    await expect(deleteListing('listing-123')).rejects.toMatchObject({ code: 'deleted' });
+    expect(rpc).not.toHaveBeenCalled();
   });
 });
 

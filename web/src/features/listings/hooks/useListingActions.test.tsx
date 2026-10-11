@@ -32,6 +32,7 @@ function renderWithCachedListings<Result>(useHook: () => Result) {
   const { result } = renderHook(useHook, { wrapper });
 
   return {
+    queryClient,
     result,
     searchIds: () => queryClient.getQueryData<Listing[]>(listingKeys.published())?.map(({ id }) => id),
     myListings: () => queryClient.getQueryData<Listing[]>(listingKeys.mine(LISTING_OWNER_ID)),
@@ -68,12 +69,15 @@ describe('listing owner actions and the cache', () => {
     expect(cache.cachedDetail('public')).toBeUndefined();
   });
 
-  it('does not remove anything when a draft is published', async () => {
+  it('shows a published draft as published in My listings straight away and removes nothing', async () => {
+    const draft: Listing = { ...owned, status: 'draft', published_at: null };
     jest.mocked(setListingPublicationStatus).mockResolvedValue(owned);
     const cache = renderWithCachedListings(() => useSetListingPublicationStatus());
+    cache.queryClient.setQueryData(listingKeys.mine(LISTING_OWNER_ID), [draft, alreadyDeleted]);
 
     await act(() => cache.result.current.mutateAsync({ listingId: owned.id, status: 'published' }));
 
+    expect(cache.myListings()).toEqual([owned, alreadyDeleted]);
     expect(cache.searchIds()).toEqual([owned.id, ownedByOtherUser.id]);
     expect(cache.cachedDetail('public')).toBe(owned);
   });

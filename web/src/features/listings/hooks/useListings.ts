@@ -72,10 +72,18 @@ export function useSetListingPublicationStatus() {
       setListingPublicationStatus(listingId, status)
     ),
     onSuccess: (savedListing, { listingId, status }) => {
+      // My listings shows the saved row at once either way, so its status badge agrees with
+      // the confirmation message instead of lagging until the refetch lands.
+      const showSavedCopy = (listings: Listing[]) => listings.map(
+        (listing) => (listing.id === listingId ? savedListing : listing),
+      );
       if (status === 'draft') {
-        hideListingFromCaches(queryClient, listingId, (listings) => listings.map(
-          (listing) => (listing.id === listingId ? savedListing : listing),
-        ));
+        hideListingFromCaches(queryClient, listingId, showSavedCopy);
+      } else {
+        queryClient.setQueriesData<Listing[]>(
+          { queryKey: listingKeys.allMine() },
+          (listings) => (listings ? showSavedCopy(listings) : listings),
+        );
       }
       void queryClient.invalidateQueries({ queryKey: listingKeys.all });
     },

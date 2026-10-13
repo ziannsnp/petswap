@@ -6,6 +6,21 @@ export type Pet = Database['public']['Tables']['pets']['Row'];
 
 export const PET_PHOTO_BUCKET = 'pet-photos';
 export const PET_PHOTO_SIGNED_URL_TTL_SECONDS = 3_600;
+export const PET_PHOTO_MAX_BYTES = 10_485_760;
+
+export const PET_PHOTO_MIME_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+] as const;
+
+export const MIME_TO_EXTENSION: Record<string, string> = {
+  'image/jpeg': '.jpg',
+  'image/png': '.png',
+  'image/webp': '.webp',
+  'image/gif': '.gif',
+};
 
 export interface CreatePetValues {
   name: string;
@@ -21,10 +36,24 @@ function blankToNull(value: string): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
-/** Generates a storage path satisfying the pet-photos bucket RLS contract (<pet_id>/<filename>). */
-export function petPhotoStoragePath(petId: string, file: File): string {
-  const extension = file.name.includes('.') ? `.${file.name.split('.').pop()}` : '';
-  return `${petId}/${crypto.randomUUID()}${extension.toLowerCase()}`;
+/** Validates photo MIME type and size against the storage bucket limits. */
+export function validatePetPhoto(file: Pick<File, 'type' | 'size'>): string | null {
+  if (!(PET_PHOTO_MIME_TYPES as readonly string[]).includes(file.type)) {
+    return 'Unsupported file type. Choose a JPG, PNG, WebP, or GIF file.';
+  }
+
+  if (file.size > PET_PHOTO_MAX_BYTES) {
+    return `Photo is larger than the ${PET_PHOTO_MAX_BYTES / 1_048_576} MB limit.`;
+  }
+
+  return null;
+}
+
+/** Generates a storage path satisfying the pet-photos bucket RLS contract (<pet_id>/<uuid>.<ext>). */
+export function petPhotoStoragePath(petId: string, file: Pick<File, 'type' | 'name'>): string {
+  const extension = MIME_TO_EXTENSION[file.type]
+    ?? (file.name.includes('.') ? `.${file.name.split('.').pop()?.toLowerCase()}` : '');
+  return `${petId}/${crypto.randomUUID()}${extension}`;
 }
 
 /** RLS also lets listing owners read pets booked at their listings, so "my pets"
@@ -45,15 +74,50 @@ export async function listMyPets(ownerId: string): Promise<Pet[]> {
   return data ?? [];
 }
 
-/** Removes a pet from public.pets by id. */
+/** Removes a pet from public.pets by id, cleaning up any associated photos in storage first. */
 export async function deletePet(petId: string): Promise<void> {
-  const { error } = await getSupabaseClient()
+  const supabase = getSupabaseClient();
+
+  // 1. Fetch pet to check existence and retrieve any attached photo_url
+  const { data: pet, error: fetchError } = await supabase
+    .from('pets')
+    .select('id, photo_url')
+    .eq('id', petId)
+    .maybeSingle();
+
+  if (fetchError) {
+    throw fetchError;
+  }
+
+  if (!pet) {
+    throw new Error(`Pet with id ${petId} not found or you do not have permission to delete it.`);
+  }
+
+  // 2. If photo exists, remove it from storage while the pet record still exists
+  // (storage RLS policy checks current_user_owns_pet in public.pets)
+  if (pet.photo_url) {
+    const { error: storageError } = await supabase.storage
+      .from(PET_PHOTO_BUCKET)
+      .remove([pet.photo_url]);
+
+    if (storageError) {
+      throw new Error(`Failed to delete pet photo: ${storageError.message}`, { cause: storageError });
+    }
+  }
+
+  // 3. Delete the pet record from public.pets and ensure at least 1 row was deleted
+  const { data: deletedRows, error: deleteError } = await supabase
     .from('pets')
     .delete()
-    .eq('id', petId);
+    .eq('id', petId)
+    .select('id');
 
-  if (error) {
-    throw error;
+  if (deleteError) {
+    throw deleteError;
+  }
+
+  if (!deletedRows || deletedRows.length === 0) {
+    throw new Error(`Could not delete pet ${petId}: permission denied or pet not found.`);
   }
 }
 
@@ -78,6 +142,13 @@ export async function getPetPhotoSignedUrl(
 }
 
 export async function createPet(values: CreatePetValues): Promise<Pet> {
+  if (values.photo) {
+    const photoError = validatePetPhoto(values.photo);
+    if (photoError) {
+      throw new Error(photoError);
+    }
+  }
+
   const supabase = getSupabaseClient();
   const { data: userData, error: userError } = await supabase.auth.getUser();
 
@@ -93,7 +164,6 @@ export async function createPet(values: CreatePetValues): Promise<Pet> {
       breed: blankToNull(values.breed),
       age_year: values.ageYear,
       description: blankToNull(values.description),
-      photo_url: null,
     })
     .select('*')
     .single();
@@ -161,7 +231,7 @@ export async function createPet(values: CreatePetValues): Promise<Pet> {
 
     if (cleanupErrors.length > 0) {
       const originalMessage = error instanceof Error ? error.message : String(error);
-      throw new Error(`${originalMessage} (rollback incomplete: ${cleanupErrors.join(', ')})`);
+      throw new Error(`${originalMessage} (rollback incomplete: ${cleanupErrors.join(', ')})`, { cause: error });
     }
 
     throw error;

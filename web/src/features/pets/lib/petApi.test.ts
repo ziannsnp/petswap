@@ -1,12 +1,14 @@
 import { getSupabaseClient } from '@/shared/lib/supabase';
 import {
   PET_PHOTO_BUCKET,
+  PET_PHOTO_MAX_BYTES,
   PET_PHOTO_SIGNED_URL_TTL_SECONDS,
   createPet,
   deletePet,
   getPetPhotoSignedUrl,
   listMyPets,
   petPhotoStoragePath,
+  validatePetPhoto,
 } from './petApi';
 
 jest.mock('@/shared/lib/supabase', () => ({
@@ -23,19 +25,41 @@ afterEach(() => {
   jest.clearAllMocks();
 });
 
-describe('petPhotoStoragePath', () => {
-  it('builds a storage path scoped to the pet id with a UUID filename and lowercase extension', () => {
-    const file = new File(['binary'], 'Rocket_PHOTO.JPEG', { type: 'image/jpeg' });
-    const path = petPhotoStoragePath('20000000-0000-4000-8000-000000000001', file);
-
-    expect(path).toMatch(/^20000000-0000-4000-8000-000000000001\/[0-9a-f-]+\.jpeg$/);
+describe('validatePetPhoto', () => {
+  it.each(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])('accepts valid MIME type %s', (type) => {
+    expect(validatePetPhoto({ type, size: 1024 })).toBeNull();
   });
 
-  it('handles files without an extension', () => {
-    const file = new File(['binary'], 'photo-no-extension', { type: 'image/png' });
+  it.each(['image/svg+xml', 'application/pdf', 'application/octet-stream', ''])('rejects unsupported MIME type %p', (type) => {
+    expect(validatePetPhoto({ type, size: 1024 })).toMatch(/unsupported file type/i);
+  });
+
+  it('accepts photos up to the 10 MB limit and rejects photos exceeding it', () => {
+    expect(validatePetPhoto({ type: 'image/png', size: PET_PHOTO_MAX_BYTES })).toBeNull();
+    expect(validatePetPhoto({ type: 'image/png', size: PET_PHOTO_MAX_BYTES + 1 })).toMatch(/10 MB limit/);
+  });
+});
+
+describe('petPhotoStoragePath', () => {
+  it('derives the extension from MIME type when known', () => {
+    const file = new File(['binary'], 'Rocket_PHOTO.weird', { type: 'image/jpeg' });
     const path = petPhotoStoragePath('20000000-0000-4000-8000-000000000001', file);
 
-    expect(path).toMatch(/^20000000-0000-4000-8000-000000000001\/[0-9a-f-]+$/);
+    expect(path).toMatch(/^20000000-0000-4000-8000-000000000001\/[0-9a-f-]+\.jpg$/);
+  });
+
+  it('handles user filenames with trailing dots by relying on MIME type', () => {
+    const file = new File(['binary'], 'photo.', { type: 'image/png' });
+    const path = petPhotoStoragePath('20000000-0000-4000-8000-000000000001', file);
+
+    expect(path).toMatch(/^20000000-0000-4000-8000-000000000001\/[0-9a-f-]+\.png$/);
+  });
+
+  it('falls back to lowercase file extension when MIME type is unknown', () => {
+    const file = { type: 'unknown/mime', name: 'photo.WEBP' };
+    const path = petPhotoStoragePath('20000000-0000-4000-8000-000000000001', file);
+
+    expect(path).toMatch(/^20000000-0000-4000-8000-000000000001\/[0-9a-f-]+\.webp$/);
   });
 });
 
@@ -66,28 +90,129 @@ describe('listMyPets', () => {
 });
 
 describe('deletePet', () => {
-  it('removes a pet by id', async () => {
-    const eq = jest.fn().mockResolvedValue({ data: null, error: null });
-    const deleteMethod = jest.fn().mockReturnValue({ eq });
-    const from = jest.fn().mockReturnValue({ delete: deleteMethod });
+  it('removes a pet with no photo directly from the database without calling storage', async () => {
+    const petRecord = { id: 'pet-123', photo_url: null };
+    const fetchSingle = jest.fn().mockResolvedValue({ data: petRecord, error: null });
+    const fetchEq = jest.fn().mockReturnValue({ maybeSingle: fetchSingle });
+    const fetchSelect = jest.fn().mockReturnValue({ eq: fetchEq });
 
-    mockedGetSupabaseClient.mockReturnValue({ from } as never);
+    const deleteSelect = jest.fn().mockResolvedValue({ data: [{ id: 'pet-123' }], error: null });
+    const deleteEq = jest.fn().mockReturnValue({ select: deleteSelect });
+    const deleteMethod = jest.fn().mockReturnValue({ eq: deleteEq });
+
+    const from = jest.fn((table: string) => {
+      if (table === 'pets') {
+        return {
+          select: fetchSelect,
+          delete: deleteMethod,
+        };
+      }
+      throw new Error(`Unexpected table: ${table}`);
+    });
+
+    const storageFrom = jest.fn();
+
+    mockedGetSupabaseClient.mockReturnValue({ from, storage: { from: storageFrom } } as never);
 
     await expect(deletePet('pet-123')).resolves.toBeUndefined();
     expect(from).toHaveBeenCalledWith('pets');
+    expect(fetchSelect).toHaveBeenCalledWith('id, photo_url');
+    expect(fetchEq).toHaveBeenCalledWith('id', 'pet-123');
+    expect(storageFrom).not.toHaveBeenCalled();
     expect(deleteMethod).toHaveBeenCalled();
-    expect(eq).toHaveBeenCalledWith('id', 'pet-123');
+    expect(deleteEq).toHaveBeenCalledWith('id', 'pet-123');
+    expect(deleteSelect).toHaveBeenCalledWith('id');
   });
 
-  it('surfaces a database error when pet deletion fails', async () => {
-    const dbError = new Error('delete failed');
-    const eq = jest.fn().mockResolvedValue({ data: null, error: dbError });
-    const deleteMethod = jest.fn().mockReturnValue({ eq });
-    const from = jest.fn().mockReturnValue({ delete: deleteMethod });
+  it('removes pet photo from storage before deleting the database row', async () => {
+    const petRecord = { id: 'pet-123', photo_url: 'pet-123/uuid-photo.png' };
+    const fetchSingle = jest.fn().mockResolvedValue({ data: petRecord, error: null });
+    const fetchEq = jest.fn().mockReturnValue({ maybeSingle: fetchSingle });
+    const fetchSelect = jest.fn().mockReturnValue({ eq: fetchEq });
+
+    const deleteSelect = jest.fn().mockResolvedValue({ data: [{ id: 'pet-123' }], error: null });
+    const deleteEq = jest.fn().mockReturnValue({ select: deleteSelect });
+    const deleteMethod = jest.fn().mockReturnValue({ eq: deleteEq });
+
+    const from = jest.fn((table: string) => {
+      if (table === 'pets') {
+        return {
+          select: fetchSelect,
+          delete: deleteMethod,
+        };
+      }
+      throw new Error(`Unexpected table: ${table}`);
+    });
+
+    const remove = jest.fn().mockResolvedValue({ data: [], error: null });
+    const storageFrom = jest.fn().mockReturnValue({ remove });
+
+    mockedGetSupabaseClient.mockReturnValue({ from, storage: { from: storageFrom } } as never);
+
+    await expect(deletePet('pet-123')).resolves.toBeUndefined();
+    expect(storageFrom).toHaveBeenCalledWith(PET_PHOTO_BUCKET);
+    expect(remove).toHaveBeenCalledWith(['pet-123/uuid-photo.png']);
+    expect(deleteMethod).toHaveBeenCalled();
+    expect(deleteEq).toHaveBeenCalledWith('id', 'pet-123');
+  });
+
+  it('throws an error if pet is not found or not owned by user during fetch', async () => {
+    const fetchSingle = jest.fn().mockResolvedValue({ data: null, error: null });
+    const fetchEq = jest.fn().mockReturnValue({ maybeSingle: fetchSingle });
+    const fetchSelect = jest.fn().mockReturnValue({ eq: fetchEq });
+    const from = jest.fn().mockReturnValue({ select: fetchSelect });
 
     mockedGetSupabaseClient.mockReturnValue({ from } as never);
 
-    await expect(deletePet('pet-123')).rejects.toBe(dbError);
+    await expect(deletePet('pet-123')).rejects.toThrow('Pet with id pet-123 not found or you do not have permission to delete it.');
+  });
+
+  it('surfaces fetch error when retrieving pet before deletion', async () => {
+    const fetchError = new Error('network down');
+    const fetchSingle = jest.fn().mockResolvedValue({ data: null, error: fetchError });
+    const fetchEq = jest.fn().mockReturnValue({ maybeSingle: fetchSingle });
+    const fetchSelect = jest.fn().mockReturnValue({ eq: fetchEq });
+    const from = jest.fn().mockReturnValue({ select: fetchSelect });
+
+    mockedGetSupabaseClient.mockReturnValue({ from } as never);
+
+    await expect(deletePet('pet-123')).rejects.toBe(fetchError);
+  });
+
+  it('surfaces storage remove error and does not delete database row', async () => {
+    const petRecord = { id: 'pet-123', photo_url: 'pet-123/uuid-photo.png' };
+    const fetchSingle = jest.fn().mockResolvedValue({ data: petRecord, error: null });
+    const fetchEq = jest.fn().mockReturnValue({ maybeSingle: fetchSingle });
+    const fetchSelect = jest.fn().mockReturnValue({ eq: fetchEq });
+
+    const deleteMethod = jest.fn();
+    const from = jest.fn().mockReturnValue({ select: fetchSelect, delete: deleteMethod });
+
+    const storageError = new Error('storage remove failed');
+    const remove = jest.fn().mockResolvedValue({ data: null, error: storageError });
+    const storageFrom = jest.fn().mockReturnValue({ remove });
+
+    mockedGetSupabaseClient.mockReturnValue({ from, storage: { from: storageFrom } } as never);
+
+    await expect(deletePet('pet-123')).rejects.toThrow('Failed to delete pet photo: storage remove failed');
+    expect(deleteMethod).not.toHaveBeenCalled();
+  });
+
+  it('throws an error when database delete affects 0 rows due to RLS filtering', async () => {
+    const petRecord = { id: 'pet-123', photo_url: null };
+    const fetchSingle = jest.fn().mockResolvedValue({ data: petRecord, error: null });
+    const fetchEq = jest.fn().mockReturnValue({ maybeSingle: fetchSingle });
+    const fetchSelect = jest.fn().mockReturnValue({ eq: fetchEq });
+
+    const deleteSelect = jest.fn().mockResolvedValue({ data: [], error: null });
+    const deleteEq = jest.fn().mockReturnValue({ select: deleteSelect });
+    const deleteMethod = jest.fn().mockReturnValue({ eq: deleteEq });
+
+    const from = jest.fn().mockReturnValue({ select: fetchSelect, delete: deleteMethod });
+
+    mockedGetSupabaseClient.mockReturnValue({ from } as never);
+
+    await expect(deletePet('pet-123')).rejects.toThrow('Could not delete pet pet-123: permission denied or pet not found.');
   });
 });
 
@@ -140,14 +265,59 @@ describe('getPetPhotoSignedUrl', () => {
 });
 
 describe('createPet', () => {
-  it('inserts a trimmed pet without a photo and stores blank optional fields as null', async () => {
+  it('validates photo MIME type upfront and rejects before touching auth or database', async () => {
+    const from = jest.fn();
+    const getUser = jest.fn();
+
+    mockedGetSupabaseClient.mockReturnValue({ auth: { getUser }, from } as never);
+
+    const invalidFile = new File(['binary'], 'document.pdf', { type: 'application/pdf' });
+    await expect(createPet({
+      name: 'Rocket',
+      species: 'dog',
+      breed: '',
+      ageYear: null,
+      description: '',
+      photo: invalidFile,
+    })).rejects.toThrow('Unsupported file type. Choose a JPG, PNG, WebP, or GIF file.');
+
+    expect(getUser).not.toHaveBeenCalled();
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it('validates photo size upfront and rejects before touching auth or database', async () => {
+    const from = jest.fn();
+    const getUser = jest.fn();
+
+    mockedGetSupabaseClient.mockReturnValue({ auth: { getUser }, from } as never);
+
+    const oversizedFile = { type: 'image/png', size: PET_PHOTO_MAX_BYTES + 100 } as File;
+    await expect(createPet({
+      name: 'Rocket',
+      species: 'dog',
+      breed: '',
+      ageYear: null,
+      description: '',
+      photo: oversizedFile,
+    })).rejects.toThrow(/Photo is larger than the 10 MB limit/);
+
+    expect(getUser).not.toHaveBeenCalled();
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it('inserts a trimmed pet without a photo and ensures storage is never called', async () => {
     const created = { id: 'pet-1', name: 'Rocket', photo_url: null };
     const single = jest.fn().mockResolvedValue({ data: created, error: null });
     const select = jest.fn().mockReturnValue({ single });
     const insert = jest.fn().mockReturnValue({ select });
     const from = jest.fn().mockReturnValue({ insert });
+    const storageFrom = jest.fn();
 
-    mockedGetSupabaseClient.mockReturnValue({ auth: { getUser: signedIn('owner-123') }, from } as never);
+    mockedGetSupabaseClient.mockReturnValue({
+      auth: { getUser: signedIn('owner-123') },
+      from,
+      storage: { from: storageFrom },
+    } as never);
 
     await expect(createPet({
       name: '  Rocket ',
@@ -165,8 +335,8 @@ describe('createPet', () => {
       breed: null,
       age_year: 3,
       description: 'Loves walks',
-      photo_url: null,
     });
+    expect(storageFrom).not.toHaveBeenCalled();
   });
 
   it('refuses to create a pet when signed out', async () => {
@@ -192,7 +362,7 @@ describe('createPet', () => {
 
   it('inserts pet, uploads photo to pet-photos bucket, and updates photo_url when photo is provided', async () => {
     const createdPet = { id: 'pet-1', name: 'Rocket', photo_url: null };
-    const updatedPet = { ...createdPet, photo_url: 'pet-1/mock-uuid.jpg' };
+    const updatedPet = { ...createdPet, photo_url: 'pet-1/mock-uuid.png' };
 
     const insertSingle = jest.fn().mockResolvedValue({ data: createdPet, error: null });
     const insertSelect = jest.fn().mockReturnValue({ single: insertSingle });
@@ -234,7 +404,6 @@ describe('createPet', () => {
     expect(insert).toHaveBeenCalledWith(expect.objectContaining({
       owner_id: 'owner-123',
       name: 'Rocket',
-      photo_url: null,
     }));
     expect(storageFrom).toHaveBeenCalledWith(PET_PHOTO_BUCKET);
     expect(upload).toHaveBeenCalledWith(
@@ -343,7 +512,7 @@ describe('createPet', () => {
     expect(deleteEq).toHaveBeenCalledWith('id', 'pet-1');
   });
 
-  it('reports incomplete rollback when pet deletion fails after upload failure', async () => {
+  it('reports incomplete rollback and preserves cause when pet deletion fails after upload failure', async () => {
     const createdPet = { id: 'pet-1', name: 'Rocket', photo_url: null };
     const insertSingle = jest.fn().mockResolvedValue({ data: createdPet, error: null });
     const insertSelect = jest.fn().mockReturnValue({ single: insertSingle });
@@ -369,17 +538,28 @@ describe('createPet', () => {
     } as never);
 
     const file = new File(['image-bytes'], 'rocket.png', { type: 'image/png' });
-    await expect(createPet({
-      name: 'Rocket',
-      species: 'dog',
-      breed: '',
-      ageYear: null,
-      description: '',
-      photo: file,
-    })).rejects.toThrow('Storage failed (rollback incomplete: pet cleanup failed: DB delete rejected)');
+    let caughtError: unknown;
+    try {
+      await createPet({
+        name: 'Rocket',
+        species: 'dog',
+        breed: '',
+        ageYear: null,
+        description: '',
+        photo: file,
+      });
+    } catch (err) {
+      caughtError = err;
+    }
+
+    expect(caughtError).toBeInstanceOf(Error);
+    expect((caughtError as Error).message).toBe(
+      'Storage failed (rollback incomplete: pet cleanup failed: DB delete rejected)',
+    );
+    expect((caughtError as Error).cause).toBe(uploadError);
   });
 
-  it('reports incomplete rollback when both storage remove and pet delete fail after update failure', async () => {
+  it('reports incomplete rollback and preserves cause when both storage remove and pet delete fail after update failure', async () => {
     const createdPet = { id: 'pet-1', name: 'Rocket', photo_url: null };
     const insertSingle = jest.fn().mockResolvedValue({ data: createdPet, error: null });
     const insertSelect = jest.fn().mockReturnValue({ single: insertSingle });
@@ -412,13 +592,24 @@ describe('createPet', () => {
     } as never);
 
     const file = new File(['image-bytes'], 'rocket.png', { type: 'image/png' });
-    await expect(createPet({
-      name: 'Rocket',
-      species: 'dog',
-      breed: '',
-      ageYear: null,
-      description: '',
-      photo: file,
-    })).rejects.toThrow('Update failed (rollback incomplete: photo cleanup failed: Storage remove failed, pet cleanup failed: DB delete failed)');
+    let caughtError: unknown;
+    try {
+      await createPet({
+        name: 'Rocket',
+        species: 'dog',
+        breed: '',
+        ageYear: null,
+        description: '',
+        photo: file,
+      });
+    } catch (err) {
+      caughtError = err;
+    }
+
+    expect(caughtError).toBeInstanceOf(Error);
+    expect((caughtError as Error).message).toBe(
+      'Update failed (rollback incomplete: photo cleanup failed: Storage remove failed, pet cleanup failed: DB delete failed)',
+    );
+    expect((caughtError as Error).cause).toBe(updateError);
   });
 });

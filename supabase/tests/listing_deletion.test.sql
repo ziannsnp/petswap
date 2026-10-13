@@ -12,6 +12,9 @@ begin;
 --
 -- Ownership cases: a listing of Alex's with no bookings (Blair is the non-owner), a listing
 -- Alex has already deleted, and ...299, an id no listing uses (missing).
+--
+-- Unpublish case: a published listing of Alex's last changed a day ago, so the audit check can
+-- see updated_at move forward within this one transaction.
 set local session_replication_role = replica;
 
 insert into public.listings (
@@ -40,6 +43,16 @@ values
   ('30000000-0000-4000-8000-000000000202', '10000000-0000-4000-8000-000000000001',
    'Already deleted case', 'Test City', 'Soft-deleted by Alex earlier.',
    1, array['dog']::public.pet_species[], 'deleted', null, now());
+
+insert into public.listings (
+  id, owner_id, title, location, description, capacity, accepted_pet_types,
+  status, published_at, deleted_at, created_at, updated_at
+)
+values
+  ('30000000-0000-4000-8000-000000000203', '10000000-0000-4000-8000-000000000001',
+   'Unpublish case', 'Test City', 'Published by Alex a day ago.',
+   1, array['dog']::public.pet_species[], 'published', now() - interval '1 day', null,
+   now() - interval '1 day', now() - interval '1 day');
 
 insert into public.bookings (
   id, listing_id, pet_id, requester_id, status, start_date, end_date,
@@ -367,6 +380,138 @@ begin
 
   if not rejected then
     raise exception 'listing deletion: a new booking was accepted after soft deletion';
+  end if;
+end;
+$$;
+
+-- Signed out: an anonymous request and an authenticated request that carries no user id are
+-- both refused before anything changes. anon does hold EXECUTE on the operation (Supabase's
+-- default privileges grant it, and revoking from PUBLIC does not take it away), so it is the
+-- operation's own auth.uid() check that stops both.
+reset role;
+set local role anon;
+
+do $$
+declare
+  rejected boolean := false;
+begin
+  begin
+    perform public.delete_listing_with_active_booking_check(
+      '30000000-0000-4000-8000-000000000201'
+    );
+  exception
+    when insufficient_privilege then rejected := true;
+  end;
+
+  if not rejected then
+    raise exception 'listing deletion: an anonymous caller was not refused';
+  end if;
+end;
+$$;
+
+reset role;
+
+do $$
+begin
+  if not exists (
+    select 1 from public.listings
+    where id = '30000000-0000-4000-8000-000000000201'
+      and status = 'published'
+      and deleted_at is null
+  ) then
+    raise exception 'listing deletion: a refused anonymous delete changed the listing';
+  end if;
+end;
+$$;
+
+reset role;
+select set_config('request.jwt.claims', '{"role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare
+  error_message text;
+begin
+  begin
+    perform public.delete_listing_with_active_booking_check(
+      '30000000-0000-4000-8000-000000000201'
+    );
+  exception
+    when insufficient_privilege then
+      get stacked diagnostics error_message = message_text;
+  end;
+
+  if error_message is distinct from 'You must be signed in to delete a listing.' then
+    raise exception 'listing deletion: a request without a user id was not refused as signed out (%)',
+      coalesce(error_message, 'no error');
+  end if;
+end;
+$$;
+
+-- Unpublishing: only the owner may do it, never on a deleted listing, and it clears
+-- published_at and moves updated_at forward.
+reset role;
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"10000000-0000-4000-8000-000000000002","role":"authenticated"}',
+  true
+);
+set local role authenticated;
+
+do $$
+declare
+  changed_rows integer;
+begin
+  update public.listings
+  set status = 'draft'
+  where id = '30000000-0000-4000-8000-000000000203';
+  get diagnostics changed_rows = row_count;
+
+  if changed_rows <> 0 then
+    raise exception 'listing deletion: a non-owner unpublished another user listing';
+  end if;
+end;
+$$;
+
+reset role;
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"10000000-0000-4000-8000-000000000001","role":"authenticated"}',
+  true
+);
+set local role authenticated;
+
+do $$
+declare
+  previous_updated_at timestamptz;
+  unpublished record;
+  changed_rows integer;
+begin
+  select updated_at into previous_updated_at
+  from public.listings
+  where id = '30000000-0000-4000-8000-000000000203';
+
+  update public.listings
+  set status = 'draft'
+  where id = '30000000-0000-4000-8000-000000000203';
+
+  select status, published_at, updated_at into unpublished
+  from public.listings
+  where id = '30000000-0000-4000-8000-000000000203';
+
+  if unpublished.status is distinct from 'draft'
+    or unpublished.published_at is not null
+    or unpublished.updated_at <= previous_updated_at then
+    raise exception 'listing deletion: unpublishing did not persist status and audit columns';
+  end if;
+
+  update public.listings
+  set status = 'draft'
+  where id = '30000000-0000-4000-8000-000000000202';
+  get diagnostics changed_rows = row_count;
+
+  if changed_rows <> 0 then
+    raise exception 'listing deletion: a deleted listing was unpublished';
   end if;
 end;
 $$;

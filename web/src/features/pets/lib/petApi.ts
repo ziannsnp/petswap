@@ -31,6 +31,14 @@ export interface CreatePetValues {
   photo?: File | null;
 }
 
+export interface UpdatePetValues {
+  name: string;
+  species: PetSpecies;
+  breed: string;
+  ageYear: number | null;
+  description: string;
+}
+
 function blankToNull(value: string): string | null {
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
@@ -56,6 +64,21 @@ export function petPhotoStoragePath(petId: string, file: Pick<File, 'type' | 'na
   return `${petId}/${crypto.randomUUID()}${extension}`;
 }
 
+/** Retrieves a single pet by id. Returns null if not found or not visible under RLS. */
+export async function getPet(petId: string): Promise<Pet | null> {
+  const { data, error } = await getSupabaseClient()
+    .from('pets')
+    .select('*')
+    .eq('id', petId)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
 /** RLS also lets listing owners read pets booked at their listings, so "my pets"
  * must filter by owner explicitly rather than rely on RLS alone. The caller passes
  * the owner id it uses in the query key, so the cache entry and the filter always
@@ -72,6 +95,37 @@ export async function listMyPets(ownerId: string): Promise<Pet[]> {
   }
 
   return data ?? [];
+}
+
+/** Updates an existing pet. Scoped to the authenticated owner; never updates or sends owner_id. */
+export async function updatePet(petId: string, values: UpdatePetValues): Promise<Pet> {
+  const supabase = getSupabaseClient();
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+
+  if (userError) throw userError;
+  if (!userData.user) {
+    throw new Error('You must be signed in to update a pet.');
+  }
+
+  const { data: updatedPet, error: updateError } = await supabase
+    .from('pets')
+    .update({
+      name: values.name.trim(),
+      species: values.species,
+      breed: blankToNull(values.breed),
+      age_year: values.ageYear,
+      description: blankToNull(values.description),
+    })
+    .eq('id', petId)
+    .eq('owner_id', userData.user.id)
+    .select('*')
+    .single();
+
+  if (updateError) {
+    throw updateError;
+  }
+
+  return updatedPet;
 }
 
 function isStoragePathRemoved(

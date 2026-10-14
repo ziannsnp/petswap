@@ -24,7 +24,7 @@ export function useCreatePet() {
 
   return useMutation({
     mutationFn: (values: CreatePetValues) => createPet(values),
-    onSuccess: () => {
+    onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: petKeys.all });
     },
   });

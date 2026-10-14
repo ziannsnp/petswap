@@ -1,5 +1,8 @@
 import { getSupabaseClient } from '@/shared/lib/supabase';
 import type { Database } from '@/shared/types/database.types';
+import { BookingConflictError } from './bookingErrors';
+
+export { BookingConflictError };
 
 export type Booking = Database['public']['Tables']['bookings']['Row'];
 export type BookingInsert = Database['public']['Tables']['bookings']['Insert'];
@@ -92,6 +95,11 @@ export async function updateBookingStatus(
     .single();
 
   if (error) {
+    // The database exclusion constraint is the authoritative, concurrency-safe overlap check.
+    if (status === 'confirmed' && error.code === '23P01') {
+      throw new BookingConflictError();
+    }
+
     throw error;
   }
 

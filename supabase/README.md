@@ -21,7 +21,7 @@ http://127.0.0.1:54323
 
 ## Contract tests
 
-`supabase/tests/` holds SQL checks that the schema keeps its promises (RLS on, booking policies present, confirmed bookings cannot overlap). Run them after a reset; see [`supabase/tests/README.md`](tests/README.md). They also run in CI via [`.github/workflows/db-contract.yml`](../.github/workflows/db-contract.yml).
+`supabase/tests/` holds SQL checks that the schema keeps its promises (RLS on, booking policies present, confirmed bookings cannot overlap, and listing host projections are visibility-scoped). Run them after a reset; see [`supabase/tests/README.md`](tests/README.md). They also run in CI via [`.github/workflows/db-contract.yml`](../.github/workflows/db-contract.yml).
 
 ## Migrations
 

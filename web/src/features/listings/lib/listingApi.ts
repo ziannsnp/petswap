@@ -52,11 +52,19 @@ export interface ListingHost {
 export type Listing = Database['public']['Tables']['listings']['Row'] & {
   listing_images: ListingImage[];
   cover_photo_url: string | null;
-  /** Team B's detail adapter supplies this minimal public profile projection. */
+  /** Only the detail adapter supplies this minimal public profile projection. */
   host: ListingHost | null;
 };
 
+export type ListingDetailResponse = Listing;
+
 const LISTING_PHOTO_SIGNED_URL_TTL_SECONDS = 3_600;
+
+function isPhotoSigningTransportError(error: unknown): boolean {
+  return error instanceof TypeError || (
+    error instanceof Error && error.name === 'StorageUnknownError'
+  );
+}
 
 function photoStoragePath(listingId: string, file: File): string {
   const extension = file.name.includes('.') ? `.${file.name.split('.').pop()}` : '';
@@ -304,26 +312,29 @@ async function addSignedPhotoUrls(
     return { ...listing, listing_images: [], cover_photo_url: null, host: listing.host ?? null };
   }
 
-  const { data: signedPhotos, error } = await getSupabaseClient().storage
+  const withoutSignedPhotos = () => ({
+    ...listing,
+    listing_images: listingImages.map((image) => ({ ...image, signed_url: null })),
+    cover_photo_url: null,
+    host: listing.host ?? null,
+  });
+  const signingRequest = getSupabaseClient().storage
     .from('listing-photos')
     .createSignedUrls(
       listingImages.map((image) => image.storage_path),
       LISTING_PHOTO_SIGNED_URL_TTL_SECONDS,
     );
+  const signingResult = await signingRequest.catch((error: unknown) => {
+    if (isPhotoSigningTransportError(error)) return null;
+    throw error;
+  });
 
   // Photo signing is intentionally best-effort: a missing object or temporary storage
   // failure must not make the listing's text details inaccessible (US-4.3).
-  if (error) {
-    return {
-      ...listing,
-      listing_images: listingImages.map((image) => ({ ...image, signed_url: null })),
-      cover_photo_url: null,
-      host: listing.host ?? null,
-    };
-  }
+  if (!signingResult || signingResult.error) return withoutSignedPhotos();
 
   const signedUrlByPath = new Map(
-    (signedPhotos ?? [])
+    (signingResult.data ?? [])
       .filter((photo) => Boolean(photo.signedUrl))
       .map((photo) => [photo.path, photo.signedUrl]),
   );
@@ -338,6 +349,21 @@ async function addSignedPhotoUrls(
     cover_photo_url: imagesWithUrls[0]?.signed_url ?? null,
     host: listing.host ?? null,
   };
+}
+
+async function getListingHost(listingId: string): Promise<ListingHost | null> {
+  try {
+    const { data, error } = await getSupabaseClient().rpc('get_listing_host', {
+      target_listing_id: listingId,
+    });
+
+    if (error) return null;
+    return data?.[0] ?? null;
+  } catch (error) {
+    // Only transport failures are optional; unexpected errors remain visible to the API.
+    if (error instanceof TypeError) return null;
+    throw error;
+  }
 }
 
 export async function listPublishedListings(): Promise<Listing[]> {
@@ -358,9 +384,10 @@ export async function listPublishedListings(): Promise<Listing[]> {
   })));
 }
 
-export async function getListing(listingId: string): Promise<Listing> {
+export async function getListing(listingId: string): Promise<ListingDetailResponse> {
   try {
-    const { data, error } = await getSupabaseClient()
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
       .from('listings')
       .select('*, listing_images(*)')
       .eq('id', listingId)
@@ -374,7 +401,12 @@ export async function getListing(listingId: string): Promise<Listing> {
       throw new ListingError('deleted', 'This listing is no longer available.');
     }
 
-    return addSignedPhotoUrls({ ...data, listing_images: data.listing_images ?? [] });
+    const [host, listingWithSignedPhotos] = await Promise.all([
+      getListingHost(data.id),
+      addSignedPhotoUrls({ ...data, listing_images: data.listing_images ?? [] }),
+    ]);
+
+    return { ...listingWithSignedPhotos, host };
   } catch (error) {
     throw toListingError(error);
   }

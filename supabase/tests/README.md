@@ -11,12 +11,20 @@ automated form of the database review points in
 | `listing_rules.test.sql` | Behaviour of the required accepted-pet rule: an empty accepted-pet array is rejected by the named constraint. Runs in one transaction that is rolled back. | No (rolled back) |
 | `listing_facility_migration.test.sql` | Behaviour of the legacy facility-label backfill: old labels map to the prototype vocabulary, unknown values survive, and replacement duplicates are removed. | No (rolled back) |
 | `listing_photo_access.test.sql` | Storage RLS behaviour: an owner can select draft photos for signing, other authenticated and anonymous users cannot read drafts, and anonymous users can select published photos for signing. | No (rolled back) |
+| `listing_host_access.test.sql` | Listing host projection behaviour: anonymous visitors can read only the minimal host projection of published listings; owners can read their own draft host projection; other users cannot read draft host details or profiles directly. | No (rolled back) |
 | `listing_edit_rules.test.sql` | US-2.2 behaviour: owners can edit valid listing fields, invalid updates fail, non-owners cannot edit listing data or photos, photo metadata stays under the correct listing path and ten-photo cap, and main-photo ordering changes atomically. | No (rolled back) |
 | `listing_deletion.test.sql` | Listing-owner deletion behaviour: a pending or confirmed booking blocks deletion while a declined, cancelled, or completed one does not (one fixture listing per status), only owners may delete, a missing or already-deleted listing is refused, audit timestamps persist, and direct update/hard-delete bypasses are rejected. | No (rolled back) |
 | `avatar_storage_access.test.sql` | Avatar storage behaviour: avatars are publicly readable; users may create and replace their own avatars but cannot upload into or delete another user's folder. | No (rolled back) |
 | `pet_photo_access.test.sql` | Pet photo storage behaviour: private bucket; pet owners have full CRUD over their pet photos; listing hosts with a booking for that pet can read photos; unrelated users and anonymous requests are blocked. | No (rolled back) |
 
 ## Run locally
+
+After rebuilding the database, the host projection contract can also be run with:
+
+```bash
+docker exec -i supabase_db_petswap psql -U postgres -d postgres \
+  -v ON_ERROR_STOP=1 < supabase/tests/listing_host_access.test.sql
+```
 
 ```bash
 npx supabase db reset

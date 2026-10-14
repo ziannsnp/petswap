@@ -31,9 +31,21 @@ export interface CreatePetValues {
   photo?: File | null;
 }
 
+export type UpdatePetValues = Omit<CreatePetValues, 'photo'>;
+
 function blankToNull(value: string): string | null {
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
+}
+
+function toPetRowAttributes(values: UpdatePetValues) {
+  return {
+    name: values.name.trim(),
+    species: values.species,
+    breed: blankToNull(values.breed),
+    age_year: values.ageYear,
+    description: blankToNull(values.description),
+  };
 }
 
 /** Validates photo MIME type and size against the storage bucket limits. */
@@ -56,6 +68,27 @@ export function petPhotoStoragePath(petId: string, file: Pick<File, 'type' | 'na
   return `${petId}/${crypto.randomUUID()}${extension}`;
 }
 
+/**
+ * Retrieves a single pet by id. Returns null if not found or not visible under RLS.
+ *
+ * Note: RLS allows listing owners to read pets booked at their listings, so this
+ * function may return a pet owned by another user. Callers that require ownership
+ * (such as pet edit screens) must verify `pet.owner_id` against the current user.
+ */
+export async function getPet(petId: string): Promise<Pet | null> {
+  const { data, error } = await getSupabaseClient()
+    .from('pets')
+    .select('*')
+    .eq('id', petId)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
 /** RLS also lets listing owners read pets booked at their listings, so "my pets"
  * must filter by owner explicitly rather than rely on RLS alone. The caller passes
  * the owner id it uses in the query key, so the cache entry and the filter always
@@ -72,6 +105,35 @@ export async function listMyPets(ownerId: string): Promise<Pet[]> {
   }
 
   return data ?? [];
+}
+
+/** Updates an existing pet. Scoped to the authenticated owner; never updates or sends owner_id. */
+export async function updatePet(petId: string, values: UpdatePetValues): Promise<Pet> {
+  const supabase = getSupabaseClient();
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+
+  if (userError) throw userError;
+  if (!userData.user) {
+    throw new Error('You must be signed in to update a pet.');
+  }
+
+  const { data: updatedPet, error: updateError } = await supabase
+    .from('pets')
+    .update(toPetRowAttributes(values))
+    .eq('id', petId)
+    .eq('owner_id', userData.user.id)
+    .select('*')
+    .maybeSingle();
+
+  if (updateError) {
+    throw updateError;
+  }
+
+  if (!updatedPet) {
+    throw new Error(`Pet with id ${petId} not found or you do not have permission to update it.`);
+  }
+
+  return updatedPet;
 }
 
 function isStoragePathRemoved(
@@ -197,11 +259,7 @@ export async function createPet(values: CreatePetValues): Promise<Pet> {
     .from('pets')
     .insert({
       owner_id: userData.user.id,
-      name: values.name.trim(),
-      species: values.species,
-      breed: blankToNull(values.breed),
-      age_year: values.ageYear,
-      description: blankToNull(values.description),
+      ...toPetRowAttributes(values),
     })
     .select('*')
     .single();

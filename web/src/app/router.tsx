@@ -3,7 +3,7 @@ import { AuthScreen, ProtectedRoute, RegisterScreen } from '@/features/auth';
 import { BookingsScreen } from '@/features/bookings';
 import { CreateListingScreen, EditListingScreen, ListingDetailScreen, ListingsScreen } from '@/features/listings';
 import { PrivacyNoticeScreen, TermsOfServiceScreen } from '@/features/consent';
-import { CreatePetScreen, PetsScreen } from '@/features/pets';
+import { CreatePetScreen, EditPetScreen, PetsScreen } from '@/features/pets';
 import { ProfileScreen } from '@/features/profiles';
 import { SearchScreen } from '@/features/search';
 import { MainLayout, NotFoundScreen } from '@/shared/components';
@@ -30,6 +30,7 @@ export const router = createBrowserRouter([
           { path: '/profile', Component: ProfileScreen },
           { path: '/pets', Component: PetsScreen },
           { path: '/pets/new', Component: CreatePetScreen },
+          { path: '/pets/:petId/edit', Component: EditPetScreen },
           { path: '/listings', Component: ListingsScreen },
           { path: '/listings/new', Component: CreateListingScreen },
           { path: '/listings/:listingId/edit', Component: EditListingScreen },

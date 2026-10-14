@@ -898,8 +898,8 @@ describe('updatePet', () => {
       updated_at: '2026-01-02T00:00:00Z',
     };
 
-    const single = jest.fn().mockResolvedValue({ data: updatedRecord, error: null });
-    const select = jest.fn().mockReturnValue({ single });
+    const maybeSingle = jest.fn().mockResolvedValue({ data: updatedRecord, error: null });
+    const select = jest.fn().mockReturnValue({ maybeSingle });
     const eqOwner = jest.fn().mockReturnValue({ select });
     const eqId = jest.fn().mockReturnValue({ eq: eqOwner });
     const update = jest.fn().mockReturnValue({ eq: eqId });
@@ -930,12 +930,12 @@ describe('updatePet', () => {
     expect(eqId).toHaveBeenCalledWith('id', 'pet-123');
     expect(eqOwner).toHaveBeenCalledWith('owner_id', 'owner-456');
     expect(select).toHaveBeenCalledWith('*');
-    expect(single).toHaveBeenCalled();
+    expect(maybeSingle).toHaveBeenCalled();
   });
 
   it('converts blank breed and description strings to null', async () => {
-    const single = jest.fn().mockResolvedValue({ data: { id: 'pet-123' }, error: null });
-    const select = jest.fn().mockReturnValue({ single });
+    const maybeSingle = jest.fn().mockResolvedValue({ data: { id: 'pet-123' }, error: null });
+    const select = jest.fn().mockReturnValue({ maybeSingle });
     const eqOwner = jest.fn().mockReturnValue({ select });
     const eqId = jest.fn().mockReturnValue({ eq: eqOwner });
     const update = jest.fn().mockReturnValue({ eq: eqId });
@@ -964,10 +964,29 @@ describe('updatePet', () => {
     });
   });
 
+  it('throws an error when no row matches during update (not found or not owned by user)', async () => {
+    const maybeSingle = jest.fn().mockResolvedValue({ data: null, error: null });
+    const select = jest.fn().mockReturnValue({ maybeSingle });
+    const eqOwner = jest.fn().mockReturnValue({ select });
+    const eqId = jest.fn().mockReturnValue({ eq: eqOwner });
+    const update = jest.fn().mockReturnValue({ eq: eqId });
+
+    const from = jest.fn().mockReturnValue({ update });
+
+    mockedGetSupabaseClient.mockReturnValue({
+      auth: { getUser: signedIn('owner-456') },
+      from,
+    } as never);
+
+    await expect(updatePet('pet-123', validValues)).rejects.toThrow(
+      'Pet with id pet-123 not found or you do not have permission to update it.',
+    );
+  });
+
   it('surfaces update error when database update fails', async () => {
     const updateError = new Error('Permission denied or row locked');
-    const single = jest.fn().mockResolvedValue({ data: null, error: updateError });
-    const select = jest.fn().mockReturnValue({ single });
+    const maybeSingle = jest.fn().mockResolvedValue({ data: null, error: updateError });
+    const select = jest.fn().mockReturnValue({ maybeSingle });
     const eqOwner = jest.fn().mockReturnValue({ select });
     const eqId = jest.fn().mockReturnValue({ eq: eqOwner });
     const update = jest.fn().mockReturnValue({ eq: eqId });

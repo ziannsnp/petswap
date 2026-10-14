@@ -209,6 +209,10 @@ $$;
 -- 7. A pet with a booking cannot be deleted (even by its owner)
 -- Casey (...003) owns Rocket (...004), which has bookings in public.bookings.
 -- Foreign key constraint bookings_pet_id_fkey (ON DELETE RESTRICT) must reject deletion.
+--
+-- Note: Unlike listing deletion which only restricts active bookings (pending/confirmed),
+-- foreign key bookings.pet_id is ON DELETE RESTRICT, meaning any booking lifecycle row
+-- blocks pet deletion at the schema level unless changed in a future migration.
 -- ---------------------------------------------------------------------------
 reset role;
 select set_config(

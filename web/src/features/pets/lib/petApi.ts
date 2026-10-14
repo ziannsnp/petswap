@@ -74,15 +74,32 @@ export async function listMyPets(ownerId: string): Promise<Pet[]> {
   return data ?? [];
 }
 
+function isStoragePathRemoved(
+  data: Array<{ name: string }> | null | undefined,
+  path: string,
+): boolean {
+  if (!data || data.length === 0) return false;
+  const fileName = path.includes('/') ? path.split('/').pop() : path;
+  return data.some((item) => item.name === path || item.name === fileName);
+}
+
 /** Removes a pet from public.pets by id, cleaning up any associated photos in storage first. */
 export async function deletePet(petId: string): Promise<void> {
   const supabase = getSupabaseClient();
+  const { data: userData, error: userError } = await supabase.auth.getUser();
 
-  // 1. Fetch pet to check existence and retrieve any attached photo_url
+  if (userError) throw userError;
+  if (!userData.user) {
+    throw new Error('You must be signed in to delete a pet.');
+  }
+
+  // 1. Fetch pet to check existence and ownership, and retrieve any attached photo_url.
+  // Explicitly check owner_id since listing owners also have SELECT permission on booked pets.
   const { data: pet, error: fetchError } = await supabase
     .from('pets')
-    .select('id, photo_url')
+    .select('id, photo_url, owner_id')
     .eq('id', petId)
+    .eq('owner_id', userData.user.id)
     .maybeSingle();
 
   if (fetchError) {
@@ -93,19 +110,40 @@ export async function deletePet(petId: string): Promise<void> {
     throw new Error(`Pet with id ${petId} not found or you do not have permission to delete it.`);
   }
 
-  // 2. If photo exists, remove it from storage while the pet record still exists
+  // 2. Check for any existing bookings referencing this pet before touching storage.
+  // Foreign key bookings.pet_id is ON DELETE RESTRICT, so if any booking exists,
+  // removing the photo first would leave an orphan record with a dangling photo_url.
+  const { data: bookings, error: bookingsError } = await supabase
+    .from('bookings')
+    .select('id')
+    .eq('pet_id', petId)
+    .limit(1);
+
+  if (bookingsError) {
+    throw bookingsError;
+  }
+
+  if (bookings && bookings.length > 0) {
+    throw new Error('Cannot delete a pet that has existing bookings.');
+  }
+
+  // 3. If photo exists, remove it from storage while the pet record still exists
   // (storage RLS policy checks current_user_owns_pet in public.pets)
   if (pet.photo_url) {
-    const { error: storageError } = await supabase.storage
+    const { data: storageData, error: storageError } = await supabase.storage
       .from(PET_PHOTO_BUCKET)
       .remove([pet.photo_url]);
 
     if (storageError) {
       throw new Error(`Failed to delete pet photo: ${storageError.message}`, { cause: storageError });
     }
+
+    if (!isStoragePathRemoved(storageData, pet.photo_url)) {
+      throw new Error('Failed to delete pet photo: permission denied or not found.');
+    }
   }
 
-  // 3. Delete the pet record from public.pets and ensure at least 1 row was deleted
+  // 4. Delete the pet record from public.pets and ensure at least 1 row was deleted
   const { data: deletedRows, error: deleteError } = await supabase
     .from('pets')
     .delete()
@@ -201,32 +239,51 @@ export async function createPet(values: CreatePetValues): Promise<Pet> {
     return updatedPet;
   } catch (error) {
     const cleanupErrors: string[] = [];
+    let photoCleanupFailed = false;
 
     // Remove storage object first while pet row still exists in database
     // (RLS on storage.objects checks that the current user owns the pet)
     if (photoUploaded && storagePath) {
       try {
-        const { error: removeError } = await supabase.storage
+        const { data: removeData, error: removeError } = await supabase.storage
           .from(PET_PHOTO_BUCKET)
           .remove([storagePath]);
+
         if (removeError) throw removeError;
+
+        if (!isStoragePathRemoved(removeData, storagePath)) {
+          throw new Error('storage object not found or permission denied');
+        }
       } catch (storageCleanupError) {
+        photoCleanupFailed = true;
         cleanupErrors.push(
           `photo cleanup failed: ${storageCleanupError instanceof Error ? storageCleanupError.message : String(storageCleanupError)}`,
         );
       }
     }
 
-    try {
-      const { error: deletePetError } = await supabase
-        .from('pets')
-        .delete()
-        .eq('id', pet.id);
-      if (deletePetError) throw deletePetError;
-    } catch (petCleanupError) {
-      cleanupErrors.push(
-        `pet cleanup failed: ${petCleanupError instanceof Error ? petCleanupError.message : String(petCleanupError)}`,
-      );
+    // Only attempt to delete the pet row if photo cleanup was not needed (no photo was uploaded)
+    // or if photo cleanup succeeded. If photo cleanup failed, we MUST keep the pet row so that
+    // the owner still has permission to access/delete the photo later; deleting the pet row first
+    // would permanently orphan the storage object under RLS.
+    if (!photoCleanupFailed) {
+      try {
+        const { data: deletedRows, error: deletePetError } = await supabase
+          .from('pets')
+          .delete()
+          .eq('id', pet.id)
+          .select('id');
+
+        if (deletePetError) throw deletePetError;
+
+        if (!deletedRows || deletedRows.length === 0) {
+          throw new Error(`Could not delete pet ${pet.id}: permission denied or pet not found.`);
+        }
+      } catch (petCleanupError) {
+        cleanupErrors.push(
+          `pet cleanup failed: ${petCleanupError instanceof Error ? petCleanupError.message : String(petCleanupError)}`,
+        );
+      }
     }
 
     if (cleanupErrors.length > 0) {

@@ -71,13 +71,13 @@ describe('useCreatePet', () => {
     expect(mockedCreatePet).toHaveBeenCalledWith(values);
   });
 
-  it('refreshes every pet query after a successful create', () => {
+  it('refreshes every pet query when create settles', () => {
     const invalidateQueries = jest.fn();
     mockedUseQueryClient.mockReturnValue({ invalidateQueries } as never);
 
     useCreatePet();
     const options = mockedUseMutation.mock.lastCall?.[0];
-    options?.onSuccess?.({} as never, values, undefined, undefined as never);
+    options?.onSettled?.({} as never, null, values, undefined, undefined as never);
 
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['pets'] });
   });

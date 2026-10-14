@@ -27,6 +27,9 @@ export const EMPTY_PET_FORM_VALUES: PetFormValues = {
 
 const WHOLE_NUMBER = /^\d+$/;
 
+/** Generous enough for any real pet, and far below the Postgres `integer` limit. */
+export const PET_MAX_AGE_YEARS = 100;
+
 /**
  * Validates the form and, only when it is valid, returns the values the API adapter
  * accepts, so a screen cannot submit a pet without passing validation first.
@@ -41,7 +44,11 @@ export function parsePetForm(values: PetFormValues): ParsedPetForm {
   } else if (!isPetSpecies(values.species)) {
     errors.species = 'Species must use a supported option.';
   }
-  if (age && !WHOLE_NUMBER.test(age)) errors.age = 'Age must be a whole number of years, 0 or more.';
+  if (age && !WHOLE_NUMBER.test(age)) {
+    errors.age = 'Age must be a whole number of years, 0 or more.';
+  } else if (age && Number(age) > PET_MAX_AGE_YEARS) {
+    errors.age = `Age must be ${PET_MAX_AGE_YEARS} years or less.`;
+  }
   if (!values.description.trim()) errors.description = 'Description is required.';
 
   if (Object.keys(errors).length > 0 || values.species === '') {
@@ -58,31 +65,4 @@ export function parsePetForm(values: PetFormValues): ParsedPetForm {
       description: values.description,
     },
   };
-}
-
-/**
- * These limits mirror the `pet-photos` bucket created in
- * `supabase/migrations/20261006090000_create_pet_photos_storage.sql`. Storage enforces
- * them on upload; rejecting here only lets the owner see the reason straight away.
- */
-export const PET_PHOTO_MAX_BYTES = 10_485_760;
-
-export const PET_PHOTO_MIME_TYPES = [
-  'image/jpeg',
-  'image/png',
-  'image/webp',
-  'image/gif',
-] as const;
-
-/** Returns why a chosen photo cannot be used, or null when it is acceptable. */
-export function validatePetPhoto(file: Pick<File, 'type' | 'size'>): string | null {
-  if (!(PET_PHOTO_MIME_TYPES as readonly string[]).includes(file.type)) {
-    return 'Unsupported file type. Choose a JPG, PNG, WebP, or GIF file.';
-  }
-
-  if (file.size > PET_PHOTO_MAX_BYTES) {
-    return `Photo is larger than the ${PET_PHOTO_MAX_BYTES / 1_048_576} MB limit.`;
-  }
-
-  return null;
 }

@@ -1,4 +1,4 @@
-import { PET_PHOTO_MAX_BYTES, parsePetForm, validatePetPhoto, type PetFormValues } from './petForm';
+import { PET_MAX_AGE_YEARS, parsePetForm, type PetFormValues } from './petForm';
 
 const validValues: PetFormValues = {
   name: 'Mali',
@@ -44,24 +44,21 @@ describe('parsePetForm', () => {
     });
   });
 
+  it('accepts the maximum age and rejects anything above it', () => {
+    expect(parsePetForm({ ...validValues, age: String(PET_MAX_AGE_YEARS) })).toEqual({
+      ok: true,
+      values: expect.objectContaining({ ageYear: PET_MAX_AGE_YEARS }),
+    });
+    expect(parsePetForm({ ...validValues, age: String(PET_MAX_AGE_YEARS + 1) })).toEqual({
+      ok: false,
+      errors: { age: `Age must be ${PET_MAX_AGE_YEARS} years or less.` },
+    });
+    expect(parsePetForm({ ...validValues, age: '99999999999' }).ok).toBe(false);
+  });
+
   it('reports every missing required field at once', () => {
     const result = parsePetForm({ name: '', species: '', breed: '', age: '', description: '' });
     expect(result.ok).toBe(false);
     expect(!result.ok && Object.keys(result.errors).sort()).toEqual(['description', 'name', 'species']);
-  });
-});
-
-describe('validatePetPhoto', () => {
-  it.each(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])('accepts %s', (type) => {
-    expect(validatePetPhoto({ type, size: 1024 })).toBeNull();
-  });
-
-  it.each(['image/svg+xml', 'application/pdf', ''])('rejects unsupported type %p', (type) => {
-    expect(validatePetPhoto({ type, size: 1024 })).toMatch(/unsupported file type/i);
-  });
-
-  it('accepts a photo exactly at the size limit and rejects one byte over', () => {
-    expect(validatePetPhoto({ type: 'image/png', size: PET_PHOTO_MAX_BYTES })).toBeNull();
-    expect(validatePetPhoto({ type: 'image/png', size: PET_PHOTO_MAX_BYTES + 1 })).toMatch(/10 MB limit/);
   });
 });

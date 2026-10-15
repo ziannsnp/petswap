@@ -66,6 +66,15 @@ export const deleteListingRpcErrors = {
   activeBookings: { code: 'P0001', message: 'Listing has active bookings and cannot be deleted.', details: null, hint: null },
 };
 
+/**
+ * What supabase-js hands back when the network is down. Neither is the browser's TypeError:
+ * PostgREST resolves with a plain object and auth with an AuthRetryableFetchError.
+ */
+export const networkFailures = {
+  postgrest: { code: '', message: 'TypeError: Failed to fetch', details: 'TypeError: Failed to fetch', hint: '' },
+  auth: Object.assign(new Error('Failed to fetch'), { name: 'AuthRetryableFetchError', status: 0 }),
+};
+
 export const validListingFormValues: ListingFormValues = {
   title: 'Quiet home near the park',
   location: 'Chiang Mai',

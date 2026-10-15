@@ -143,6 +143,27 @@ insert into _contract (check_name, passed) values
     )
   ),
   (
+    'listing host retrieval is a restricted security definer projection',
+    exists (
+      select 1 from pg_proc
+      where oid = 'public.get_listing_host(uuid)'::regprocedure
+        and prosecdef
+        and proargnames = array['target_listing_id', 'id', 'display_name', 'photo_url', 'location']
+    )
+    and has_function_privilege('anon', 'public.get_listing_host(uuid)', 'EXECUTE')
+    and has_function_privilege('authenticated', 'public.get_listing_host(uuid)', 'EXECUTE')
+    and not exists (
+      select 1
+      from pg_proc as p
+      cross join lateral aclexplode(
+        coalesce(p.proacl, acldefault('f', p.proowner))
+      ) as acl
+      where p.oid = 'public.get_listing_host(uuid)'::regprocedure
+        and acl.grantee = 0
+        and acl.privilege_type = 'EXECUTE'
+    )
+  ),
+  (
     'direct listing updates cannot bypass the soft-delete booking check',
     exists (
       select 1 from pg_policies

@@ -114,7 +114,8 @@ npx supabase db reset
 
 Then inspect the local database in Studio at `http://127.0.0.1:54323` and verify the actor cases listed in [environments](environments.md).
 
-The SQL contract checks in `supabase/tests/` now run automatically: `database_contract.sql` (schema catalogue), `booking_rules.test.sql` (overlap-rule behaviour), `listing_rules.test.sql` (required accepted-pet behaviour), `listing_facility_migration.test.sql` (legacy facility-label backfill), `listing_photo_access.test.sql` (draft and published photo access), `listing_edit_rules.test.sql` (valid, invalid, unauthorized, and photo-order edit behaviour), `avatar_storage_access.test.sql` (public avatar reads and owner-only writes), `pet_photo_access.test.sql` (private pet photo reads for owners and booked listing hosts, owner-only writes), `profile_rules.test.sql` (profile owner updates, non-owner edit prevention, and deletion protection), and `pet_rules.test.sql` (pet owner updates, unbooked pet deletion, non-owner and host mutation blocks, and booked pet deletion restriction). Run them locally after a reset, or let [`db-contract.yml`](ci-cd.md#database-contract-workflow) run them on every change under `supabase/`. They still read as a review checklist for a migration; see [`supabase/tests/README.md`](../supabase/tests/README.md). Actor-specific RLS cases not covered there still need Studio or JWT impersonation until the Playwright journey exists.
+The SQL contract checks in `supabase/tests/` now run automatically: `database_contract.sql` (schema catalogue), `booking_rules.test.sql` (overlap-rule behaviour), `listing_rules.test.sql` (required accepted-pet behaviour), `listing_facility_migration.test.sql` (legacy facility-label backfill), `listing_photo_access.test.sql` (draft and published photo access), `listing_host_access.test.sql` (published host projection and draft privacy), `listing_edit_rules.test.sql` (valid, invalid, unauthorized, and photo-order edit behaviour), `avatar_storage_access.test.sql` (public avatar reads and owner-only writes), `pet_photo_access.test.sql` (private pet photo reads for owners and booked listing hosts, owner-only writes), `profile_rules.test.sql` (profile owner updates, non-owner edit prevention, and deletion protection), and `pet_rules.test.sql` (pet owner updates, unbooked pet deletion, non-owner and host mutation blocks, and booked pet deletion restriction). Run them locally after a reset, or let [`db-contract.yml`](ci-cd.md#database-contract-workflow) run them on every change under `supabase/`. They still read as a review checklist for a migration; see [`supabase/tests/README.md`](../supabase/tests/README.md). Actor-specific RLS cases not covered there still need Studio or JWT impersonation until the Playwright journey exists.
+
 
 The `avatars` bucket is public-read for profile photos; its Storage policies still limit uploads, replacements, and deletes to the authenticated user's own folder. The `pet-photos` bucket is private; its Storage policies grant full CRUD to the pet owner and read access to listing hosts who have a booking for that pet.
 
@@ -138,6 +139,12 @@ After `npx supabase db reset`, configure `web/.env.local` with the local API URL
 3. Create another listing and choose **Publish listing**. Confirm the success message and new card are marked Published, and the database row has `published` status.
 4. In Supabase Studio Storage, confirm `listing-photos` is private. In the My Listings browser requests, photo access should use a signed URL rather than a public object URL.
 5. Try no accepted pet type, zero/fractional capacity, an unsupported file, a file above 10 MB, and an eleventh photo. Each should be rejected without losing the rest of the form.
+
+## Manual listing detail journey
+
+1. Open a published listing as a visitor and verify its description, facilities, capacity, accepted pet types, ordered photos, and host's display name, avatar, and location are shown.
+2. Confirm listing photos load from short-lived signed URLs while the `listing-photos` bucket remains private. If a photo is missing or signing fails, the listing's text and host details should still render.
+3. Open a draft listing as its owner and verify the owner can see the listing and host projection; try the same URL as another account and anonymously, and confirm neither can read the draft or the host profile directly.
 
 ## Manual listing edit journey
 

@@ -1,6 +1,12 @@
 import { getSupabaseClient } from '../../../shared/lib/supabase';
+import {
+  MISSING_LISTING_ID,
+  detailUnavailableErrors,
+  detailVisibilityListings,
+  networkFailures,
+} from '../testing/listingFixtures';
 import { createListing, deleteListing, getListing, listMyListings, listPublishedListings, setListingPublicationStatus, updateListing } from './listingApi';
-import type { UpdateListingValues } from './listingApi';
+import type { Listing, UpdateListingValues } from './listingApi';
 
 jest.mock('../../../shared/lib/supabase', () => ({
   getSupabaseClient: jest.fn(),
@@ -245,6 +251,37 @@ describe('getListing', () => {
 
     await expect(getListing('private-listing')).rejects.toMatchObject({ code: 'not_found' });
   });
+
+  describe('with the detail visibility fixtures', () => {
+    // What the listings query returns under RLS: the row, or null when the viewer may not see it.
+    function respondWith(row: Listing | null) {
+      const maybeSingle = jest.fn().mockResolvedValue({ data: row, error: null });
+      const from = jest.fn().mockReturnValue({
+        select: jest.fn().mockReturnValue({ eq: jest.fn().mockReturnValue({ maybeSingle }) }),
+      });
+      const rpc = jest.fn().mockResolvedValue({ data: [], error: null });
+      mockedGetSupabaseClient.mockReturnValue({ from, rpc } as never);
+    }
+
+    it.each([
+      ['a published listing', detailVisibilityListings.published],
+      ["the owner's own draft", detailVisibilityListings.draft],
+    ])('returns %s', async (_case, listing) => {
+      respondWith(listing);
+
+      await expect(getListing(listing.id)).resolves.toMatchObject({ id: listing.id, status: listing.status });
+    });
+
+    it.each([
+      ['a deleted listing', detailVisibilityListings.deleted.id, detailVisibilityListings.deleted, detailUnavailableErrors.deleted],
+      ['a missing listing', MISSING_LISTING_ID, null, detailUnavailableErrors.missing],
+      ["someone else's draft, which RLS hides", detailVisibilityListings.draft.id, null, detailUnavailableErrors.otherUsersDraft],
+    ])('refuses %s with the error the fixture describes', async (_case, listingId, row, expected) => {
+      respondWith(row);
+
+      await expect(getListing(listingId)).rejects.toMatchObject({ code: expected.code, message: expected.message });
+    });
+  });
 });
 
 describe('setListingPublicationStatus', () => {
@@ -386,6 +423,26 @@ describe('deleteListing', () => {
     mockedGetSupabaseClient.mockReturnValue({ auth: { getUser }, from, rpc } as never);
 
     await expect(deleteListing('listing-123')).rejects.toMatchObject({ code: 'active_booking' });
+  });
+
+  it('reports a dropped connection as a network failure, from the session check or the delete itself', async () => {
+    const offlineGetUser = jest.fn().mockResolvedValue({ data: { user: null }, error: networkFailures.auth });
+    const rpc = jest.fn();
+    mockedGetSupabaseClient.mockReturnValue({ auth: { getUser: offlineGetUser }, from: jest.fn(), rpc } as never);
+
+    await expect(deleteListing('listing-123')).rejects.toMatchObject({ code: 'network' });
+    expect(rpc).not.toHaveBeenCalled();
+
+    const getUser = jest.fn().mockResolvedValue({ data: { user: { id: 'owner-1' } }, error: null });
+    const maybeSingle = jest.fn().mockResolvedValue({
+      data: { id: 'listing-123', owner_id: 'owner-1', status: 'published', deleted_at: null },
+      error: null,
+    });
+    const from = jest.fn().mockReturnValue({ select: jest.fn().mockReturnValue({ eq: jest.fn().mockReturnValue({ maybeSingle }) }) });
+    const offlineRpc = jest.fn().mockResolvedValue({ data: null, error: networkFailures.postgrest });
+    mockedGetSupabaseClient.mockReturnValue({ auth: { getUser }, from, rpc: offlineRpc } as never);
+
+    await expect(deleteListing('listing-123')).rejects.toMatchObject({ code: 'network' });
   });
 
   it('returns stable unauthorized and missing codes before calling the database operation', async () => {

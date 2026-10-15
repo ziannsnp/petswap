@@ -1,7 +1,12 @@
 import { getSupabaseClient } from '../../../shared/lib/supabase';
-import { networkFailures } from '../testing/listingFixtures';
+import {
+  MISSING_LISTING_ID,
+  detailUnavailableErrors,
+  detailVisibilityListings,
+  networkFailures,
+} from '../testing/listingFixtures';
 import { createListing, deleteListing, getListing, listMyListings, listPublishedListings, setListingPublicationStatus, updateListing } from './listingApi';
-import type { UpdateListingValues } from './listingApi';
+import type { Listing, UpdateListingValues } from './listingApi';
 
 jest.mock('../../../shared/lib/supabase', () => ({
   getSupabaseClient: jest.fn(),
@@ -245,6 +250,37 @@ describe('getListing', () => {
     mockedGetSupabaseClient.mockReturnValue({ from } as never);
 
     await expect(getListing('private-listing')).rejects.toMatchObject({ code: 'not_found' });
+  });
+
+  describe('with the detail visibility fixtures', () => {
+    // What the listings query returns under RLS: the row, or null when the viewer may not see it.
+    function respondWith(row: Listing | null) {
+      const maybeSingle = jest.fn().mockResolvedValue({ data: row, error: null });
+      const from = jest.fn().mockReturnValue({
+        select: jest.fn().mockReturnValue({ eq: jest.fn().mockReturnValue({ maybeSingle }) }),
+      });
+      const rpc = jest.fn().mockResolvedValue({ data: [], error: null });
+      mockedGetSupabaseClient.mockReturnValue({ from, rpc } as never);
+    }
+
+    it.each([
+      ['a published listing', detailVisibilityListings.published],
+      ["the owner's own draft", detailVisibilityListings.draft],
+    ])('returns %s', async (_case, listing) => {
+      respondWith(listing);
+
+      await expect(getListing(listing.id)).resolves.toMatchObject({ id: listing.id, status: listing.status });
+    });
+
+    it.each([
+      ['a deleted listing', detailVisibilityListings.deleted.id, detailVisibilityListings.deleted, detailUnavailableErrors.deleted],
+      ['a missing listing', MISSING_LISTING_ID, null, detailUnavailableErrors.missing],
+      ["someone else's draft, which RLS hides", detailVisibilityListings.draft.id, null, detailUnavailableErrors.otherUsersDraft],
+    ])('refuses %s with the error the fixture describes', async (_case, listingId, row, expected) => {
+      respondWith(row);
+
+      await expect(getListing(listingId)).rejects.toMatchObject({ code: expected.code, message: expected.message });
+    });
   });
 });
 

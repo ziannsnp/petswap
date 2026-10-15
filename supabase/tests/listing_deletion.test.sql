@@ -385,9 +385,9 @@ end;
 $$;
 
 -- Signed out: an anonymous request and an authenticated request that carries no user id are
--- both refused before anything changes. anon does hold EXECUTE on the operation (Supabase's
--- default privileges grant it, and revoking from PUBLIC does not take it away), so it is the
--- operation's own auth.uid() check that stops both.
+-- both refused before anything changes. anon has no EXECUTE on the operation, so its call is
+-- denied by the grant; the authenticated call without a user id is stopped by the operation's
+-- own auth.uid() check.
 reset role;
 set local role anon;
 

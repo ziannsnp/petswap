@@ -143,6 +143,27 @@ insert into _contract (check_name, passed) values
     )
   ),
   (
+    'listing host retrieval is a restricted security definer projection',
+    exists (
+      select 1 from pg_proc
+      where oid = 'public.get_listing_host(uuid)'::regprocedure
+        and prosecdef
+        and proargnames = array['target_listing_id', 'id', 'display_name', 'photo_url', 'location']
+    )
+    and has_function_privilege('anon', 'public.get_listing_host(uuid)', 'EXECUTE')
+    and has_function_privilege('authenticated', 'public.get_listing_host(uuid)', 'EXECUTE')
+    and not exists (
+      select 1
+      from pg_proc as p
+      cross join lateral aclexplode(
+        coalesce(p.proacl, acldefault('f', p.proowner))
+      ) as acl
+      where p.oid = 'public.get_listing_host(uuid)'::regprocedure
+        and acl.grantee = 0
+        and acl.privilege_type = 'EXECUTE'
+    )
+  ),
+  (
     'direct listing updates cannot bypass the soft-delete booking check',
     exists (
       select 1 from pg_policies
@@ -176,6 +197,23 @@ insert into _contract (check_name, passed) values
     not has_function_privilege('anon', 'public.lock_listing_for_booking_insert()', 'EXECUTE')
       and not has_function_privilege('authenticated', 'public.lock_listing_for_booking_insert()', 'EXECUTE')
       and not has_function_privilege('service_role', 'public.lock_listing_for_booking_insert()', 'EXECUTE')
+  ),
+  (
+    'owner-only listing operations are callable by signed-in users only',
+    not has_function_privilege('anon', 'public.delete_listing_with_active_booking_check(uuid)', 'EXECUTE')
+      and not has_function_privilege('anon', 'public.reorder_listing_images(uuid, uuid[])', 'EXECUTE')
+      and not has_function_privilege(
+        'anon',
+        'public.update_listing_with_images(uuid, text, text, text, integer, public.pet_species[], text, public.listing_status, timestamptz, uuid[], jsonb, uuid[])',
+        'EXECUTE'
+      )
+      and has_function_privilege('authenticated', 'public.delete_listing_with_active_booking_check(uuid)', 'EXECUTE')
+      and has_function_privilege('authenticated', 'public.reorder_listing_images(uuid, uuid[])', 'EXECUTE')
+      and has_function_privilege(
+        'authenticated',
+        'public.update_listing_with_images(uuid, text, text, text, integer, public.pet_species[], text, public.listing_status, timestamptz, uuid[], jsonb, uuid[])',
+        'EXECUTE'
+      )
   ),
   (
     'the listing-photos storage bucket exists and is private',

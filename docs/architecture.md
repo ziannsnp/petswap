@@ -70,8 +70,8 @@ Storage and Postgres still cannot share one transaction. An edit adapter must va
 
 ## Listing detail and action contracts
 
-The listing detail adapter exposes a minimal public `ListingHost` projection: `id`, `display_name`, `photo_url`, and `location`. The projection is nullable while the authorized host retrieval is unavailable; `host: null` is not itself a listing-load failure, so host-only UI must be omitted or presented with neutral copy. Private profile fields must not be added to this contract.
+The listing detail adapter exposes a minimal public `ListingHost` projection: `id`, `display_name`, `photo_url`, and `location`. The `get_listing_host` RPC retrieves that projection without broadening profile-table RLS; it returns data only for published listings or the current user's own listings. The projection is nullable while host retrieval is unavailable; `host: null` is not itself a listing-load failure, so host-only UI must be omitted or presented with neutral copy. Private profile fields must not be added to this contract.
 
-Photo signing is best-effort per image. A missing or failed signed URL is represented by `signed_url: null` and must not prevent the listing's text and metadata from rendering; `cover_photo_url` may also be `null`.
+Photo signing uses the private `listing-photos` bucket and is best-effort per image. A missing or failed signed URL is represented by `signed_url: null` and must not prevent the listing's text and metadata from rendering; `cover_photo_url` may also be `null`.
 
 Listing adapters expose stable `ListingErrorCode` values — `unauthorized`, `forbidden`, `not_found`, `deleted`, `active_booking`, `network`, and `unknown`. UI maps these codes to safe user-facing messages and must not expose raw backend or database error details.

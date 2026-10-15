@@ -1,6 +1,7 @@
 import { getSupabaseClient } from '@/shared/lib/supabase';
 import type { PetSpecies } from '@/shared/lib/petSpecies';
 import type { Database } from '@/shared/types/database.types';
+import { PetHasBookingsError } from './petErrors';
 
 export type Pet = Database['public']['Tables']['pets']['Row'];
 
@@ -31,14 +32,23 @@ export interface CreatePetValues {
   photo?: File | null;
 }
 
-export type UpdatePetValues = Omit<CreatePetValues, 'photo'>;
+/**
+ * Leaving out both photo fields keeps the current photo. Removal needs its own flag so that a
+ * form sending `photo: null` for "nothing chosen" cannot delete the photo by accident.
+ */
+export interface UpdatePetValues extends Omit<CreatePetValues, 'photo'> {
+  /** A new photo that replaces the current one. */
+  photo?: File;
+  /** Removes the current photo. Ignored when a new photo is given. */
+  removePhoto?: boolean;
+}
 
 function blankToNull(value: string): string | null {
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
 }
 
-function toPetRowAttributes(values: UpdatePetValues) {
+function toPetRowAttributes(values: Omit<CreatePetValues, 'photo'>) {
   return {
     name: values.name.trim(),
     species: values.species,
@@ -107,21 +117,19 @@ export async function listMyPets(ownerId: string): Promise<Pet[]> {
   return data ?? [];
 }
 
-/** Updates an existing pet. Scoped to the authenticated owner; never updates or sends owner_id. */
-export async function updatePet(petId: string, values: UpdatePetValues): Promise<Pet> {
-  const supabase = getSupabaseClient();
-  const { data: userData, error: userError } = await supabase.auth.getUser();
+type SupabaseClient = ReturnType<typeof getSupabaseClient>;
+type PetUpdate = Database['public']['Tables']['pets']['Update'];
 
-  if (userError) throw userError;
-  if (!userData.user) {
-    throw new Error('You must be signed in to update a pet.');
-  }
+function petUpdateNotFoundMessage(petId: string): string {
+  return `Pet with id ${petId} not found or you do not have permission to update it.`;
+}
 
+async function savePetRow(supabase: SupabaseClient, petId: string, ownerId: string, row: PetUpdate): Promise<Pet> {
   const { data: updatedPet, error: updateError } = await supabase
     .from('pets')
-    .update(toPetRowAttributes(values))
+    .update(row)
     .eq('id', petId)
-    .eq('owner_id', userData.user.id)
+    .eq('owner_id', ownerId)
     .select('*')
     .maybeSingle();
 
@@ -130,7 +138,125 @@ export async function updatePet(petId: string, values: UpdatePetValues): Promise
   }
 
   if (!updatedPet) {
-    throw new Error(`Pet with id ${petId} not found or you do not have permission to update it.`);
+    throw new Error(petUpdateNotFoundMessage(petId));
+  }
+
+  return updatedPet;
+}
+
+/** Removes one photo file. Returns why it failed, or null on success, so callers decide whether a failure matters. */
+async function removePetPhotoFile(supabase: SupabaseClient, path: string): Promise<string | null> {
+  try {
+    const { data, error } = await supabase.storage.from(PET_PHOTO_BUCKET).remove([path]);
+    if (error) return error.message;
+    return isStoragePathRemoved(data, path) ? null : 'storage object not found or permission denied';
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error);
+  }
+}
+
+/** False only when the row is known not to point at the path; an unreadable row counts as true so the file is kept. */
+async function petMayPointAtPhoto(
+  supabase: SupabaseClient,
+  petId: string,
+  ownerId: string,
+  path: string,
+): Promise<boolean> {
+  try {
+    const { data, error } = await supabase
+      .from('pets')
+      .select('photo_url')
+      .eq('id', petId)
+      .eq('owner_id', ownerId)
+      .maybeSingle();
+
+    if (error) return true;
+    return data?.photo_url === path;
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * Updates an existing pet. Scoped to the authenticated owner; never updates or sends owner_id.
+ *
+ * A new photo is uploaded before the row points at it, and the old file is removed only after
+ * the row is saved, so a failed save never leaves the pet without a working photo.
+ */
+export async function updatePet(petId: string, values: UpdatePetValues): Promise<Pet> {
+  if (values.photo) {
+    const photoError = validatePetPhoto(values.photo);
+    if (photoError) {
+      throw new Error(photoError);
+    }
+  }
+
+  const supabase = getSupabaseClient();
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+
+  if (userError) throw userError;
+  if (!userData.user) {
+    throw new Error('You must be signed in to update a pet.');
+  }
+
+  const ownerId = userData.user.id;
+
+  if (!values.photo && !values.removePhoto) {
+    return savePetRow(supabase, petId, ownerId, toPetRowAttributes(values));
+  }
+
+  const { data: currentPet, error: fetchError } = await supabase
+    .from('pets')
+    .select('photo_url')
+    .eq('id', petId)
+    .eq('owner_id', ownerId)
+    .maybeSingle();
+
+  if (fetchError) throw fetchError;
+  if (!currentPet) {
+    throw new Error(petUpdateNotFoundMessage(petId));
+  }
+
+  let newPhotoPath: string | null = null;
+
+  if (values.photo) {
+    newPhotoPath = petPhotoStoragePath(petId, values.photo);
+    const { error: uploadError } = await supabase.storage
+      .from(PET_PHOTO_BUCKET)
+      .upload(newPhotoPath, values.photo, {
+        contentType: values.photo.type || undefined,
+        upsert: false,
+      });
+
+    if (uploadError) throw uploadError;
+  }
+
+  let updatedPet: Pet;
+
+  try {
+    updatedPet = await savePetRow(supabase, petId, ownerId, {
+      ...toPetRowAttributes(values),
+      photo_url: newPhotoPath,
+    });
+  } catch (error) {
+    // A save can commit even though its response is lost, so only remove the new upload
+    // once the row is known not to point at it.
+    const cleanupError = newPhotoPath && !(await petMayPointAtPhoto(supabase, petId, ownerId, newPhotoPath))
+      ? await removePetPhotoFile(supabase, newPhotoPath)
+      : null;
+
+    if (cleanupError) {
+      const originalMessage = error instanceof Error ? error.message : String(error);
+      throw new Error(`${originalMessage} (rollback incomplete: photo cleanup failed: ${cleanupError})`, { cause: error });
+    }
+
+    throw error;
+  }
+
+  // The pet is already saved, so failing to remove the old file only leaves an unused file
+  // in the private bucket; it must not turn a successful save into an error.
+  if (currentPet.photo_url && currentPet.photo_url !== newPhotoPath) {
+    await removePetPhotoFile(supabase, currentPet.photo_url);
   }
 
   return updatedPet;
@@ -186,7 +312,7 @@ export async function deletePet(petId: string): Promise<void> {
   }
 
   if (bookings && bookings.length > 0) {
-    throw new Error('Cannot delete a pet that has existing bookings.');
+    throw new PetHasBookingsError();
   }
 
   // 3. If photo exists, remove it from storage while the pet record still exists
@@ -213,6 +339,10 @@ export async function deletePet(petId: string): Promise<void> {
     .select('id');
 
   if (deleteError) {
+    // 23503 (foreign key violation): a booking was created after the check in step 2.
+    if (deleteError.code === '23503') {
+      throw new PetHasBookingsError();
+    }
     throw deleteError;
   }
 

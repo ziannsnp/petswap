@@ -37,6 +37,27 @@ afterEach(() => {
   jest.clearAllMocks();
 });
 
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => { resolve = done; });
+  return { promise, resolve };
+}
+
+/** Asserts that `settled` stays pending until every one of `refetches` has resolved. */
+async function expectToWaitFor(settled: Promise<unknown>, refetches: Array<ReturnType<typeof deferred>>) {
+  let isSettled = false;
+  void settled.then(() => { isSettled = true; });
+
+  for (const refetch of refetches) {
+    await Promise.resolve();
+    expect(isSettled).toBe(false);
+    refetch.resolve();
+  }
+
+  await settled;
+  expect(isSettled).toBe(true);
+}
+
 describe('useMyPets', () => {
   it('fetches the pets of the same owner the cache key is scoped to', async () => {
     authState('owner-123', false);
@@ -65,24 +86,25 @@ describe('useMyPets', () => {
 
 describe('usePet', () => {
   type PetQueryOptions = { queryKey: unknown; enabled: boolean; queryFn: () => Promise<unknown> };
+  const petId = '20000000-0000-4000-8000-000000000001';
 
   it('loads the pet under a cache key scoped to the pet and the owner', async () => {
     authState('owner-123', false);
-    mockedGetPet.mockResolvedValue({ id: 'pet-1', owner_id: 'owner-123' } as never);
+    mockedGetPet.mockResolvedValue({ id: petId, owner_id: 'owner-123' } as never);
 
-    const options = usePet('pet-1') as unknown as PetQueryOptions;
+    const options = usePet(petId) as unknown as PetQueryOptions;
 
-    expect(options.queryKey).toEqual(['pets', 'detail', 'pet-1', 'owner-123']);
+    expect(options.queryKey).toEqual(['pets', 'detail', petId, 'owner-123']);
     expect(options.enabled).toBe(true);
-    await expect(options.queryFn()).resolves.toEqual({ id: 'pet-1', owner_id: 'owner-123' });
-    expect(mockedGetPet).toHaveBeenCalledWith('pet-1');
+    await expect(options.queryFn()).resolves.toEqual({ id: petId, owner_id: 'owner-123' });
+    expect(mockedGetPet).toHaveBeenCalledWith(petId);
   });
 
   it('treats a pet owned by someone else as not found', async () => {
     authState('listing-owner', false);
-    mockedGetPet.mockResolvedValue({ id: 'pet-1', owner_id: 'owner-123' } as never);
+    mockedGetPet.mockResolvedValue({ id: petId, owner_id: 'owner-123' } as never);
 
-    const options = usePet('pet-1') as unknown as PetQueryOptions;
+    const options = usePet(petId) as unknown as PetQueryOptions;
 
     await expect(options.queryFn()).resolves.toBeNull();
   });
@@ -91,21 +113,41 @@ describe('usePet', () => {
     authState('owner-123', false);
     mockedGetPet.mockResolvedValue(null);
 
-    const options = usePet('missing') as unknown as PetQueryOptions;
+    const options = usePet(petId) as unknown as PetQueryOptions;
 
     await expect(options.queryFn()).resolves.toBeNull();
+    expect(mockedGetPet).toHaveBeenCalledWith(petId);
+  });
+
+  it('accepts an id written in uppercase', async () => {
+    authState('owner-123', false);
+    mockedGetPet.mockResolvedValue({ id: petId, owner_id: 'owner-123' } as never);
+
+    const options = usePet(petId.toUpperCase()) as unknown as PetQueryOptions;
+
+    await expect(options.queryFn()).resolves.toEqual({ id: petId, owner_id: 'owner-123' });
+    expect(mockedGetPet).toHaveBeenCalledWith(petId.toUpperCase());
+  });
+
+  it.each(['abc', 'pet-1', `${petId}x`, ' '])('treats the malformed id %p as not found without a request', async (badId) => {
+    authState('owner-123', false);
+
+    const options = usePet(badId) as unknown as PetQueryOptions;
+
+    await expect(options.queryFn()).resolves.toBeNull();
+    expect(mockedGetPet).not.toHaveBeenCalled();
   });
 
   it('does not query before authentication resolves', () => {
     authState(null, true);
 
-    expect(usePet('pet-1')).toMatchObject({ enabled: false });
+    expect(usePet(petId)).toMatchObject({ enabled: false });
   });
 
   it('does not query for a signed-out visitor', () => {
     authState(null, false);
 
-    expect(usePet('pet-1')).toMatchObject({ queryKey: ['pets', 'detail', 'pet-1', 'anonymous'], enabled: false });
+    expect(usePet(petId)).toMatchObject({ queryKey: ['pets', 'detail', petId, 'anonymous'], enabled: false });
   });
 
   it('does not query without a pet id', () => {
@@ -129,7 +171,7 @@ describe('useCreatePet', () => {
     expect(mockedCreatePet).toHaveBeenCalledWith(values);
   });
 
-  it('refreshes every pet query when create settles', () => {
+  it('refetches every pet query, including the unmounted list, when create settles', () => {
     const invalidateQueries = jest.fn();
     mockedUseQueryClient.mockReturnValue({ invalidateQueries } as never);
 
@@ -137,7 +179,17 @@ describe('useCreatePet', () => {
     const options = mockedUseMutation.mock.lastCall?.[0];
     options?.onSettled?.({} as never, null, values, undefined, undefined as never);
 
-    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['pets'] });
+    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['pets'], refetchType: 'all' });
+  });
+
+  it('makes the mutation wait until the refetch finishes', async () => {
+    const refetch = deferred();
+    mockedUseQueryClient.mockReturnValue({ invalidateQueries: jest.fn(() => refetch.promise) } as never);
+
+    useCreatePet();
+    const options = mockedUseMutation.mock.lastCall?.[0];
+
+    await expectToWaitFor(Promise.resolve(options?.onSettled?.({} as never, null, values, undefined, undefined as never)), [refetch]);
   });
 });
 
@@ -163,8 +215,25 @@ describe('useUpdatePet', () => {
     const options = mockedUseMutation.mock.lastCall?.[0];
     options?.onSettled?.(undefined, new Error('response lost'), { petId: 'pet-1', values }, undefined, undefined as never);
 
-    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['pets'] });
+    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['pets'], refetchType: 'all' });
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['bookings'] });
+  });
+
+  it('makes the mutation wait until both refetches finish', async () => {
+    const petsRefetch = deferred();
+    const bookingsRefetch = deferred();
+    const invalidateQueries = jest.fn()
+      .mockReturnValueOnce(petsRefetch.promise)
+      .mockReturnValueOnce(bookingsRefetch.promise);
+    mockedUseQueryClient.mockReturnValue({ invalidateQueries } as never);
+
+    useUpdatePet();
+    const options = mockedUseMutation.mock.lastCall?.[0];
+    const settled = Promise.resolve(
+      options?.onSettled?.({} as never, null, { petId: 'pet-1', values }, undefined, undefined as never),
+    );
+
+    await expectToWaitFor(settled, [petsRefetch, bookingsRefetch]);
   });
 });
 

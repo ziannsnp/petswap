@@ -1,5 +1,5 @@
 import { isPetSpecies, type PetSpecies } from '@/shared/lib/petSpecies';
-import type { CreatePetValues } from './petApi';
+import type { CreatePetValues, Pet } from './petApi';
 
 /** Raw form input. Age stays a string so "1.5" or "abc" can be reported rather than
  * silently coerced, and species starts empty so the owner must choose one. */
@@ -24,6 +24,19 @@ export const EMPTY_PET_FORM_VALUES: PetFormValues = {
   age: '',
   description: '',
 };
+
+/** Turns a saved pet into form input, so the edit form starts from what is stored. */
+export function petToFormValues(
+  pet: Pick<Pet, 'name' | 'species' | 'breed' | 'age_year' | 'description'>,
+): PetFormValues {
+  return {
+    name: pet.name,
+    species: pet.species,
+    breed: pet.breed ?? '',
+    age: pet.age_year === null ? '' : String(pet.age_year),
+    description: pet.description ?? '',
+  };
+}
 
 const WHOLE_NUMBER = /^\d+$/;
 

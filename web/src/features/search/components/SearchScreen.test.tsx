@@ -3,7 +3,7 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, useLocation, useNavigate, useNavigationType } from 'react-router-dom';
 import { usePublishedListings } from '@/features/listings';
-import { makeSearchResult } from '../testing/searchFixtures';
+import { hiddenSearchListings, makeSearchResult, searchMatchListings } from '../testing/searchFixtures';
 import { SearchScreen } from './SearchScreen';
 
 // Only the data hook is replaced. Pet-type labels come from @/shared/lib/petSpecies, which
@@ -201,6 +201,34 @@ describe('SearchScreen', () => {
     expect(within(results).getAllByRole('article')).toHaveLength(1);
     expect(within(results).queryByText('Private draft')).not.toBeInTheDocument();
     expect(within(results).queryByText('Deleted place')).not.toBeInTheDocument();
+  });
+
+  it('shows only the published matches when hidden listings match the search too', () => {
+    mockedUsePublishedListings.mockReturnValue({
+      data: [...searchMatchListings, ...hiddenSearchListings],
+      isPending: false,
+      isError: false,
+    } as unknown as ReturnType<typeof usePublishedListings>);
+
+    renderSearchAt('/?keyword=garden');
+
+    const links = within(screen.getByRole('region', { name: 'Listings' })).getAllByRole('link');
+    expect(links).toHaveLength(2);
+    expect(links[0]).toHaveAccessibleName('Sunny Garden Room');
+    expect(links[1]).toHaveAccessibleName('Countryside cottage');
+  });
+
+  it('shows the no-results state when only a hidden listing matches', () => {
+    mockedUsePublishedListings.mockReturnValue({
+      data: [...searchMatchListings, ...hiddenSearchListings],
+      isPending: false,
+      isError: false,
+    } as unknown as ReturnType<typeof usePublishedListings>);
+
+    renderSearchAt('/?keyword=suite');
+
+    expect(screen.getByRole('status', { name: 'No search results' })).toBeInTheDocument();
+    expect(screen.queryByText('Garden suite (draft)')).not.toBeInTheDocument();
   });
 
   it('fills the fields from the search in the URL', () => {

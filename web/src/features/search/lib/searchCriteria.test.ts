@@ -1,5 +1,11 @@
-import { filterPublishedListings, isSameSearch, readSearchCriteria, toSearchParams } from './searchCriteria';
-import { makeSearchResult } from '../testing/searchFixtures';
+import { EMPTY_SEARCH_CRITERIA, filterPublishedListings, isSameSearch, readSearchCriteria, toSearchParams } from './searchCriteria';
+import {
+  hiddenSearchListings,
+  makeSearchResult,
+  noResultSearches,
+  searchMatchCases,
+  searchMatchListings,
+} from '../testing/searchFixtures';
 
 describe('search criteria in the URL', () => {
   it('reads a trimmed location and keyword, treating a missing one as empty', () => {
@@ -60,5 +66,22 @@ describe('search criteria in the URL', () => {
 
     expect(filterPublishedListings(listings, { location: '', keyword: '' }).map(({ id }) => id))
       .toEqual(['published']);
+  });
+});
+
+describe('search fixtures', () => {
+  const listings = [...searchMatchListings, ...hiddenSearchListings];
+  const ids = (results: readonly { id: string }[]) => results.map(({ id }) => id);
+
+  it.each(searchMatchCases)('finds $name', ({ criteria, expectedIds }) => {
+    expect(ids(filterPublishedListings(listings, criteria))).toEqual(expectedIds);
+  });
+
+  it.each(noResultSearches)('returns nothing for $name', ({ criteria }) => {
+    expect(filterPublishedListings(listings, criteria)).toEqual([]);
+  });
+
+  it('browses every published listing and none of the hidden ones', () => {
+    expect(ids(filterPublishedListings(listings, EMPTY_SEARCH_CRITERIA))).toEqual(ids(searchMatchListings));
   });
 });

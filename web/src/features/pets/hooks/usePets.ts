@@ -87,8 +87,7 @@ export function useDeletePet() {
     mutationFn: (petId: string) => deletePet(petId),
     // deletePet removes the photo before the row, so a failed delete can still change the pet.
     // Bookings are not refreshed: deletePet refuses to delete a pet that has bookings.
-    onSettled: () => {
-      void queryClient.invalidateQueries({ queryKey: petKeys.all });
-    },
+    // Returning the promise keeps the dialog open until My Pets has dropped the card.
+    onSettled: () => queryClient.invalidateQueries({ queryKey: petKeys.all }),
   });
 }

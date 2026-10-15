@@ -261,6 +261,16 @@ describe('useDeletePet', () => {
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['pets'] });
   });
 
+  it('makes the mutation wait until the refetch finishes', async () => {
+    const refetch = deferred();
+    mockedUseQueryClient.mockReturnValue({ invalidateQueries: jest.fn(() => refetch.promise) } as never);
+
+    useDeletePet();
+    const options = mockedUseMutation.mock.lastCall?.[0];
+
+    await expectToWaitFor(Promise.resolve(options?.onSettled?.(undefined, null, 'pet-1', undefined, undefined as never)), [refetch]);
+  });
+
   it('rejects with the API error', async () => {
     mockedUseQueryClient.mockReturnValue({ invalidateQueries: jest.fn() } as never);
     mockedDeletePet.mockRejectedValue(new Error('pet has bookings'));

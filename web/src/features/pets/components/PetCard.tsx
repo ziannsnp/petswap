@@ -59,7 +59,10 @@ export function PetCard({ pet }: PetCardProps) {
       {pet.description && (
         <p className="mt-4 line-clamp-3 text-sm text-gray-600 break-words">{pet.description}</p>
       )}
-      <DeletePetDialog pet={pet} isOpen={isDeleteDialogOpen} onClose={() => setIsDeleteDialogOpen(false)} />
+      {/* Mounted only while open, so each card does not hold an idle delete mutation. */}
+      {isDeleteDialogOpen && (
+        <DeletePetDialog pet={pet} isOpen onClose={() => setIsDeleteDialogOpen(false)} />
+      )}
     </article>
   );
 }

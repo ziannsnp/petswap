@@ -155,13 +155,13 @@ describe('useUpdatePet', () => {
     expect(mockedUpdatePet).toHaveBeenCalledWith('pet-1', values);
   });
 
-  it('refreshes pet and booking queries after a successful update', () => {
+  it('refreshes pet and booking queries when the update settles, including after a failure', () => {
     const invalidateQueries = jest.fn();
     mockedUseQueryClient.mockReturnValue({ invalidateQueries } as never);
 
     useUpdatePet();
     const options = mockedUseMutation.mock.lastCall?.[0];
-    options?.onSuccess?.({} as never, { petId: 'pet-1', values }, undefined, undefined as never);
+    options?.onSettled?.(undefined, new Error('response lost'), { petId: 'pet-1', values }, undefined, undefined as never);
 
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['pets'] });
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['bookings'] });

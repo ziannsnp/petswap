@@ -63,7 +63,8 @@ export function useUpdatePet() {
     mutationFn: ({ petId, values }: { petId: string; values: UpdatePetValues }) => (
       updatePet(petId, values)
     ),
-    onSuccess: () => {
+    // A save whose response is lost may still have committed, so refresh after failures too.
+    onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: petKeys.all });
       // Bookings show the pet's name, so they must not keep the old details.
       void queryClient.invalidateQueries({ queryKey: ['bookings'] });

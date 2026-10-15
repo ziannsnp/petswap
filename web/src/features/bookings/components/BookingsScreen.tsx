@@ -53,10 +53,7 @@ function BookingCard({
 }: BookingCardProps) {
   const canRespond = booking.status !== 'completed';
   const canConfirm = variant === 'incoming' && booking.status === 'pending';
-  const canCancel = variant === 'outgoing' && [
-    'pending',
-    'confirmed',
-  ].includes(booking.status);
+  const canCancel = booking.status === 'confirmed' || (variant === 'outgoing' && booking.status === 'pending');
 
   return (
     <li className="booking-card">
@@ -281,6 +278,7 @@ export function BookingsScreen() {
             onDecline={(bookingId) => void respond(bookingId, 'declined')}
             respondingId={respondingId}
             responseError={responseError}
+            setConfirmingBookingId={setConfirmingBookingId}
           />
         </>
       )}

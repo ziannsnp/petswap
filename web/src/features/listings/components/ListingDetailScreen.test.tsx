@@ -1,11 +1,19 @@
 /** @jest-environment jsdom */
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { useAuth } from '@/features/auth';
 import { useListing } from '../hooks/useListings';
 import { ListingError } from '../lib/listingErrors';
 import type { Listing } from '../lib/listingApi';
+import {
+  LISTING_OWNER_ID,
+  detailContentListings,
+  detailUnavailableErrors,
+  detailVisibilityListings,
+  listingFacilities,
+  listingHosts,
+} from '../testing/listingFixtures';
 import { ListingDetailScreen } from './ListingDetailScreen';
 
 jest.mock('@/features/auth', () => ({ useAuth: jest.fn() }));
@@ -151,5 +159,120 @@ describe('ListingDetailScreen', () => {
     await user.click(screen.getByRole('button', { name: 'Try again' }));
 
     expect(refetch).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('ListingDetailScreen visibility', () => {
+  it.each([
+    {
+      viewer: 'a visitor',
+      user: null,
+      listing: detailVisibilityListings.published,
+      badge: null,
+      preview: false,
+      backLink: 'Back to listings',
+    },
+    {
+      viewer: 'its owner',
+      user: { id: LISTING_OWNER_ID },
+      listing: detailVisibilityListings.published,
+      badge: 'Published',
+      preview: false,
+      backLink: 'Back to my listings',
+    },
+    {
+      viewer: 'its owner',
+      user: { id: LISTING_OWNER_ID },
+      listing: detailVisibilityListings.draft,
+      badge: 'Draft',
+      preview: true,
+      backLink: 'Back to my listings',
+    },
+  ])('shows a $listing.status listing to $viewer', ({ user, listing, badge, preview, backLink }) => {
+    mockedUseAuth.mockReturnValue({ user } as ReturnType<typeof useAuth>);
+    mockedUseListing.mockReturnValue(listingQuery({ data: listing }));
+
+    renderDetail();
+
+    expect(screen.getByRole('heading', { level: 1, name: listing.title })).toBeInTheDocument();
+    expect(screen.queryByText(/^(Published|Draft)$/)?.textContent ?? null).toBe(badge);
+    expect(Boolean(screen.queryByText(/^Owner preview/))).toBe(preview);
+    expect(screen.getByRole('link', { name: backLink })).toBeInTheDocument();
+  });
+
+  it.each([
+    ['a missing listing', detailUnavailableErrors.missing],
+    ["someone else's draft", detailUnavailableErrors.otherUsersDraft],
+    ['a deleted listing', detailUnavailableErrors.deleted],
+  ])('gives %s the same safe response', (_case, error) => {
+    mockedUseListing.mockReturnValue(listingQuery({ data: undefined, isError: true, error }));
+
+    renderDetail();
+
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent('Listing unavailable');
+    expect(alert).not.toHaveTextContent(error.message);
+    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument();
+  });
+});
+
+describe('ListingDetailScreen content', () => {
+  it('shows every facility, the host photo, and the whole gallery of a complete listing', () => {
+    const listing = detailContentListings.complete;
+    mockedUseListing.mockReturnValue(listingQuery({ data: listing }));
+
+    renderDetail();
+
+    const facilities = within(screen.getByRole('region', { name: 'Facilities' })).getAllByRole('listitem');
+    expect(facilities.map((item) => item.textContent)).toEqual(['Lawn', 'Enclosed fence', 'Daily photo updates']);
+    expect(screen.getByRole('img', { name: "Alex Rivera's profile" })).toHaveAttribute('src', listingHosts.withPhoto.photo_url);
+    expect(screen.getByRole('img', { name: 'Fenced garden' })).toHaveAttribute('src', listing.listing_images[0].signed_url);
+    expect(screen.getAllByRole('tab')).toHaveLength(3);
+  });
+
+  it('keeps a listing with no facilities, photos, or host readable', () => {
+    const listing = detailContentListings.bare;
+    mockedUseListing.mockReturnValue(listingQuery({ data: listing }));
+
+    renderDetail();
+
+    expect(screen.getByRole('heading', { level: 1, name: listing.title })).toBeInTheDocument();
+    expect(screen.getByText('No facilities have been added.')).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: `${listing.title} photo unavailable` })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Your host' })).not.toBeInTheDocument();
+  });
+
+  it('keeps the details and host when no photo could be signed', () => {
+    const listing = detailContentListings.photosUnavailable;
+    mockedUseListing.mockReturnValue(listingQuery({ data: listing }));
+
+    renderDetail();
+
+    expect(screen.getByRole('img', { name: `${listing.title} photo unavailable` })).toBeInTheDocument();
+    expect(screen.getByText(listing.description)).toBeInTheDocument();
+    expect(screen.getByText('AR')).toBeInTheDocument();
+    expect(screen.getByText('Based in Chiang Mai')).toBeInTheDocument();
+  });
+
+  it('leaves out the host location when the host has not set one', () => {
+    mockedUseListing.mockReturnValue(listingQuery({
+      data: { ...detailContentListings.bare, host: listingHosts.withoutLocation },
+    }));
+
+    renderDetail();
+
+    expect(screen.getByText('Alex Rivera')).toBeInTheDocument();
+    expect(screen.queryByText(/^Based in/)).not.toBeInTheDocument();
+  });
+
+  it('ignores padding and blank lines in stored facilities', () => {
+    mockedUseListing.mockReturnValue(listingQuery({
+      data: { ...detailVisibilityListings.published, facilities: listingFacilities.withBlankLines },
+    }));
+
+    renderDetail();
+
+    const facilities = within(screen.getByRole('region', { name: 'Facilities' })).getAllByRole('listitem');
+    expect(facilities.map((item) => item.textContent)).toEqual(['Lawn', 'Security cameras']);
   });
 });

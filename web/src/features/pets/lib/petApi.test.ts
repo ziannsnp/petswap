@@ -5,10 +5,13 @@ import {
   PET_PHOTO_SIGNED_URL_TTL_SECONDS,
   createPet,
   deletePet,
+  getPet,
   getPetPhotoSignedUrl,
   listMyPets,
   petPhotoStoragePath,
+  updatePet,
   validatePetPhoto,
+  type UpdatePetValues,
 } from './petApi';
 
 jest.mock('@/shared/lib/supabase', () => ({
@@ -796,5 +799,205 @@ describe('createPet', () => {
     );
     expect((caughtError as Error).cause).toBe(updateError);
     expect(deleteMethod).toHaveBeenCalled();
+  });
+});
+
+describe('getPet', () => {
+  it('fetches a single pet by id and returns the row', async () => {
+    const mockPet = {
+      id: 'pet-123',
+      owner_id: 'owner-1',
+      name: 'Rocket',
+      species: 'dog',
+      breed: 'Beagle',
+      age_year: 3,
+      description: 'Friendly dog',
+      photo_url: null,
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+    };
+
+    const maybeSingle = jest.fn().mockResolvedValue({ data: mockPet, error: null });
+    const eq = jest.fn().mockReturnValue({ maybeSingle });
+    const select = jest.fn().mockReturnValue({ eq });
+    const from = jest.fn((table: string) => {
+      if (table === 'pets') return { select };
+      throw new Error(`Unexpected table: ${table}`);
+    });
+
+    mockedGetSupabaseClient.mockReturnValue({ from } as never);
+
+    await expect(getPet('pet-123')).resolves.toEqual(mockPet);
+    expect(from).toHaveBeenCalledWith('pets');
+    expect(select).toHaveBeenCalledWith('*');
+    expect(eq).toHaveBeenCalledWith('id', 'pet-123');
+  });
+
+  it('returns null when the pet does not exist or is not accessible', async () => {
+    const maybeSingle = jest.fn().mockResolvedValue({ data: null, error: null });
+    const eq = jest.fn().mockReturnValue({ maybeSingle });
+    const select = jest.fn().mockReturnValue({ eq });
+    const from = jest.fn().mockReturnValue({ select });
+
+    mockedGetSupabaseClient.mockReturnValue({ from } as never);
+
+    await expect(getPet('nonexistent-pet')).resolves.toBeNull();
+  });
+
+  it('surfaces database error when fetching pet fails', async () => {
+    const dbError = new Error('Database connection failed');
+    const maybeSingle = jest.fn().mockResolvedValue({ data: null, error: dbError });
+    const eq = jest.fn().mockReturnValue({ maybeSingle });
+    const select = jest.fn().mockReturnValue({ eq });
+    const from = jest.fn().mockReturnValue({ select });
+
+    mockedGetSupabaseClient.mockReturnValue({ from } as never);
+
+    await expect(getPet('pet-123')).rejects.toBe(dbError);
+  });
+});
+
+describe('updatePet', () => {
+  const validValues: UpdatePetValues = {
+    name: '  Rocket Updated  ',
+    species: 'dog',
+    breed: '  Beagle Mix  ',
+    ageYear: 4,
+    description: '  Very active and friendly dog  ',
+  };
+
+  it('throws an error when user is not signed in', async () => {
+    mockedGetSupabaseClient.mockReturnValue({
+      auth: { getUser: signedIn(null) },
+    } as never);
+
+    await expect(updatePet('pet-123', validValues)).rejects.toThrow('You must be signed in to update a pet.');
+  });
+
+  it('surfaces auth error when getUser fails', async () => {
+    const authError = new Error('Session expired');
+    const getUser = jest.fn().mockResolvedValue({ data: { user: null }, error: authError });
+    mockedGetSupabaseClient.mockReturnValue({
+      auth: { getUser },
+    } as never);
+
+    await expect(updatePet('pet-123', validValues)).rejects.toBe(authError);
+  });
+
+  it('updates pet attributes, trims text, never sends owner_id, and returns updated pet row', async () => {
+    const updatedRecord = {
+      id: 'pet-123',
+      owner_id: 'owner-456',
+      name: 'Rocket Updated',
+      species: 'dog',
+      breed: 'Beagle Mix',
+      age_year: 4,
+      description: 'Very active and friendly dog',
+      photo_url: 'pet-123/photo.jpg',
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-02T00:00:00Z',
+    };
+
+    const maybeSingle = jest.fn().mockResolvedValue({ data: updatedRecord, error: null });
+    const select = jest.fn().mockReturnValue({ maybeSingle });
+    const eqOwner = jest.fn().mockReturnValue({ select });
+    const eqId = jest.fn().mockReturnValue({ eq: eqOwner });
+    const update = jest.fn().mockReturnValue({ eq: eqId });
+
+    const from = jest.fn((table: string) => {
+      if (table === 'pets') return { update };
+      throw new Error(`Unexpected table: ${table}`);
+    });
+
+    mockedGetSupabaseClient.mockReturnValue({
+      auth: { getUser: signedIn('owner-456') },
+      from,
+    } as never);
+
+    const result = await updatePet('pet-123', validValues);
+
+    expect(result).toEqual(updatedRecord);
+    expect(from).toHaveBeenCalledWith('pets');
+    expect(update).toHaveBeenCalledWith({
+      name: 'Rocket Updated',
+      species: 'dog',
+      breed: 'Beagle Mix',
+      age_year: 4,
+      description: 'Very active and friendly dog',
+    });
+    // Explicitly verify owner_id is NEVER sent in the update payload
+    expect(update.mock.calls[0][0]).not.toHaveProperty('owner_id');
+    expect(eqId).toHaveBeenCalledWith('id', 'pet-123');
+    expect(eqOwner).toHaveBeenCalledWith('owner_id', 'owner-456');
+    expect(select).toHaveBeenCalledWith('*');
+    expect(maybeSingle).toHaveBeenCalled();
+  });
+
+  it('converts blank breed and description strings to null', async () => {
+    const maybeSingle = jest.fn().mockResolvedValue({ data: { id: 'pet-123' }, error: null });
+    const select = jest.fn().mockReturnValue({ maybeSingle });
+    const eqOwner = jest.fn().mockReturnValue({ select });
+    const eqId = jest.fn().mockReturnValue({ eq: eqOwner });
+    const update = jest.fn().mockReturnValue({ eq: eqId });
+
+    const from = jest.fn().mockReturnValue({ update });
+
+    mockedGetSupabaseClient.mockReturnValue({
+      auth: { getUser: signedIn('owner-456') },
+      from,
+    } as never);
+
+    await updatePet('pet-123', {
+      name: 'Milo',
+      species: 'cat',
+      breed: '   ',
+      ageYear: null,
+      description: '',
+    });
+
+    expect(update).toHaveBeenCalledWith({
+      name: 'Milo',
+      species: 'cat',
+      breed: null,
+      age_year: null,
+      description: null,
+    });
+  });
+
+  it('throws an error when no row matches during update (not found or not owned by user)', async () => {
+    const maybeSingle = jest.fn().mockResolvedValue({ data: null, error: null });
+    const select = jest.fn().mockReturnValue({ maybeSingle });
+    const eqOwner = jest.fn().mockReturnValue({ select });
+    const eqId = jest.fn().mockReturnValue({ eq: eqOwner });
+    const update = jest.fn().mockReturnValue({ eq: eqId });
+
+    const from = jest.fn().mockReturnValue({ update });
+
+    mockedGetSupabaseClient.mockReturnValue({
+      auth: { getUser: signedIn('owner-456') },
+      from,
+    } as never);
+
+    await expect(updatePet('pet-123', validValues)).rejects.toThrow(
+      'Pet with id pet-123 not found or you do not have permission to update it.',
+    );
+  });
+
+  it('surfaces update error when database update fails', async () => {
+    const updateError = new Error('Permission denied or row locked');
+    const maybeSingle = jest.fn().mockResolvedValue({ data: null, error: updateError });
+    const select = jest.fn().mockReturnValue({ maybeSingle });
+    const eqOwner = jest.fn().mockReturnValue({ select });
+    const eqId = jest.fn().mockReturnValue({ eq: eqOwner });
+    const update = jest.fn().mockReturnValue({ eq: eqId });
+
+    const from = jest.fn().mockReturnValue({ update });
+
+    mockedGetSupabaseClient.mockReturnValue({
+      auth: { getUser: signedIn('owner-456') },
+      from,
+    } as never);
+
+    await expect(updatePet('pet-123', validValues)).rejects.toBe(updateError);
   });
 });

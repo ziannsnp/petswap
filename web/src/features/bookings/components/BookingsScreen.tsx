@@ -4,6 +4,7 @@ import { useIncomingBookings, useOutgoingBookings, useUpdateBookingStatus } from
 import { BookingConflictError } from '../lib/bookingErrors';
 import type { BookingWithDetails } from '../lib/bookingApi';
 import type { Database } from '@/shared/types/database.types';
+import { ConfirmDialog } from '@/shared/components/ConfirmDialog';
 
 type BookingStatus = Database['public']['Enums']['booking_status'];
 
@@ -38,10 +39,24 @@ interface BookingCardProps {
   readonly onDecline?: (bookingId: string) => void;
   readonly isResponding?: boolean;
   readonly responseError?: string | null;
+  readonly setConfirmingBookingId?: (bookingId: string | null) => void;
 }
 
-function BookingCard({ booking, variant, onConfirm, onDecline, isResponding, responseError }: BookingCardProps) {
-  const canRespond = variant === 'incoming' && booking.status === 'pending';
+function BookingCard({
+  booking,
+  variant,
+  onConfirm,
+  onDecline,
+  isResponding,
+  responseError,
+  setConfirmingBookingId,
+}: BookingCardProps) {
+  const canRespond = booking.status !== 'completed';
+  const canConfirm = variant === 'incoming' && booking.status === 'pending';
+  const canCancel = variant === 'outgoing' && [
+    'pending',
+    'confirmed',
+  ].includes(booking.status);
 
   return (
     <li className="booking-card">
@@ -59,22 +74,40 @@ function BookingCard({ booking, variant, onConfirm, onDecline, isResponding, res
       </p>
       {canRespond && (
         <div className="booking-card__actions">
-          <button
-            type="button"
-            className="btn-primary"
-            onClick={() => onConfirm?.(booking.id)}
-            disabled={isResponding}
-          >
-            {isResponding ? 'Saving...' : 'Confirm'}
-          </button>
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={() => onDecline?.(booking.id)}
-            disabled={isResponding}
-          >
-            Decline
-          </button>
+          {canConfirm && (
+            <>
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={() => onConfirm?.(booking.id)}
+                disabled={isResponding}
+              >
+                {isResponding ? 'Saving...' : 'Confirm'}
+              </button>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => onDecline?.(booking.id)}
+                disabled={isResponding}
+              >
+                Decline
+              </button>
+            </>
+          )}
+          {canCancel && (
+            <button
+              type="button"
+              className="btn-cancel"
+              onClick={() => {
+                if (setConfirmingBookingId) {
+                  setConfirmingBookingId(booking.id);
+                }
+              }}
+              disabled={isResponding}
+            >
+              Cancel
+            </button>
+          )}
           {responseError && (
             <p className="booking-card__error" role="alert">
               {responseError}
@@ -126,6 +159,7 @@ interface BookingSectionProps {
   readonly onDecline?: (bookingId: string) => void;
   readonly respondingId?: string | null;
   readonly responseError?: { bookingId: string; message: string } | null;
+  readonly setConfirmingBookingId?: (bookingId: string | null) => void;
 }
 
 function BookingSection({
@@ -137,6 +171,7 @@ function BookingSection({
   onDecline,
   respondingId,
   responseError,
+  setConfirmingBookingId,
 }: BookingSectionProps) {
   return (
     <section className="booking-section" aria-busy={query.isLoading}>
@@ -168,6 +203,7 @@ function BookingSection({
               onDecline={onDecline}
               isResponding={respondingId === booking.id}
               responseError={responseError?.bookingId === booking.id ? responseError.message : null}
+              setConfirmingBookingId={setConfirmingBookingId}
             />
           ))}
         </ul>
@@ -186,6 +222,9 @@ export function BookingsScreen() {
   const noRelatedBookings =
     outgoing.isSuccess && incoming.isSuccess && outgoing.data.length === 0 && incoming.data.length === 0;
 
+  // Track which booking is being confirmed for cancellation
+  const [confirmingBookingId, setConfirmingBookingId] = useState<string | null>(null);
+
   async function respond(bookingId: string, status: 'confirmed' | 'declined') {
     setRespondingId(bookingId);
     setResponseError(null);
@@ -196,6 +235,21 @@ export function BookingsScreen() {
         ? error.message
         : 'Could not update this booking. Please try again.';
       setResponseError({ bookingId, message });
+    } finally {
+      setRespondingId(null);
+    }
+  }
+
+  async function cancel(bookingId: string) {
+    setRespondingId(bookingId);
+    setResponseError(null);
+    try {
+      await updateStatus.mutateAsync({ bookingId, status: 'cancelled' });
+    } catch {
+      setResponseError({
+        bookingId,
+        message: 'Could not cancel this booking. Please try again.',
+      });
     } finally {
       setRespondingId(null);
     }
@@ -216,6 +270,7 @@ export function BookingsScreen() {
             emptyMessage="You haven't sent any requests yet"
             query={outgoing}
             variant="outgoing"
+            setConfirmingBookingId={setConfirmingBookingId}
           />
           <BookingSection
             title="Incoming requests"
@@ -229,6 +284,19 @@ export function BookingsScreen() {
           />
         </>
       )}
+      <ConfirmDialog
+        isOpen={confirmingBookingId !== null}
+        onClose={() => setConfirmingBookingId(null)}
+        title="Cancel booking?"
+        description="Are you sure you want to cancel this booking? This action cannot be undone."
+        confirmLabel="Cancel booking"
+        cancelLabel="Keep booking"
+        onConfirm={async () => {
+          if (confirmingBookingId) {
+            await cancel(confirmingBookingId);
+          }
+        }}
+      />
     </main>
   );
 }

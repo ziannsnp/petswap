@@ -1,4 +1,4 @@
-import { isPetSpecies, type PetSpecies } from './listingOptions';
+import { isPetSpecies, type PetSpecies } from '@/shared/lib/petSpecies';
 
 export interface ListingFormValues {
   title: string;

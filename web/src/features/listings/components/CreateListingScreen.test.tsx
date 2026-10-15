@@ -3,7 +3,8 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { LISTING_PHOTO_MAX_BYTES, LISTING_PHOTO_MAX_COUNT } from '../lib/listingPhotos';
-import { FACILITY_OPTIONS, PET_TYPE_OPTIONS } from '../lib/listingOptions';
+import { FACILITY_OPTIONS } from '../lib/listingOptions';
+import { PET_SPECIES_OPTIONS } from '@/shared/lib/petSpecies';
 import { validListingFormValues } from '../testing/listingFixtures';
 import { CreateListingScreen } from './CreateListingScreen';
 
@@ -255,7 +256,7 @@ describe('CreateListingScreen', () => {
     const petTypeSelect = screen.getByRole('combobox', { name: 'Accepted pet type' });
     expect(petTypeSelect).toHaveDisplayValue('Cat');
 
-    for (const { label } of PET_TYPE_OPTIONS) {
+    for (const { label } of PET_SPECIES_OPTIONS) {
       expect(screen.getByRole('option', { name: label })).toBeInTheDocument();
     }
     expect(screen.getByRole('button', { name: 'Remove Dog' })).toBeInTheDocument();

@@ -1,9 +1,93 @@
-import { useQuery } from '@tanstack/react-query';
-import { listMyPets } from '../lib/petApi';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '@/features/auth';
+import {
+  createPet,
+  deletePet,
+  getPet,
+  listMyPets,
+  updatePet,
+  type CreatePetValues,
+  type UpdatePetValues,
+} from '../lib/petApi';
+
+export const petKeys = {
+  all: ['pets'] as const,
+  mine: (ownerId: string) => [...petKeys.all, 'mine', ownerId] as const,
+  detail: (petId: string, ownerId: string) => [...petKeys.all, 'detail', petId, ownerId] as const,
+};
 
 export function useMyPets() {
+  const { user, isLoading } = useAuth();
+  const ownerId = user?.id;
+
   return useQuery({
-    queryKey: ['pets', 'mine'],
-    queryFn: listMyPets,
+    queryKey: petKeys.mine(ownerId ?? 'anonymous'),
+    // enabled guarantees ownerId is set whenever the query runs.
+    queryFn: () => listMyPets(ownerId as string),
+    enabled: !isLoading && Boolean(ownerId),
+  });
+}
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Loads one of the signed-in user's pets, or null when it does not exist or is not theirs. */
+export function usePet(petId: string) {
+  const { user, isLoading } = useAuth();
+  const ownerId = user?.id;
+
+  return useQuery({
+    queryKey: petKeys.detail(petId, ownerId ?? 'anonymous'),
+    queryFn: async () => {
+      // pets.id is a uuid, so a malformed URL id cannot be a pet; Postgres would reject it
+      // with an error instead of returning no row.
+      if (!UUID_PATTERN.test(petId)) return null;
+
+      const pet = await getPet(petId);
+      // RLS also lets listing owners read pets booked at their listings, so a pet
+      // the user can see is not necessarily one they may edit.
+      return pet && pet.owner_id === ownerId ? pet : null;
+    },
+    enabled: !isLoading && Boolean(ownerId) && Boolean(petId),
+  });
+}
+
+export function useCreatePet() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (values: CreatePetValues) => createPet(values),
+    // Returning the promise makes mutateAsync wait for the refetch, and 'all' includes the
+    // My Pets list, which is not mounted on this screen, so it shows the new pet on arrival.
+    onSettled: () => queryClient.invalidateQueries({ queryKey: petKeys.all, refetchType: 'all' }),
+  });
+}
+
+export function useUpdatePet() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ petId, values }: { petId: string; values: UpdatePetValues }) => (
+      updatePet(petId, values)
+    ),
+    // A save whose response is lost may still have committed, so refresh after failures too.
+    // Waiting for the refetch (including the unmounted My Pets list) means the screen
+    // navigated to next already shows the saved values.
+    onSettled: () => Promise.all([
+      queryClient.invalidateQueries({ queryKey: petKeys.all, refetchType: 'all' }),
+      // Bookings show the pet's name, so they must not keep the old details.
+      queryClient.invalidateQueries({ queryKey: ['bookings'] }),
+    ]),
+  });
+}
+
+export function useDeletePet() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (petId: string) => deletePet(petId),
+    // deletePet removes the photo before the row, so a failed delete can still change the pet.
+    // Bookings are not refreshed: deletePet refuses to delete a pet that has bookings.
+    // Returning the promise keeps the dialog open until My Pets has dropped the card.
+    onSettled: () => queryClient.invalidateQueries({ queryKey: petKeys.all }),
   });
 }

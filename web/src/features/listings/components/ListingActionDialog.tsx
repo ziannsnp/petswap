@@ -6,6 +6,8 @@ export interface ListingActionDialogProps {
   title: string;
   description: string;
   confirmLabel: string;
+  /** Shown on the confirm button while the action runs, e.g. "Deleting...". */
+  pendingLabel: string;
   isPending: boolean;
   errorMessage: string | null;
   onCancel: () => void;
@@ -17,6 +19,7 @@ export function ListingActionDialog({
   title,
   description,
   confirmLabel,
+  pendingLabel,
   isPending,
   errorMessage,
   onCancel,
@@ -123,7 +126,7 @@ export function ListingActionDialog({
             onClick={onConfirm}
             disabled={isPending}
           >
-            {isPending ? 'Working...' : confirmLabel}
+            {isPending ? pendingLabel : confirmLabel}
           </button>
         </div>
       </section>

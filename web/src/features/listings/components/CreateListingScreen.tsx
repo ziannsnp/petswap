@@ -5,10 +5,12 @@ import { Link, useNavigate } from 'react-router-dom';
 import { validateListingForm } from '../lib/listingForm';
 import type { ListingFormErrors } from '../lib/listingForm';
 import { useCreateListing } from '../hooks/useCreateListing';
-import { FACILITY_OPTIONS, PET_TYPE_OPTIONS } from '../lib/listingOptions';
+import { FACILITY_OPTIONS } from '../lib/listingOptions';
+import { PET_SPECIES_OPTIONS } from '@/shared/lib/petSpecies';
 import { partitionListingPhotos } from '../lib/listingPhotos';
 import type { RejectedListingPhoto } from '../lib/listingPhotos';
-import type { Facility, PetSpecies } from '../lib/listingOptions';
+import type { Facility } from '../lib/listingOptions';
+import type { PetSpecies } from '@/shared/lib/petSpecies';
 
 const labelClassName = 'mb-2 block text-sm font-medium text-gray-700';
 
@@ -22,7 +24,7 @@ function inputClassName(hasError: boolean) {
 }
 
 function firstAvailablePetType(selected: PetSpecies[]): PetSpecies {
-  return PET_TYPE_OPTIONS.find(({ value }) => !selected.includes(value))?.value ?? PET_TYPE_OPTIONS[0].value;
+  return PET_SPECIES_OPTIONS.find(({ value }) => !selected.includes(value))?.value ?? PET_SPECIES_OPTIONS[0].value;
 }
 
 export function CreateListingScreen() {
@@ -201,7 +203,7 @@ export function CreateListingScreen() {
                 disabled={isSubmitting}
                 aria-label="Accepted pet type"
               >
-                {PET_TYPE_OPTIONS.map(({ value, label }) => (
+                {PET_SPECIES_OPTIONS.map(({ value, label }) => (
                   <option value={value} key={value} disabled={acceptedPetTypes.includes(value)}>
                     {label}
                   </option>
@@ -217,7 +219,7 @@ export function CreateListingScreen() {
                   setAcceptedPetTypes(nextPetTypes);
                   setPetTypeToAdd(firstAvailablePetType(nextPetTypes));
                 }}
-                disabled={isSubmitting || acceptedPetTypes.length === PET_TYPE_OPTIONS.length || acceptedPetTypes.includes(petTypeToAdd)}
+                disabled={isSubmitting || acceptedPetTypes.length === PET_SPECIES_OPTIONS.length || acceptedPetTypes.includes(petTypeToAdd)}
               >
                 <Plus className="h-4 w-4" aria-hidden="true" />
                 Add type
@@ -225,7 +227,7 @@ export function CreateListingScreen() {
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
               {acceptedPetTypes.map((value) => {
-                const option = PET_TYPE_OPTIONS.find((item) => item.value === value);
+                const option = PET_SPECIES_OPTIONS.find((item) => item.value === value);
                 return option ? (
                   <button
                     className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-brand-600 bg-brand-50 px-3 py-1.5 text-sm font-medium text-brand-700"

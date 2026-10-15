@@ -6,7 +6,14 @@ export { useCreateListing } from './hooks/useCreateListing';
 export { useUpdateListing } from './hooks/useUpdateListing';
 export { useDeleteListing, useListing, useMyListings, usePublishedListings } from './hooks/useListings';
 export { createListing, deleteListing, getListing, listMyListings, listPublishedListings, updateListing } from './lib/listingApi';
-export type { CreateListingValues, Listing, ListingHost, ListingPhotoInput, UpdateListingValues } from './lib/listingApi';
+export type {
+  CreateListingValues,
+  Listing,
+  ListingDetailResponse,
+  ListingHost,
+  ListingPhotoInput,
+  UpdateListingValues,
+} from './lib/listingApi';
 export { ListingError, listingErrorCode } from './lib/listingErrors';
 export type { ListingErrorCode } from './lib/listingErrors';
 export { petSpeciesLabel } from '@/shared/lib/petSpecies';

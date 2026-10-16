@@ -155,6 +155,26 @@ begin
 end;
 $$;
 
+set local role anon;
+do $$
+declare
+  visible_ids uuid[];
+begin
+  select array_agg(id order by id)
+  into visible_ids
+  from public.search_published_listings('', 'quartz', 1, 10);
+
+  if visible_ids is distinct from array[
+    '30000000-0000-4000-8000-000000000091'::uuid,
+    '30000000-0000-4000-8000-000000000092'::uuid,
+    '30000000-0000-4000-8000-000000000093'::uuid
+  ] then
+    raise exception 'anonymous search returned unexpected rows: %', visible_ids;
+  end if;
+end;
+$$;
+reset role;
+
 insert into public.listings (
   owner_id, title, location, description, capacity, accepted_pet_types, status
 )
@@ -186,6 +206,14 @@ from public.listings
 where status = 'published'
   and deleted_at is null
   and location ilike '%plan target district%'
+order by published_at desc nulls last, id desc
+limit 9;
+
+explain (analyze, buffers, verbose)
+select id
+from public.listings
+where status = 'published'
+  and deleted_at is null
 order by published_at desc nulls last, id desc
 limit 9;
 

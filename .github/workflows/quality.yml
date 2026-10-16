@@ -112,7 +112,7 @@ jobs:
       - name: Setup Supabase CLI
         uses: supabase/setup-cli@v1
         with:
-          version: latest
+          version: 2.117.0 # keep in step with web/package-lock.json; "latest" calls the rate-limited GitHub API
 
       - name: Deploy DB Migrations
         env:

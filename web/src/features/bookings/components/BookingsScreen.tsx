@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { useIncomingBookings, useOutgoingBookings, useUpdateBookingStatus } from '../hooks/useBookings';
-import { BookingConflictError } from '../lib/bookingErrors';
+import { BookingCompletionError, BookingConflictError } from '../lib/bookingErrors';
+import { todayIsoDate } from '../lib/bookingRequestForm';
+import { canCompleteBooking } from '../lib/bookingRules';
 import type { BookingWithDetails } from '../lib/bookingApi';
 import type { Database } from '@/shared/types/database.types';
 
@@ -37,13 +39,27 @@ interface BookingCardProps {
   readonly onConfirm?: (bookingId: string) => void;
   readonly onDecline?: (bookingId: string) => void;
   readonly onCancel?: (bookingId: string) => void;
+  readonly onComplete?: (bookingId: string) => void;
+  readonly today: string;
   readonly isResponding?: boolean;
   readonly responseError?: string | null;
 }
 
-function BookingCard({ booking, variant, onConfirm, onDecline, onCancel, isResponding, responseError }: BookingCardProps) {
+function BookingCard({
+  booking,
+  variant,
+  onConfirm,
+  onDecline,
+  onCancel,
+  onComplete,
+  today,
+  isResponding,
+  responseError,
+}: BookingCardProps) {
   const canRespond = variant === 'incoming' && booking.status === 'pending';
   const canCancel = variant === 'outgoing' && (booking.status === 'pending' || booking.status === 'confirmed');
+  const canComplete = variant === 'incoming'
+    && canCompleteBooking({ status: booking.status, endDate: booking.end_date }, today);
 
   return (
     <li className="booking-card">
@@ -59,7 +75,7 @@ function BookingCard({ booking, variant, onConfirm, onDecline, onCancel, isRespo
       <p className="booking-card__dates">
         {formatBookingDate(booking.start_date)} &ndash; {formatBookingDate(booking.end_date)}
       </p>
-      {(canRespond || canCancel) && (
+      {(canRespond || canCancel || canComplete) && (
         <div className="booking-card__actions">
           {canRespond && (
             <>
@@ -89,6 +105,16 @@ function BookingCard({ booking, variant, onConfirm, onDecline, onCancel, isRespo
               disabled={isResponding}
             >
               {isResponding ? 'Saving...' : 'Cancel booking'}
+            </button>
+          )}
+          {canComplete && (
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={() => onComplete?.(booking.id)}
+              disabled={isResponding}
+            >
+              {isResponding ? 'Saving...' : 'Mark completed'}
             </button>
           )}
           {responseError && (
@@ -141,6 +167,8 @@ interface BookingSectionProps {
   readonly onConfirm?: (bookingId: string) => void;
   readonly onDecline?: (bookingId: string) => void;
   readonly onCancel?: (bookingId: string) => void;
+  readonly onComplete?: (bookingId: string) => void;
+  readonly today: string;
   readonly respondingId?: string | null;
   readonly responseError?: { bookingId: string; message: string } | null;
 }
@@ -153,6 +181,8 @@ function BookingSection({
   onConfirm,
   onDecline,
   onCancel,
+  onComplete,
+  today,
   respondingId,
   responseError,
 }: BookingSectionProps) {
@@ -185,6 +215,8 @@ function BookingSection({
               onConfirm={onConfirm}
               onDecline={onDecline}
               onCancel={onCancel}
+              onComplete={onComplete}
+              today={today}
               isResponding={respondingId === booking.id}
               responseError={responseError?.bookingId === booking.id ? responseError.message : null}
             />
@@ -201,6 +233,7 @@ export function BookingsScreen() {
   const updateStatus = useUpdateBookingStatus();
   const [respondingId, setRespondingId] = useState<string | null>(null);
   const [responseError, setResponseError] = useState<{ bookingId: string; message: string } | null>(null);
+  const today = todayIsoDate();
 
   const noRelatedBookings =
     outgoing.isSuccess && incoming.isSuccess && outgoing.data.length === 0 && incoming.data.length === 0;
@@ -211,7 +244,7 @@ export function BookingsScreen() {
     try {
       await updateStatus.mutateAsync({ bookingId, status });
     } catch (error) {
-      const message = error instanceof BookingConflictError
+      const message = error instanceof BookingConflictError || error instanceof BookingCompletionError
         ? error.message
         : 'Could not update this booking. Please try again.';
       setResponseError({ bookingId, message });
@@ -236,6 +269,7 @@ export function BookingsScreen() {
             query={outgoing}
             variant="outgoing"
             onCancel={(bookingId) => void changeStatus(bookingId, 'cancelled')}
+            today={today}
             respondingId={respondingId}
             responseError={responseError}
           />
@@ -246,6 +280,8 @@ export function BookingsScreen() {
             variant="incoming"
             onConfirm={(bookingId) => void changeStatus(bookingId, 'confirmed')}
             onDecline={(bookingId) => void changeStatus(bookingId, 'declined')}
+            onComplete={(bookingId) => void changeStatus(bookingId, 'completed')}
+            today={today}
             respondingId={respondingId}
             responseError={responseError}
           />

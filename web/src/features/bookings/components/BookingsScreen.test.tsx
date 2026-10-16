@@ -4,7 +4,8 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { BookingsScreen } from './BookingsScreen';
 import { useIncomingBookings, useOutgoingBookings, useUpdateBookingStatus } from '../hooks/useBookings';
-import { BookingConflictError } from '../lib/bookingErrors';
+import { BookingCompletionError, BookingConflictError } from '../lib/bookingErrors';
+import { todayIsoDate } from '../lib/bookingRequestForm';
 import type { BookingWithDetails } from '../lib/bookingApi';
 
 // Explicit factory so the real hooks module (and its supabase/import.meta.env chain) never loads under Jest.
@@ -280,5 +281,177 @@ it('shows an overlap conflict on the booking card when its owner cannot confirm'
 
   expect(await screen.findByRole('alert')).toHaveTextContent(
     'This request overlaps another confirmed booking on this listing. Choose different dates before confirming.',
+  );
+});
+
+// --- Confirm / decline (listing owner) ---
+
+it.each(['declined', 'cancelled', 'completed'] as const)(
+  'does not offer Confirm or Decline on a %s incoming booking',
+  (status) => {
+    mockUseOutgoingBookings.mockReturnValue(successResult([]));
+    mockUseIncomingBookings.mockReturnValue(successResult([makeBooking({ status })]));
+
+    render(<BookingsScreen />);
+
+    expect(screen.queryByRole('button', { name: 'Confirm' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Decline' })).not.toBeInTheDocument();
+  },
+);
+
+it('does not let a requester confirm or decline their own pending request', () => {
+  mockUseOutgoingBookings.mockReturnValue(successResult([makeBooking({ id: 'out-1', status: 'pending' })]));
+  mockUseIncomingBookings.mockReturnValue(successResult([]));
+
+  render(<BookingsScreen />);
+
+  expect(screen.queryByRole('button', { name: 'Confirm' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Decline' })).not.toBeInTheDocument();
+});
+
+it('disables both responses on a card while its update is saving', async () => {
+  const mutateAsync = jest.fn().mockReturnValue(new Promise(() => {}));
+  mockUseUpdateBookingStatus.mockReturnValue({ mutateAsync });
+  mockUseOutgoingBookings.mockReturnValue(successResult([]));
+  mockUseIncomingBookings.mockReturnValue(successResult([makeBooking({ id: 'in-1', status: 'pending' })]));
+
+  render(<BookingsScreen />);
+  fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+
+  expect(await screen.findByRole('button', { name: 'Saving...' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Decline' })).toBeDisabled();
+  expect(mutateAsync).toHaveBeenCalledTimes(1);
+});
+
+it('shows an overlap conflict only on the card that failed to confirm', async () => {
+  const mutateAsync = jest.fn().mockRejectedValue(new BookingConflictError());
+  mockUseUpdateBookingStatus.mockReturnValue({ mutateAsync });
+  mockUseOutgoingBookings.mockReturnValue(successResult([]));
+  mockUseIncomingBookings.mockReturnValue(successResult([
+    makeBooking({ id: 'in-1', status: 'pending', pet: { id: 'pet-1', name: 'Milo', species: 'dog', photo_url: null } }),
+    makeBooking({ id: 'in-2', status: 'pending', pet: { id: 'pet-2', name: 'Bella', species: 'cat', photo_url: null } }),
+  ]));
+
+  render(<BookingsScreen />);
+  fireEvent.click(screen.getAllByRole('button', { name: 'Confirm' })[0]);
+
+  const alert = await screen.findByRole('alert');
+  expect(alert.closest('li')).toHaveTextContent('Milo');
+  expect(screen.getAllByRole('alert')).toHaveLength(1);
+});
+
+// --- Cancellation (requester) ---
+
+it('does not let a listing owner cancel a confirmed incoming booking', () => {
+  mockUseOutgoingBookings.mockReturnValue(successResult([]));
+  mockUseIncomingBookings.mockReturnValue(successResult([makeBooking({ id: 'in-1', status: 'confirmed' })]));
+
+  render(<BookingsScreen />);
+
+  expect(screen.queryByRole('button', { name: 'Cancel booking' })).not.toBeInTheDocument();
+});
+
+it('shows an error on the outgoing card when a cancellation fails', async () => {
+  const mutateAsync = jest.fn().mockRejectedValue(new Error('permission denied'));
+  mockUseUpdateBookingStatus.mockReturnValue({ mutateAsync });
+  mockUseOutgoingBookings.mockReturnValue(successResult([makeBooking({ id: 'out-1', status: 'confirmed' })]));
+  mockUseIncomingBookings.mockReturnValue(successResult([]));
+
+  render(<BookingsScreen />);
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel booking' }));
+
+  expect(await screen.findByRole('alert')).toHaveTextContent(/could not update this booking/i);
+});
+
+// --- Completion (listing owner, confirmed, end date reached) ---
+
+const ENDED = '2020-01-10';
+const NOT_ENDED = '2999-01-10';
+
+it('offers Mark completed on a confirmed incoming booking whose end date has passed', () => {
+  mockUseOutgoingBookings.mockReturnValue(successResult([]));
+  mockUseIncomingBookings.mockReturnValue(successResult([
+    makeBooking({ status: 'confirmed', start_date: '2020-01-05', end_date: ENDED }),
+  ]));
+
+  render(<BookingsScreen />);
+
+  expect(screen.getByRole('button', { name: 'Mark completed' })).toBeInTheDocument();
+});
+
+it('offers Mark completed on the end date itself (check-out day)', () => {
+  mockUseOutgoingBookings.mockReturnValue(successResult([]));
+  mockUseIncomingBookings.mockReturnValue(successResult([
+    makeBooking({ status: 'confirmed', start_date: '2020-01-05', end_date: todayIsoDate() }),
+  ]));
+
+  render(<BookingsScreen />);
+
+  expect(screen.getByRole('button', { name: 'Mark completed' })).toBeInTheDocument();
+});
+
+it('does not offer Mark completed before the end date', () => {
+  mockUseOutgoingBookings.mockReturnValue(successResult([]));
+  mockUseIncomingBookings.mockReturnValue(successResult([
+    makeBooking({ status: 'confirmed', start_date: '2020-01-05', end_date: NOT_ENDED }),
+  ]));
+
+  render(<BookingsScreen />);
+
+  expect(screen.queryByRole('button', { name: 'Mark completed' })).not.toBeInTheDocument();
+});
+
+it.each(['pending', 'declined', 'cancelled', 'completed'] as const)(
+  'does not offer Mark completed on a %s incoming booking, even after its end date',
+  (status) => {
+    mockUseOutgoingBookings.mockReturnValue(successResult([]));
+    mockUseIncomingBookings.mockReturnValue(successResult([
+      makeBooking({ status, start_date: '2020-01-05', end_date: ENDED }),
+    ]));
+
+    render(<BookingsScreen />);
+
+    expect(screen.queryByRole('button', { name: 'Mark completed' })).not.toBeInTheDocument();
+  },
+);
+
+it('does not let the requester mark their own finished booking completed', () => {
+  mockUseOutgoingBookings.mockReturnValue(successResult([
+    makeBooking({ id: 'out-1', status: 'confirmed', start_date: '2020-01-05', end_date: ENDED }),
+  ]));
+  mockUseIncomingBookings.mockReturnValue(successResult([]));
+
+  render(<BookingsScreen />);
+
+  expect(screen.queryByRole('button', { name: 'Mark completed' })).not.toBeInTheDocument();
+});
+
+it('marks a finished confirmed incoming booking completed', async () => {
+  const mutateAsync = jest.fn().mockResolvedValue({});
+  mockUseUpdateBookingStatus.mockReturnValue({ mutateAsync });
+  mockUseOutgoingBookings.mockReturnValue(successResult([]));
+  mockUseIncomingBookings.mockReturnValue(successResult([
+    makeBooking({ id: 'in-1', status: 'confirmed', start_date: '2020-01-05', end_date: ENDED }),
+  ]));
+
+  render(<BookingsScreen />);
+  fireEvent.click(screen.getByRole('button', { name: 'Mark completed' }));
+
+  await waitFor(() => expect(mutateAsync).toHaveBeenCalledWith({ bookingId: 'in-1', status: 'completed' }));
+});
+
+it('explains on the card when the database refuses a completion', async () => {
+  const mutateAsync = jest.fn().mockRejectedValue(new BookingCompletionError());
+  mockUseUpdateBookingStatus.mockReturnValue({ mutateAsync });
+  mockUseOutgoingBookings.mockReturnValue(successResult([]));
+  mockUseIncomingBookings.mockReturnValue(successResult([
+    makeBooking({ id: 'in-1', status: 'confirmed', start_date: '2020-01-05', end_date: ENDED }),
+  ]));
+
+  render(<BookingsScreen />);
+  fireEvent.click(screen.getByRole('button', { name: 'Mark completed' }));
+
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'This booking can only be marked completed once it is confirmed and its end date has arrived.',
   );
 });

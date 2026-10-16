@@ -65,6 +65,9 @@ jobs:
       - name: Listing deletion behavioural checks
         run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/listing_deletion.test.sql
 
+      - name: Listing search and pagination checks
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/listing_search.test.sql
+
       - name: Avatar storage access behavioural checks
         run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/avatar_storage_access.test.sql
 

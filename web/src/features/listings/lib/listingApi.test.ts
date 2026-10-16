@@ -1,5 +1,5 @@
 import { getSupabaseClient } from '../../../shared/lib/supabase';
-import { createListing, deleteListing, getListing, listMyListings, listPublishedListings, setListingPublicationStatus, updateListing } from './listingApi';
+import { createListing, deleteListing, getListing, listMyListings, listPublishedListings, PUBLISHED_LISTINGS_PAGE_SIZE, searchPublishedListings, setListingPublicationStatus, updateListing } from './listingApi';
 import type { UpdateListingValues } from './listingApi';
 
 jest.mock('../../../shared/lib/supabase', () => ({
@@ -45,14 +45,102 @@ describe('listMyListings', () => {
   });
 });
 
+describe('searchPublishedListings', () => {
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('requests a stable server-side search page and signs its photos', async () => {
+    const image = {
+      id: 'image-1',
+      listing_id: 'listing-1',
+      storage_path: 'listing-1/front.jpg',
+      alt_text: null,
+      sort_order: 0,
+      created_at: '2026-09-07T00:00:00.000Z',
+    };
+    const rpc = jest.fn().mockResolvedValue({
+      data: [{
+        id: 'listing-1',
+        owner_id: 'owner-1',
+        title: 'Quiet home',
+        location: 'Bangkok',
+        description: 'A calm place.',
+        capacity: 2,
+        accepted_pet_types: ['dog'],
+        facilities: null,
+        status: 'published',
+        deleted_at: null,
+        published_at: '2026-09-07T00:00:00.000Z',
+        created_at: '2026-09-07T00:00:00.000Z',
+        updated_at: '2026-09-07T00:00:00.000Z',
+        page_number: 2,
+        total_count: 10,
+      }],
+      error: null,
+    });
+    const orderById = jest.fn().mockResolvedValue({ data: [image], error: null });
+    const orderByPosition = jest.fn().mockReturnValue({ order: orderById });
+    const filterIn = jest.fn().mockReturnValue({ order: orderByPosition });
+    const select = jest.fn().mockReturnValue({ in: filterIn });
+    const from = jest.fn().mockReturnValue({ select });
+    const createSignedUrls = jest.fn().mockResolvedValue({
+      data: [{ path: image.storage_path, signedUrl: 'https://example.test/signed-photo' }],
+      error: null,
+    });
+    mockedGetSupabaseClient.mockReturnValue({
+      rpc,
+      from,
+      storage: { from: jest.fn().mockReturnValue({ createSignedUrls }) },
+    } as never);
+
+    await expect(searchPublishedListings({ location: ' Bangkok ', keyword: 'garden', page: 2 })).resolves.toMatchObject({
+      page: 2,
+      pageSize: PUBLISHED_LISTINGS_PAGE_SIZE,
+      totalCount: 10,
+      listings: [{
+        id: 'listing-1',
+        cover_photo_url: 'https://example.test/signed-photo',
+        listing_images: [{ signed_url: 'https://example.test/signed-photo' }],
+      }],
+    });
+
+    expect(rpc).toHaveBeenCalledWith('search_published_listings', {
+      p_location: ' Bangkok ',
+      p_keyword: 'garden',
+      p_page: 2,
+      p_page_size: PUBLISHED_LISTINGS_PAGE_SIZE,
+    });
+    expect(from).toHaveBeenCalledWith('listing_images');
+    expect(filterIn).toHaveBeenCalledWith('listing_id', ['listing-1']);
+    expect(orderByPosition).toHaveBeenCalledWith('sort_order', { ascending: true });
+    expect(orderById).toHaveBeenCalledWith('id', { ascending: true });
+  });
+
+  it('returns an empty first page without querying image rows when nothing matches', async () => {
+    const rpc = jest.fn().mockResolvedValue({ data: [], error: null });
+    const from = jest.fn();
+    mockedGetSupabaseClient.mockReturnValue({ rpc, from } as never);
+
+    await expect(searchPublishedListings({ location: '', keyword: 'missing', page: 4 })).resolves.toEqual({
+      listings: [],
+      page: 1,
+      pageSize: PUBLISHED_LISTINGS_PAGE_SIZE,
+      totalCount: 0,
+    });
+    expect(from).not.toHaveBeenCalled();
+  });
+});
+
 describe('listPublishedListings', () => {
   afterEach(() => {
     jest.clearAllMocks();
   });
 
-  it('queries only published listings that are not soft-deleted', async () => {
-    const order = jest.fn().mockResolvedValue({ data: [], error: null });
-    const isDeleted = jest.fn().mockReturnValue({ order });
+  it('keeps the original published-listing list contract and adds a stable tie-breaker', async () => {
+    const orderById = jest.fn().mockResolvedValue({ data: [], error: null });
+    const orderByPublishedAt = jest.fn().mockReturnValue({ order: orderById });
+    const isDeleted = jest.fn().mockReturnValue({ order: orderByPublishedAt });
     const eq = jest.fn().mockReturnValue({ is: isDeleted });
     const select = jest.fn().mockReturnValue({ eq });
     const from = jest.fn().mockReturnValue({ select });
@@ -63,7 +151,8 @@ describe('listPublishedListings', () => {
     expect(from).toHaveBeenCalledWith('listings');
     expect(eq).toHaveBeenCalledWith('status', 'published');
     expect(isDeleted).toHaveBeenCalledWith('deleted_at', null);
-    expect(order).toHaveBeenCalledWith('published_at', { ascending: false });
+    expect(orderByPublishedAt).toHaveBeenCalledWith('published_at', { ascending: false });
+    expect(orderById).toHaveBeenCalledWith('id', { ascending: false });
   });
 });
 

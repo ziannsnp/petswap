@@ -23,6 +23,10 @@ It is deliberately separate from `Quality` and not a required check: it starts c
 
 `.github/workflows/e2e-smoke.yml` runs the Playwright smoke suite (`web/e2e/smoke.spec.ts`) on desktop and mobile Chromium, and desktop Firefox for every `web/**` change and on demand. It builds a browser and starts the dev server, so it is a separate, non-required workflow rather than part of `Quality`. A red run means the app shell or router regressed and the change author owns the fix. The full Playwright journey (`booking-flow.spec.ts`) stays skipped until its screens exist; see [testing.md](testing.md).
 
+## E2E booking workflow
+
+`.github/workflows/e2e-booking.yml` runs the Playwright booking journeys (`booking-flow.spec.ts` and `booking-lifecycle.spec.ts`) against a local Supabase stack that it starts, resets, and seeds on the runner, so nobody needs Docker locally and the shared hosted project is never touched. It runs on pull requests that touch bookings, auth, `web/e2e/**`, the Playwright config, or `supabase/` migrations/seed/config, and on demand. Like E2E smoke it is not a required check; a red run means a booking journey regressed and the change author owns the fix. Download the `playwright-booking-report` artifact from the run for screenshots and traces of any failure.
+
 ## Main branch protection
 
 The protected `main` branch is the only shared integration branch. GitHub requires a pull request, one approving review, current Quality checks, and resolution of review conversations before merge. New commits dismiss earlier approvals; administrators follow the same rules. Direct pushes, force pushes, and branch deletion are blocked.

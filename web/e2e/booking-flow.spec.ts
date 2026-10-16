@@ -22,10 +22,11 @@ function formatBookingDate(date: string): string {
 
 test.describe('booking request and confirmation', () => {
   test('a requester books a listing and the owner confirms it', async ({ browser }, testInfo) => {
-    // desktop-chromium and mobile-chromium run this file in parallel against the
-    // same local database, so each project needs a date range the other cannot
-    // also pick - a fixed calendar date would create two identical-looking cards.
-    const monthOffset = testInfo.project.name === 'mobile-chromium' ? 1 : 0;
+    // Every project runs this file in parallel against the same local database, so
+    // each needs a date range no other project picks - a shared range would create
+    // identical-looking cards, and the second confirmation would hit the overlap rule.
+    const monthOffsets: Record<string, number> = { 'desktop-chromium': 0, 'mobile-chromium': 1, 'desktop-firefox': 2 };
+    const monthOffset = monthOffsets[testInfo.project.name] ?? 3;
     const START_DATE = `2027-0${2 + monthOffset}-01`;
     const END_DATE = `2027-0${2 + monthOffset}-05`;
 

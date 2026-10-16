@@ -36,12 +36,14 @@ interface BookingCardProps {
   readonly variant: 'incoming' | 'outgoing';
   readonly onConfirm?: (bookingId: string) => void;
   readonly onDecline?: (bookingId: string) => void;
+  readonly onCancel?: (bookingId: string) => void;
   readonly isResponding?: boolean;
   readonly responseError?: string | null;
 }
 
-function BookingCard({ booking, variant, onConfirm, onDecline, isResponding, responseError }: BookingCardProps) {
+function BookingCard({ booking, variant, onConfirm, onDecline, onCancel, isResponding, responseError }: BookingCardProps) {
   const canRespond = variant === 'incoming' && booking.status === 'pending';
+  const canCancel = variant === 'outgoing' && (booking.status === 'pending' || booking.status === 'confirmed');
 
   return (
     <li className="booking-card">
@@ -57,24 +59,38 @@ function BookingCard({ booking, variant, onConfirm, onDecline, isResponding, res
       <p className="booking-card__dates">
         {formatBookingDate(booking.start_date)} &ndash; {formatBookingDate(booking.end_date)}
       </p>
-      {canRespond && (
+      {(canRespond || canCancel) && (
         <div className="booking-card__actions">
-          <button
-            type="button"
-            className="btn-primary"
-            onClick={() => onConfirm?.(booking.id)}
-            disabled={isResponding}
-          >
-            {isResponding ? 'Saving...' : 'Confirm'}
-          </button>
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={() => onDecline?.(booking.id)}
-            disabled={isResponding}
-          >
-            Decline
-          </button>
+          {canRespond && (
+            <>
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={() => onConfirm?.(booking.id)}
+                disabled={isResponding}
+              >
+                {isResponding ? 'Saving...' : 'Confirm'}
+              </button>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => onDecline?.(booking.id)}
+                disabled={isResponding}
+              >
+                Decline
+              </button>
+            </>
+          )}
+          {canCancel && (
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => onCancel?.(booking.id)}
+              disabled={isResponding}
+            >
+              {isResponding ? 'Saving...' : 'Cancel booking'}
+            </button>
+          )}
           {responseError && (
             <p className="booking-card__error" role="alert">
               {responseError}
@@ -124,6 +140,7 @@ interface BookingSectionProps {
   readonly variant: 'incoming' | 'outgoing';
   readonly onConfirm?: (bookingId: string) => void;
   readonly onDecline?: (bookingId: string) => void;
+  readonly onCancel?: (bookingId: string) => void;
   readonly respondingId?: string | null;
   readonly responseError?: { bookingId: string; message: string } | null;
 }
@@ -135,6 +152,7 @@ function BookingSection({
   variant,
   onConfirm,
   onDecline,
+  onCancel,
   respondingId,
   responseError,
 }: BookingSectionProps) {
@@ -166,6 +184,7 @@ function BookingSection({
               variant={variant}
               onConfirm={onConfirm}
               onDecline={onDecline}
+              onCancel={onCancel}
               isResponding={respondingId === booking.id}
               responseError={responseError?.bookingId === booking.id ? responseError.message : null}
             />
@@ -186,7 +205,7 @@ export function BookingsScreen() {
   const noRelatedBookings =
     outgoing.isSuccess && incoming.isSuccess && outgoing.data.length === 0 && incoming.data.length === 0;
 
-  async function respond(bookingId: string, status: 'confirmed' | 'declined') {
+  async function changeStatus(bookingId: string, status: BookingStatus) {
     setRespondingId(bookingId);
     setResponseError(null);
     try {
@@ -216,14 +235,17 @@ export function BookingsScreen() {
             emptyMessage="You haven't sent any requests yet"
             query={outgoing}
             variant="outgoing"
+            onCancel={(bookingId) => void changeStatus(bookingId, 'cancelled')}
+            respondingId={respondingId}
+            responseError={responseError}
           />
           <BookingSection
             title="Incoming requests"
             emptyMessage="No incoming requests on your listings"
             query={incoming}
             variant="incoming"
-            onConfirm={(bookingId) => void respond(bookingId, 'confirmed')}
-            onDecline={(bookingId) => void respond(bookingId, 'declined')}
+            onConfirm={(bookingId) => void changeStatus(bookingId, 'confirmed')}
+            onDecline={(bookingId) => void changeStatus(bookingId, 'declined')}
             respondingId={respondingId}
             responseError={responseError}
           />

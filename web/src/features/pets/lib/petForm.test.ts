@@ -1,4 +1,4 @@
-import { PET_MAX_AGE_YEARS, parsePetForm, type PetFormValues } from './petForm';
+import { PET_MAX_AGE_YEARS, parsePetForm, petToFormValues, type PetFormValues } from './petForm';
 
 const validValues: PetFormValues = {
   name: 'Mali',
@@ -60,5 +60,44 @@ describe('parsePetForm', () => {
     const result = parsePetForm({ name: '', species: '', breed: '', age: '', description: '' });
     expect(result.ok).toBe(false);
     expect(!result.ok && Object.keys(result.errors).sort()).toEqual(['description', 'name', 'species']);
+  });
+});
+
+describe('petToFormValues', () => {
+  const savedPet = {
+    name: 'Rocket',
+    species: 'dog' as const,
+    breed: 'Beagle mix',
+    age_year: 4,
+    description: 'Friendly with other dogs.',
+  };
+
+  it('copies a saved pet into form input', () => {
+    expect(petToFormValues(savedPet)).toEqual({
+      name: 'Rocket',
+      species: 'dog',
+      breed: 'Beagle mix',
+      age: '4',
+      description: 'Friendly with other dogs.',
+    });
+  });
+
+  it('turns empty optional fields into blank input', () => {
+    expect(petToFormValues({ ...savedPet, breed: null, age_year: null, description: null })).toMatchObject({
+      breed: '',
+      age: '',
+      description: '',
+    });
+  });
+
+  it('keeps age 0 instead of treating it as blank', () => {
+    expect(petToFormValues({ ...savedPet, age_year: 0 }).age).toBe('0');
+  });
+
+  it('round-trips through parsePetForm unchanged', () => {
+    expect(parsePetForm(petToFormValues(savedPet))).toEqual({
+      ok: true,
+      values: { name: 'Rocket', species: 'dog', breed: 'Beagle mix', ageYear: 4, description: 'Friendly with other dogs.' },
+    });
   });
 });

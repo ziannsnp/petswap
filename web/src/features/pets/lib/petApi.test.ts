@@ -13,6 +13,7 @@ import {
   validatePetPhoto,
   type UpdatePetValues,
 } from './petApi';
+import { PetHasBookingsError } from './petErrors';
 
 jest.mock('@/shared/lib/supabase', () => ({
   getSupabaseClient: jest.fn(),
@@ -240,9 +241,19 @@ describe('deletePet', () => {
       bookings: [{ id: 'booking-1' }],
     });
 
-    await expect(deletePet('pet-123')).rejects.toThrow('Cannot delete a pet that has existing bookings.');
+    const result = deletePet('pet-123');
+    await expect(result).rejects.toBeInstanceOf(PetHasBookingsError);
+    await expect(result).rejects.toThrow('Cannot delete a pet that has existing bookings.');
     expect(storageFrom).not.toHaveBeenCalled();
     expect(deleteMethod).not.toHaveBeenCalled();
+  });
+
+  it('reports a booking created after the check as a has-bookings error', async () => {
+    setupDeletePetMocks({
+      deleteError: Object.assign(new Error('violates foreign key constraint "bookings_pet_id_fkey"'), { code: '23503' }),
+    });
+
+    await expect(deletePet('pet-123')).rejects.toBeInstanceOf(PetHasBookingsError);
   });
 
   it('surfaces bookings check error and does not touch storage or delete row', async () => {
@@ -1000,4 +1011,250 @@ describe('updatePet', () => {
 
     await expect(updatePet('pet-123', validValues)).rejects.toBe(updateError);
   });
+});
+
+describe('updatePet photo changes', () => {
+  const baseValues: UpdatePetValues = {
+    name: 'Rocket',
+    species: 'dog',
+    breed: 'Beagle mix',
+    ageYear: 4,
+    description: 'Friendly with other dogs.',
+  };
+  const savedPet = { id: 'pet-1', owner_id: 'owner-1', name: 'Rocket', photo_url: 'pet-1/new.png' };
+
+  function newPhoto() {
+    return new File(['png'], 'new.png', { type: 'image/png' });
+  }
+
+  type RemoveOutcome = 'removed' | 'error' | 'throws' | 'empty';
+
+  function setupPhotoUpdateMocks({
+    currentPet = { photo_url: 'pet-1/old.png' } as { photo_url: string | null } | null,
+    fetchError = null as Error | null,
+    uploadError = null as Error | null,
+    updateResult = { data: savedPet as unknown, error: null as Error | null },
+    // What a re-read after a failed save finds: the old row, a row pointing at the new upload, or an error.
+    reread = 'unchanged' as 'unchanged' | 'points-at-new' | 'error',
+    removeOutcome = 'removed' as RemoveOutcome,
+  } = {}) {
+    const upload = jest.fn().mockResolvedValue({ data: {}, error: uploadError });
+
+    const fetchMaybeSingle = jest.fn()
+      .mockResolvedValueOnce({ data: currentPet, error: fetchError })
+      .mockImplementation(() => {
+        if (reread === 'error') return Promise.resolve({ data: null, error: new Error('network down') });
+        const photoUrl = reread === 'points-at-new' ? upload.mock.calls[0]?.[0] : currentPet?.photo_url;
+        return Promise.resolve({ data: { photo_url: photoUrl ?? null }, error: null });
+      });
+    const fetchEqOwner = jest.fn().mockReturnValue({ maybeSingle: fetchMaybeSingle });
+    const fetchEqId = jest.fn().mockReturnValue({ eq: fetchEqOwner });
+    const select = jest.fn().mockReturnValue({ eq: fetchEqId });
+
+    const updateMaybeSingle = jest.fn().mockResolvedValue(updateResult);
+    const updateSelect = jest.fn().mockReturnValue({ maybeSingle: updateMaybeSingle });
+    const updateEqOwner = jest.fn().mockReturnValue({ select: updateSelect });
+    const updateEqId = jest.fn().mockReturnValue({ eq: updateEqOwner });
+    const update = jest.fn().mockReturnValue({ eq: updateEqId });
+
+    const remove = jest.fn().mockImplementation((paths: string[]) => {
+      switch (removeOutcome) {
+        case 'error':
+          return Promise.resolve({ data: null, error: new Error('permission denied') });
+        case 'throws':
+          return Promise.reject(new Error('socket hang up'));
+        case 'empty':
+          return Promise.resolve({ data: [], error: null });
+        default:
+          return Promise.resolve({ data: paths.map((path) => ({ name: path.split('/').pop() })), error: null });
+      }
+    });
+    const storageFrom = jest.fn().mockReturnValue({ upload, remove });
+
+    mockedGetSupabaseClient.mockReturnValue({
+      auth: { getUser: signedIn('owner-1') },
+      from: jest.fn().mockReturnValue({ select, update }),
+      storage: { from: storageFrom },
+    } as never);
+
+    return { select, fetchEqOwner, update, updateEqOwner, upload, remove, storageFrom };
+  }
+
+  it('keeps the current photo when no photo change is given', async () => {
+    const { select, update, storageFrom } = setupPhotoUpdateMocks();
+
+    await updatePet('pet-1', baseValues);
+
+    expect(select).not.toHaveBeenCalled();
+    expect(storageFrom).not.toHaveBeenCalled();
+    expect(update.mock.calls[0][0]).not.toHaveProperty('photo_url');
+  });
+
+  it('keeps the current photo when removePhoto is false', async () => {
+    const { storageFrom, update } = setupPhotoUpdateMocks();
+
+    await updatePet('pet-1', { ...baseValues, removePhoto: false });
+
+    expect(storageFrom).not.toHaveBeenCalled();
+    expect(update.mock.calls[0][0]).not.toHaveProperty('photo_url');
+  });
+
+  it('uploads the new photo, points the pet at it, then removes the old file', async () => {
+    const { fetchEqOwner, upload, update, updateEqOwner, remove, storageFrom } = setupPhotoUpdateMocks();
+    const photo = newPhoto();
+
+    await expect(updatePet('pet-1', { ...baseValues, photo })).resolves.toEqual(savedPet);
+
+    expect(fetchEqOwner).toHaveBeenCalledWith('owner_id', 'owner-1');
+    expect(storageFrom).toHaveBeenCalledWith(PET_PHOTO_BUCKET);
+    const newPath = upload.mock.calls[0][0] as string;
+    expect(newPath).toMatch(/^pet-1\/[0-9a-f-]+\.png$/);
+    expect(upload).toHaveBeenCalledWith(newPath, photo, { contentType: 'image/png', upsert: false });
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({ name: 'Rocket', photo_url: newPath }));
+    expect(update.mock.calls[0][0]).not.toHaveProperty('owner_id');
+    expect(updateEqOwner).toHaveBeenCalledWith('owner_id', 'owner-1');
+    expect(remove).toHaveBeenCalledTimes(1);
+    expect(remove).toHaveBeenCalledWith(['pet-1/old.png']);
+    expect(upload.mock.invocationCallOrder[0]).toBeLessThan(update.mock.invocationCallOrder[0]);
+    expect(update.mock.invocationCallOrder[0]).toBeLessThan(remove.mock.invocationCallOrder[0]);
+  });
+
+  it('replaces the photo when both a new photo and removePhoto are given', async () => {
+    const { upload, update } = setupPhotoUpdateMocks();
+
+    await updatePet('pet-1', { ...baseValues, photo: newPhoto(), removePhoto: true });
+
+    expect(upload).toHaveBeenCalledTimes(1);
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({ photo_url: upload.mock.calls[0][0] }));
+  });
+
+  it('clears photo_url before removing the file when removePhoto is true', async () => {
+    const { upload, update, remove } = setupPhotoUpdateMocks();
+
+    await updatePet('pet-1', { ...baseValues, removePhoto: true });
+
+    expect(upload).not.toHaveBeenCalled();
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({ photo_url: null }));
+    expect(remove).toHaveBeenCalledWith(['pet-1/old.png']);
+    expect(update.mock.invocationCallOrder[0]).toBeLessThan(remove.mock.invocationCallOrder[0]);
+  });
+
+  it('removes no file when removePhoto is true but the pet has no photo', async () => {
+    const { update, remove } = setupPhotoUpdateMocks({ currentPet: { photo_url: null } });
+
+    await updatePet('pet-1', { ...baseValues, removePhoto: true });
+
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({ photo_url: null }));
+    expect(remove).not.toHaveBeenCalled();
+  });
+
+  it('does not try to remove a file when a pet without a photo gets its first one', async () => {
+    const { upload, remove } = setupPhotoUpdateMocks({ currentPet: { photo_url: null } });
+
+    await updatePet('pet-1', { ...baseValues, photo: newPhoto() });
+
+    expect(upload).toHaveBeenCalledTimes(1);
+    expect(remove).not.toHaveBeenCalled();
+  });
+
+  it('rejects an invalid photo before any network call', async () => {
+    const photo = new File(['svg'], 'logo.svg', { type: 'image/svg+xml' });
+
+    await expect(updatePet('pet-1', { ...baseValues, photo })).rejects.toThrow(/unsupported file type/i);
+    expect(mockedGetSupabaseClient).not.toHaveBeenCalled();
+  });
+
+  it('does not upload when the pet is not found or not owned', async () => {
+    const { upload, update } = setupPhotoUpdateMocks({ currentPet: null });
+
+    await expect(updatePet('pet-1', { ...baseValues, photo: newPhoto() })).rejects.toThrow(
+      'Pet with id pet-1 not found or you do not have permission to update it.',
+    );
+    expect(upload).not.toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('surfaces a fetch error without uploading', async () => {
+    const fetchError = new Error('network down');
+    const { upload } = setupPhotoUpdateMocks({ fetchError });
+
+    await expect(updatePet('pet-1', { ...baseValues, photo: newPhoto() })).rejects.toBe(fetchError);
+    expect(upload).not.toHaveBeenCalled();
+  });
+
+  it('leaves the pet unchanged when the upload fails', async () => {
+    const uploadError = new Error('quota exceeded');
+    const { update, remove } = setupPhotoUpdateMocks({ uploadError });
+
+    await expect(updatePet('pet-1', { ...baseValues, photo: newPhoto() })).rejects.toBe(uploadError);
+    expect(update).not.toHaveBeenCalled();
+    expect(remove).not.toHaveBeenCalled();
+  });
+
+  it('removes the new upload and keeps the old file when the update fails', async () => {
+    const updateError = new Error('check constraint violated');
+    const { upload, remove } = setupPhotoUpdateMocks({ updateResult: { data: null, error: updateError } });
+
+    await expect(updatePet('pet-1', { ...baseValues, photo: newPhoto() })).rejects.toBe(updateError);
+
+    expect(remove).toHaveBeenCalledTimes(1);
+    expect(remove).toHaveBeenCalledWith([upload.mock.calls[0][0]]);
+  });
+
+  it('removes the new upload when the update matches no row', async () => {
+    const { upload, remove } = setupPhotoUpdateMocks({ updateResult: { data: null, error: null } });
+
+    await expect(updatePet('pet-1', { ...baseValues, photo: newPhoto() })).rejects.toThrow(
+      'Pet with id pet-1 not found or you do not have permission to update it.',
+    );
+    expect(remove).toHaveBeenCalledWith([upload.mock.calls[0][0]]);
+  });
+
+  it('keeps the new upload when the failed save actually committed', async () => {
+    const lostResponse = new Error('Failed to fetch');
+    const { remove } = setupPhotoUpdateMocks({
+      updateResult: { data: null, error: lostResponse },
+      reread: 'points-at-new',
+    });
+
+    await expect(updatePet('pet-1', { ...baseValues, photo: newPhoto() })).rejects.toBe(lostResponse);
+    expect(remove).not.toHaveBeenCalled();
+  });
+
+  it('keeps the new upload when the row cannot be re-read after a failed save', async () => {
+    const lostResponse = new Error('Failed to fetch');
+    const { remove } = setupPhotoUpdateMocks({
+      updateResult: { data: null, error: lostResponse },
+      reread: 'error',
+    });
+
+    await expect(updatePet('pet-1', { ...baseValues, photo: newPhoto() })).rejects.toBe(lostResponse);
+    expect(remove).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['returns an error', 'error', 'permission denied'],
+    ['throws', 'throws', 'socket hang up'],
+    ['reports nothing removed', 'empty', 'storage object not found or permission denied'],
+  ] as const)('reports an incomplete rollback when removing the new upload %s', async (_label, removeOutcome, reason) => {
+    const updateError = new Error('check constraint violated');
+    setupPhotoUpdateMocks({ updateResult: { data: null, error: updateError }, removeOutcome });
+
+    const result = updatePet('pet-1', { ...baseValues, photo: newPhoto() });
+
+    await expect(result).rejects.toThrow(
+      `check constraint violated (rollback incomplete: photo cleanup failed: ${reason})`,
+    );
+    await expect(result).rejects.toHaveProperty('cause', updateError);
+  });
+
+  it.each(['error', 'throws', 'empty'] as const)(
+    'still returns the saved pet when removing the old file %s',
+    async (removeOutcome) => {
+      const { remove } = setupPhotoUpdateMocks({ removeOutcome });
+
+      await expect(updatePet('pet-1', { ...baseValues, photo: newPhoto() })).resolves.toEqual(savedPet);
+      expect(remove).toHaveBeenCalledWith(['pet-1/old.png']);
+    },
+  );
 });

@@ -28,11 +28,23 @@ function isSupabaseLikeError(error: unknown): error is SupabaseLikeError {
   return typeof error === 'object' && error !== null;
 }
 
+// supabase-js never rejects with the browser's TypeError when the network is down: PostgREST
+// calls resolve with `{ code: '', message: 'TypeError: Failed to fetch' }` and auth calls with
+// an AuthRetryableFetchError whose status is 0. All three shapes mean "could not reach us".
+function isNetworkFailure(error: unknown): boolean {
+  if (error instanceof TypeError) return true;
+  if (typeof error !== 'object' || error === null) return false;
+
+  const { name, status, code, message } = error as { name?: unknown; status?: unknown; code?: unknown; message?: unknown };
+  if (name === 'AuthRetryableFetchError' || status === 0) return true;
+  return code === '' && typeof message === 'string' && /^(TypeError|FetchError|AbortError):/.test(message);
+}
+
 /** Translate backend details without leaking them into user-facing copy. */
 export function toListingError(error: unknown): ListingError {
   if (error instanceof ListingError) return error;
 
-  if (error instanceof TypeError) {
+  if (isNetworkFailure(error)) {
     return new ListingError('network', 'The listing service could not be reached.', { cause: error });
   }
 

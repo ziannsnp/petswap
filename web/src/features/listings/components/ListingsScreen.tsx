@@ -3,12 +3,42 @@ import { Home, Image, Pencil, Plus, Trash2 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { useDeleteListing, useMyListings, useSetListingPublicationStatus } from '../hooks/useListings';
 import { listingErrorCode } from '../lib/listingErrors';
+import type { ListingErrorCode } from '../lib/listingErrors';
 import { petSpeciesLabel } from '@/shared/lib/petSpecies';
 import { LISTING_STATUS_STYLES } from '../lib/listingStatus';
 import type { Listing } from '../lib/listingApi';
 import { ListingActionDialog } from './ListingActionDialog';
 
 type ListingAction = 'unpublish' | 'delete';
+
+interface ActionFailure {
+  message: string;
+  /** Network and unknown failures may succeed on a second attempt; the others will not. */
+  canRetry: boolean;
+}
+
+function describeActionFailure(action: ListingAction | 'publish', error: unknown): ActionFailure {
+  const code: ListingErrorCode = listingErrorCode(error);
+  switch (code) {
+    case 'active_booking':
+      return { message: 'This listing has pending or confirmed bookings and cannot be deleted.', canRetry: false };
+    case 'unauthorized':
+      return { message: 'Please sign in again before managing this listing.', canRetry: false };
+    case 'forbidden':
+      return { message: `You cannot ${action} a listing you do not own.`, canRetry: false };
+    case 'not_found':
+      return { message: 'This listing could not be found. Refresh your listings and try again.', canRetry: false };
+    case 'deleted':
+      return { message: 'This listing has already been deleted. Refresh your listings to continue.', canRetry: false };
+    case 'network':
+      return {
+        message: `We could not ${action} this listing because PetSwap could not be reached. Check your connection and try again.`,
+        canRetry: true,
+      };
+    default:
+      return { message: `We could not ${action} this listing. Something went wrong on our side; please try again.`, canRetry: true };
+  }
+}
 
 interface PendingListingAction {
   action: ListingAction;
@@ -19,7 +49,7 @@ interface ListingCardProps {
   listing: Listing;
   isPending: boolean;
   isPublishing: boolean;
-  publishError: boolean;
+  publishError: string | null;
   onRequestAction: (action: ListingAction, listing: Listing) => void;
   onPublish: () => void;
 }
@@ -97,7 +127,7 @@ function ListingCard({ listing, isPending, isPublishing, publishError, onRequest
         </button>
         {publishError && (
           <p className="mt-2 text-xs text-red-700" role="alert">
-            We could not publish this listing. Check your connection and try again.
+            {publishError}
           </p>
         )}
       </div>
@@ -111,11 +141,14 @@ export function ListingsScreen() {
   const publicationMutation = useSetListingPublicationStatus();
   const deleteMutation = useDeleteListing();
   const [pendingAction, setPendingAction] = useState<PendingListingAction | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionFailure, setActionFailure] = useState<ActionFailure | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const [deletedListingId, setDeletedListingId] = useState<string | null>(null);
-  const [publishErrorListingId, setPublishErrorListingId] = useState<string | null>(null);
+  const [publishFailure, setPublishFailure] = useState<{ listingId: string; message: string } | null>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
+  // Set synchronously, so a second click that lands before React re-renders with the
+  // disabled buttons cannot send the same request twice.
+  const actionInFlight = useRef(false);
   const activeListings = listings.filter((listing) => listing.status !== 'deleted');
   const isActionPending = publicationMutation.isPending || deleteMutation.isPending;
   const publishingListingId = publicationMutation.isPending && publicationMutation.variables?.status === 'published'
@@ -132,30 +165,35 @@ export function ListingsScreen() {
   }, [deletedListingId, pendingAction]);
 
   const requestAction = (action: ListingAction, listing: Listing) => {
-    setActionError(null);
+    setActionFailure(null);
     setActionSuccess(null);
     setPendingAction({ action, listing });
   };
 
   const publishListing = async (listing: Listing) => {
-    setPublishErrorListingId(null);
+    if (actionInFlight.current) return;
+    actionInFlight.current = true;
+    setPublishFailure(null);
     setActionSuccess(null);
     try {
       await publicationMutation.mutateAsync({ listingId: listing.id, status: 'published' });
       setActionSuccess(`"${listing.title}" is now published. Pet owners can find it in search.`);
-    } catch {
-      setPublishErrorListingId(listing.id);
+    } catch (error) {
+      setPublishFailure({ listingId: listing.id, message: describeActionFailure('publish', error).message });
+    } finally {
+      actionInFlight.current = false;
     }
   };
 
   const cancelAction = () => {
     setPendingAction(null);
-    setActionError(null);
+    setActionFailure(null);
   };
 
   const confirmAction = async () => {
-    if (!pendingAction) return;
-    setActionError(null);
+    if (!pendingAction || actionInFlight.current) return;
+    actionInFlight.current = true;
+    setActionFailure(null);
     try {
       const { listing } = pendingAction;
       if (pendingAction.action === 'unpublish') {
@@ -168,20 +206,9 @@ export function ListingsScreen() {
       }
       setPendingAction(null);
     } catch (error) {
-      const code = listingErrorCode(error);
-      if (code === 'active_booking') {
-        setActionError('This listing has pending or confirmed bookings and cannot be deleted.');
-      } else if (code === 'unauthorized') {
-        setActionError('Please sign in again before managing this listing.');
-      } else if (code === 'forbidden') {
-        setActionError(`You cannot ${pendingAction.action} a listing you do not own.`);
-      } else if (code === 'not_found') {
-        setActionError('This listing could not be found. Refresh your listings and try again.');
-      } else if (code === 'deleted') {
-        setActionError('This listing has already been deleted. Refresh your listings to continue.');
-      } else {
-        setActionError(`We could not ${pendingAction.action} this listing. Check your connection and try again.`);
-      }
+      setActionFailure(describeActionFailure(pendingAction.action, error));
+    } finally {
+      actionInFlight.current = false;
     }
   };
 
@@ -249,7 +276,7 @@ export function ListingsScreen() {
                 listing={listing}
                 isPending={isActionPending}
                 isPublishing={publishingListingId === listing.id}
-                publishError={publishErrorListingId === listing.id}
+                publishError={publishFailure?.listingId === listing.id ? publishFailure.message : null}
                 onRequestAction={requestAction}
                 onPublish={() => { void publishListing(listing); }}
               />
@@ -263,10 +290,10 @@ export function ListingsScreen() {
         description={pendingAction?.action === 'unpublish'
           ? 'This listing will no longer appear in search and new booking requests will stop. Existing bookings are not changed.'
           : 'This listing will be removed from search and marked as deleted. Listings with pending or confirmed bookings cannot be deleted.'}
-        confirmLabel={actionName}
+        confirmLabel={actionFailure?.canRetry ? 'Try again' : actionName}
         pendingLabel={pendingAction?.action === 'unpublish' ? 'Unpublishing...' : 'Deleting...'}
         isPending={isActionPending}
-        errorMessage={actionError}
+        errorMessage={actionFailure?.message ?? null}
         onCancel={cancelAction}
         onConfirm={() => { void confirmAction(); }}
       />

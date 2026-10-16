@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { ListingError } from '../lib/listingErrors';
+import { networkFailures } from '../testing/listingFixtures';
 import { ListingsScreen } from './ListingsScreen';
 
 // Referenced from inside jest.mock below, which babel hoists above these
@@ -249,6 +250,83 @@ describe('ListingsScreen', () => {
     const publishButton = screen.getByRole('button', { name: 'Publish listing listing-123' });
     expect(publishButton).toHaveTextContent('Publishing...');
     expect(publishButton).toBeDisabled();
+  });
+
+  it.each([
+    ['a dropped connection', networkFailures.postgrest,
+      'We could not delete this listing because PetSwap could not be reached. Check your connection and try again.'],
+    ['an unexpected failure', new Error('boom'),
+      'We could not delete this listing. Something went wrong on our side; please try again.'],
+  ])('explains %s and offers to try again', async (_, failure, explanation) => {
+    const user = userEvent.setup();
+    mockDeleteMutateAsync.mockRejectedValueOnce(failure);
+    renderListings();
+
+    await user.click(screen.getByRole('button', { name: 'Delete listing listing-123' }));
+    await user.click(screen.getByRole('button', { name: /^Delete$/ }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(explanation);
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeEnabled();
+  });
+
+  it('keeps the action label when the refusal will not change on a retry', async () => {
+    const user = userEvent.setup();
+    mockDeleteMutateAsync.mockRejectedValueOnce({ code: 'P0001', message: 'Listing has active bookings and cannot be deleted.' });
+    renderListings();
+
+    await user.click(screen.getByRole('button', { name: 'Delete listing listing-123' }));
+    await user.click(screen.getByRole('button', { name: /^Delete$/ }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('pending or confirmed bookings');
+    expect(screen.getByRole('button', { name: /^Delete$/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument();
+  });
+
+  it('confirms the deletion when a retry after a dropped connection succeeds', async () => {
+    const user = userEvent.setup();
+    mockDeleteMutateAsync.mockRejectedValueOnce(networkFailures.postgrest);
+    renderListings();
+
+    await user.click(screen.getByRole('button', { name: 'Delete listing listing-123' }));
+    await user.click(screen.getByRole('button', { name: /^Delete$/ }));
+    await user.click(await screen.findByRole('button', { name: 'Try again' }));
+
+    expect(await screen.findByRole('status')).toHaveTextContent('"Quiet home" was deleted.');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(mockDeleteMutateAsync).toHaveBeenCalledTimes(2);
+  });
+
+  it('sends one request when an action is confirmed twice in quick succession', async () => {
+    const user = userEvent.setup();
+    mockDeleteMutateAsync.mockReturnValue(new Promise(() => {}));
+    renderListings();
+
+    await user.click(screen.getByRole('button', { name: 'Delete listing listing-123' }));
+    await user.dblClick(screen.getByRole('button', { name: /^Delete$/ }));
+
+    expect(mockDeleteMutateAsync).toHaveBeenCalledTimes(1);
+  });
+
+  it('sends one request when Publish is pressed twice in quick succession', async () => {
+    const user = userEvent.setup();
+    mockListingState.status = 'draft';
+    mockMutateAsync.mockReturnValue(new Promise(() => {}));
+    renderListings();
+
+    await user.dblClick(screen.getByRole('button', { name: 'Publish listing listing-123' }));
+
+    expect(mockMutateAsync).toHaveBeenCalledTimes(1);
+  });
+
+  it('explains on the card why publishing was refused', async () => {
+    const user = userEvent.setup();
+    mockListingState.status = 'draft';
+    mockMutateAsync.mockRejectedValueOnce({ code: '42501', message: 'permission denied for table listings' });
+    renderListings();
+
+    await user.click(screen.getByRole('button', { name: 'Publish listing listing-123' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('You cannot publish a listing you do not own.');
   });
 
   it('keeps the delete confirmation open and explains active bookings', async () => {

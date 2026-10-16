@@ -13,6 +13,7 @@ const mockPetsState: { data: Pet[] | undefined; isPending: boolean; isError: boo
 
 jest.mock('../hooks/usePets', () => ({
   useMyPets: () => mockPetsState,
+  useDeletePet: () => ({ mutateAsync: jest.fn(), isPending: false }),
 }));
 
 function pet(overrides: Partial<Pet>): Pet {
@@ -73,6 +74,16 @@ describe('PetsScreen', () => {
     expect(screen.getByText('Guinea pig · Under 1 year old')).toBeInTheDocument();
     expect(screen.getByText('Cat · 1 year old')).toBeInTheDocument();
     expect(screen.queryByText('No pets yet')).not.toBeInTheDocument();
+  });
+
+  it('gives every pet its own Edit and Delete actions', () => {
+    mockPetsState.data = [pet({ id: 'pet-1', name: 'Mali' }), pet({ id: 'pet-2', name: 'Kiwi' })];
+    renderScreen();
+
+    expect(screen.getByRole('link', { name: 'Edit Mali' })).toHaveAttribute('href', '/pets/pet-1/edit');
+    expect(screen.getByRole('link', { name: 'Edit Kiwi' })).toHaveAttribute('href', '/pets/pet-2/edit');
+    expect(screen.getByRole('button', { name: 'Delete Mali' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Delete Kiwi' })).toBeInTheDocument();
   });
 
   it('explains when pets cannot be loaded', () => {

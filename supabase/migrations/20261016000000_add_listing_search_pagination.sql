@@ -48,6 +48,9 @@ as $$
 declare
   location_pattern text;
   keyword_pattern text;
+  total_rows bigint;
+  resolved_page integer;
+  row_offset bigint;
 begin
   if p_page is null or p_page < 1 then
     raise exception 'Page must be a positive integer.';
@@ -73,60 +76,56 @@ begin
     ) || '%';
   end if;
 
+  select count(*)
+  into total_rows
+  from public.listings as listing
+  where listing.status = 'published'
+    and listing.deleted_at is null
+    and (location_pattern is null or listing.location ilike location_pattern escape E'\\')
+    and (
+      keyword_pattern is null
+      or listing.title ilike keyword_pattern escape E'\\'
+      or listing.description ilike keyword_pattern escape E'\\'
+    );
+
+  resolved_page := case
+    when total_rows = 0 then 1
+    else least(
+      p_page,
+      greatest(1, ceil(total_rows::numeric / p_page_size)::integer)
+    )
+  end;
+  row_offset := (resolved_page - 1)::bigint * p_page_size;
+
   return query
-  with filtered as not materialized (
-    select listing.*
-    from public.listings as listing
-    where listing.status = 'published'
-      and listing.deleted_at is null
-      and (location_pattern is null or listing.location ilike location_pattern escape E'\\')
-      and (
-        keyword_pattern is null
-        or listing.title ilike keyword_pattern escape E'\\'
-        or listing.description ilike keyword_pattern escape E'\\'
-      )
-  ),
-  result_count as (
-    select count(*) as total_count from filtered
-  ),
-  page_state as (
-    select
-      result_count.total_count,
-      case
-        when result_count.total_count = 0 then 1
-        else least(
-          p_page,
-          greatest(1, ceil(result_count.total_count::numeric / p_page_size)::integer)
-        )
-      end as page_number
-    from result_count
-  ),
-  page_rows as (
-    select filtered.*
-    from filtered
-    cross join page_state
-    order by filtered.published_at desc nulls last, filtered.id desc
-    limit p_page_size
-    offset ((page_state.page_number - 1)::bigint * p_page_size)
-  )
   select
-    page_rows.id,
-    page_rows.owner_id,
-    page_rows.title,
-    page_rows.location,
-    page_rows.description,
-    page_rows.capacity,
-    page_rows.accepted_pet_types,
-    page_rows.facilities,
-    page_rows.status,
-    page_rows.deleted_at,
-    page_rows.published_at,
-    page_rows.created_at,
-    page_rows.updated_at,
-    page_state.page_number,
-    page_state.total_count
-  from page_state
-  join page_rows on true;
+    listing.id,
+    listing.owner_id,
+    listing.title,
+    listing.location,
+    listing.description,
+    listing.capacity,
+    listing.accepted_pet_types,
+    listing.facilities,
+    listing.status,
+    listing.deleted_at,
+    listing.published_at,
+    listing.created_at,
+    listing.updated_at,
+    resolved_page,
+    total_rows
+  from public.listings as listing
+  where listing.status = 'published'
+    and listing.deleted_at is null
+    and (location_pattern is null or listing.location ilike location_pattern escape E'\\')
+    and (
+      keyword_pattern is null
+      or listing.title ilike keyword_pattern escape E'\\'
+      or listing.description ilike keyword_pattern escape E'\\'
+    )
+  order by listing.published_at desc nulls last, listing.id desc
+  limit p_page_size
+  offset row_offset;
 end;
 $$;
 

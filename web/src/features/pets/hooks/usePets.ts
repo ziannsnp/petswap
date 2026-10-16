@@ -13,7 +13,8 @@ import {
 export const petKeys = {
   all: ['pets'] as const,
   mine: (ownerId: string) => [...petKeys.all, 'mine', ownerId] as const,
-  detail: (petId: string, ownerId: string) => [...petKeys.all, 'detail', petId, ownerId] as const,
+  allDetails: (petId: string) => [...petKeys.all, 'detail', petId] as const,
+  detail: (petId: string, ownerId: string) => [...petKeys.allDetails(petId), ownerId] as const,
 };
 
 export function useMyPets() {
@@ -85,6 +86,12 @@ export function useDeletePet() {
 
   return useMutation({
     mutationFn: (petId: string) => deletePet(petId),
+    // Invalidating only refetches mounted queries, so the edit screen's cached copy would
+    // otherwise flash the deleted pet before 'Pet not found'. A blocked delete keeps the pet,
+    // so only a successful one drops it.
+    onSuccess: (_data, petId) => {
+      queryClient.removeQueries({ queryKey: petKeys.allDetails(petId) });
+    },
     // deletePet removes the photo before the row, so a failed delete can still change the pet.
     // Bookings are not refreshed: deletePet refuses to delete a pet that has bookings.
     // Returning the promise keeps the dialog open until My Pets has dropped the card.

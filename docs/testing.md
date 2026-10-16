@@ -104,6 +104,8 @@ The CI gate runs lint, typecheck, Jest, and production build for every relevant 
 
 `isValidBookingTransition()` must cover every allowed transition and reject invalid transitions.
 
+`canCompleteBooking()` must allow a confirmed booking on and after its end date, and block it before the end date or from any other status.
+
 ## Database and RLS verification
 
 For schema or policy changes, run from the repository root:

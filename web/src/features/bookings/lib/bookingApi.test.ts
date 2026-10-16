@@ -1,5 +1,5 @@
 import { getSupabaseClient, type AppSupabaseClient } from '@/shared/lib/supabase';
-import { BookingConflictError } from './bookingErrors';
+import { BookingCompletionError, BookingConflictError } from './bookingErrors';
 import { listIncomingBookings, listOutgoingBookings, updateBookingStatus } from './bookingApi';
 
 // Explicit factory so the real module (and its Vite-only `import.meta.env` usage) never loads under Jest.
@@ -136,5 +136,56 @@ describe('updateBookingStatus', () => {
     mockAuthenticatedClient('owner-1', { data: null, error: databaseError });
 
     await expect(updateBookingStatus('booking-1', 'declined')).rejects.toBe(databaseError);
+  });
+});
+
+describe('updateBookingStatus status changes', () => {
+  it.each(['confirmed', 'declined', 'cancelled', 'completed'] as const)(
+    'sends only the new %s status for the chosen booking and returns the saved row',
+    async (status) => {
+      const saved = { ...BOOKING_FIELDS, requester_id: 'requester-1', status };
+      const { builder, from } = mockAuthenticatedClient('user-1', { data: saved, error: null });
+
+      await expect(updateBookingStatus('booking-1', status)).resolves.toEqual(saved);
+
+      expect(from).toHaveBeenCalledWith('bookings');
+      expect(builder.update).toHaveBeenCalledWith({ status });
+      expect(builder.eq).toHaveBeenCalledWith('id', 'booking-1');
+    },
+  );
+
+  it('passes through the error when the database refuses a cancellation', async () => {
+    const databaseError = { code: 'P0001', message: 'invalid booking status transition' };
+    mockAuthenticatedClient('stranger-1', { data: null, error: databaseError });
+
+    await expect(updateBookingStatus('booking-1', 'cancelled')).rejects.toBe(databaseError);
+  });
+
+  it('passes through the error when RLS hides the booking from the caller', async () => {
+    const notFound = { code: 'PGRST116', message: 'JSON object requested, multiple (or no) rows returned' };
+    mockAuthenticatedClient('stranger-1', { data: null, error: notFound });
+
+    await expect(updateBookingStatus('booking-1', 'confirmed')).rejects.toBe(notFound);
+  });
+});
+
+describe('updateBookingStatus completion', () => {
+  it('explains that completion was refused because the stay has not finished', async () => {
+    const databaseError = { code: 'P0001', message: 'invalid booking status transition' };
+    mockAuthenticatedClient('owner-1', { data: null, error: databaseError });
+
+    const update = updateBookingStatus('booking-1', 'completed');
+
+    await expect(update).rejects.toBeInstanceOf(BookingCompletionError);
+    await expect(update).rejects.toThrow(
+      'This booking can only be marked completed once it is confirmed and its end date has arrived.',
+    );
+  });
+
+  it('keeps unrelated errors unchanged when completing', async () => {
+    const databaseError = { code: '42501', message: 'permission denied' };
+    mockAuthenticatedClient('owner-1', { data: null, error: databaseError });
+
+    await expect(updateBookingStatus('booking-1', 'completed')).rejects.toBe(databaseError);
   });
 });

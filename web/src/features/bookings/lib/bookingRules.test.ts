@@ -1,4 +1,4 @@
-import { hasBookingConflict, isValidBookingTransition, assertValidWindow, asUtcDay } from './bookingRules';
+import { hasBookingConflict, isValidBookingTransition, assertValidWindow, asUtcDay, canCompleteBooking } from './bookingRules';
 import type { BookingStatus, ExistingBooking } from '../types';
 
 describe('hasBookingConflict', () => {
@@ -294,5 +294,57 @@ describe('isValidBookingTransition', () => {
         expect(isValidBookingTransition(terminal, target)).toBe(false);
       });
     });
+  });
+});
+
+describe('isValidBookingTransition actor-specific paths', () => {
+  it.each(['confirmed', 'declined'] as const)('lets a listing owner respond to a pending request with %s', (to) => {
+    expect(isValidBookingTransition('pending', to)).toBe(true);
+  });
+
+  it.each(['pending', 'confirmed'] as const)('lets a requester cancel a %s booking', (from) => {
+    expect(isValidBookingTransition(from, 'cancelled')).toBe(true);
+  });
+
+  it.each(['declined', 'cancelled', 'completed'] as const)('does not allow cancelling a %s booking', (from) => {
+    expect(isValidBookingTransition(from, 'cancelled')).toBe(false);
+  });
+
+  it.each(['pending', 'declined', 'cancelled', 'completed'] as const)(
+    'only confirmed bookings can be completed, not %s ones',
+    (from) => {
+      expect(isValidBookingTransition(from, 'completed')).toBe(false);
+    },
+  );
+});
+
+describe('canCompleteBooking', () => {
+  const endDate = '2026-10-10';
+
+  it('allows completing a confirmed booking after its end date', () => {
+    expect(canCompleteBooking({ status: 'confirmed', endDate }, '2026-10-12')).toBe(true);
+  });
+
+  it('allows completing a confirmed booking on its end date (check-out day)', () => {
+    expect(canCompleteBooking({ status: 'confirmed', endDate }, '2026-10-10')).toBe(true);
+  });
+
+  it('blocks completing a confirmed booking before its end date', () => {
+    expect(canCompleteBooking({ status: 'confirmed', endDate }, '2026-10-09')).toBe(false);
+  });
+
+  it('blocks completing a confirmed booking that has not started yet', () => {
+    expect(canCompleteBooking({ status: 'confirmed', endDate }, '2026-09-01')).toBe(false);
+  });
+
+  it.each(['pending', 'declined', 'cancelled', 'completed'] as const)(
+    'blocks completing a %s booking even after its end date',
+    (status) => {
+      expect(canCompleteBooking({ status, endDate }, '2026-10-12')).toBe(false);
+    },
+  );
+
+  it('throws RangeError for an invalid date instead of guessing', () => {
+    expect(() => canCompleteBooking({ status: 'confirmed', endDate }, 'not-a-date')).toThrow(RangeError);
   });
 });

@@ -1,4 +1,4 @@
-import { EMPTY_SEARCH_CRITERIA, filterPublishedListings, isSameSearch, readSearchCriteria, toSearchParams } from './searchCriteria';
+import { EMPTY_SEARCH_CRITERIA, filterPublishedListings, isSameSearch, readSearchCriteria, readSearchPage, toSearchParams } from './searchCriteria';
 import {
   hiddenSearchListings,
   makeSearchResult,
@@ -17,6 +17,22 @@ describe('search criteria in the URL', () => {
   it('leaves blank fields out, so an empty search is the plain browse-all URL', () => {
     expect(toSearchParams({ location: '   ', keyword: '' }).toString()).toBe('');
     expect(toSearchParams({ location: ' Bangkok ', keyword: '' }).toString()).toBe('location=Bangkok');
+  });
+
+  it('reads only positive safe-integer page values and defaults invalid values to the first page', () => {
+    expect(readSearchPage(new URLSearchParams('page=3'))).toBe(3);
+    expect(readSearchPage(new URLSearchParams('page=0'))).toBe(1);
+    expect(readSearchPage(new URLSearchParams('page=-2'))).toBe(1);
+    expect(readSearchPage(new URLSearchParams('page=2.5'))).toBe(1);
+    expect(readSearchPage(new URLSearchParams('page=9007199254740992'))).toBe(1);
+    expect(readSearchPage(new URLSearchParams('page=2147483648'))).toBe(2147483647);
+    expect(readSearchPage(new URLSearchParams(''))).toBe(1);
+  });
+
+  it('stores later pages beside the applied search while omitting the first page', () => {
+    const criteria = { location: 'Bangkok', keyword: 'garden' };
+    expect(toSearchParams(criteria).toString()).toBe('location=Bangkok&keyword=garden');
+    expect(toSearchParams(criteria, 2).toString()).toBe('location=Bangkok&keyword=garden&page=2');
   });
 
   it('treats searches that differ only in surrounding spaces as the same search', () => {

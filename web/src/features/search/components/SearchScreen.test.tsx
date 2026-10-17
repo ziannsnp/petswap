@@ -1,19 +1,23 @@
 /** @jest-environment jsdom */
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, useLocation, useNavigate, useNavigationType } from 'react-router-dom';
-import { usePublishedListings } from '@/features/listings';
+import { usePublishedListingPage } from '@/features/listings';
 import { hiddenSearchListings, makeSearchResult, searchMatchListings } from '../testing/searchFixtures';
 import { SearchScreen } from './SearchScreen';
 
 // Only the data hook is replaced. Pet-type labels come from @/shared/lib/petSpecies, which
 // is not mocked, so the cards show the same labels as the rest of the app.
 jest.mock('@/features/listings', () => ({
-  usePublishedListings: jest.fn(),
+  usePublishedListingPage: jest.fn(),
 }));
 
-const mockedUsePublishedListings = jest.mocked(usePublishedListings);
+const mockedUsePublishedListingPage = jest.mocked(usePublishedListingPage);
 const mockRefetch = jest.fn();
+
+function makePage(listings: ReturnType<typeof makeSearchResult>[], totalCount = listings.length, page = 1) {
+  return { listings, totalCount, page, pageSize: 9 };
+}
 
 // Shows what the browser would: the URL's query string, how the last navigation happened,
 // and a back button.
@@ -42,28 +46,28 @@ function renderSearchAt(url: string) {
 const urlSearch = () => screen.getByTestId('url-search').textContent;
 
 beforeEach(() => {
-  mockedUsePublishedListings.mockReturnValue({
-    data: [
+  mockedUsePublishedListingPage.mockReturnValue({
+    data: makePage([
       makeSearchResult({ id: 'listing-1', title: 'Sunny garden room' }),
       makeSearchResult({ id: 'listing-2', title: 'Quiet studio with catio', accepted_pet_types: ['cat'] }),
-    ],
+    ]),
     isPending: false,
     isError: false,
     isFetching: false,
     refetch: mockRefetch,
-  } as unknown as ReturnType<typeof usePublishedListings>);
+  } as unknown as ReturnType<typeof usePublishedListingPage>);
   mockRefetch.mockReset();
 });
 
 describe('SearchScreen', () => {
   it('shows an initial loading state before listings arrive', () => {
-    mockedUsePublishedListings.mockReturnValue({
+    mockedUsePublishedListingPage.mockReturnValue({
       data: undefined,
       isPending: true,
       isError: false,
       isFetching: true,
       refetch: mockRefetch,
-    } as unknown as ReturnType<typeof usePublishedListings>);
+    } as unknown as ReturnType<typeof usePublishedListingPage>);
 
     renderSearchAt('/');
 
@@ -72,13 +76,13 @@ describe('SearchScreen', () => {
   });
 
   it('shows an active-search loading state while results are being refreshed', () => {
-    mockedUsePublishedListings.mockReturnValue({
-      data: [makeSearchResult()],
+    mockedUsePublishedListingPage.mockReturnValue({
+      data: makePage([makeSearchResult()]),
       isPending: false,
       isError: false,
       isFetching: true,
       refetch: mockRefetch,
-    } as unknown as ReturnType<typeof usePublishedListings>);
+    } as unknown as ReturnType<typeof usePublishedListingPage>);
 
     renderSearchAt('/?keyword=garden');
 
@@ -88,13 +92,13 @@ describe('SearchScreen', () => {
 
   it('shows a retryable error state when the listings API fails', async () => {
     const user = userEvent.setup();
-    mockedUsePublishedListings.mockReturnValue({
+    mockedUsePublishedListingPage.mockReturnValue({
       data: undefined,
       isPending: false,
       isError: true,
       isFetching: false,
       refetch: mockRefetch,
-    } as unknown as ReturnType<typeof usePublishedListings>);
+    } as unknown as ReturnType<typeof usePublishedListingPage>);
 
     renderSearchAt('/?keyword=garden');
     expect(screen.getByRole('alert')).toHaveTextContent('We could not load listings');
@@ -104,13 +108,13 @@ describe('SearchScreen', () => {
   });
 
   it('shows a browse-all empty state when no published listings exist', () => {
-    mockedUsePublishedListings.mockReturnValue({
-      data: [],
+    mockedUsePublishedListingPage.mockReturnValue({
+      data: makePage([], 0),
       isPending: false,
       isError: false,
       isFetching: false,
       refetch: mockRefetch,
-    } as unknown as ReturnType<typeof usePublishedListings>);
+    } as unknown as ReturnType<typeof usePublishedListingPage>);
 
     renderSearchAt('/');
 
@@ -119,13 +123,13 @@ describe('SearchScreen', () => {
 
   it('shows a no-results state and clears the applied search', async () => {
     const user = userEvent.setup();
-    mockedUsePublishedListings.mockReturnValue({
-      data: [makeSearchResult()],
+    mockedUsePublishedListingPage.mockReturnValue({
+      data: makePage([makeSearchResult()]),
       isPending: false,
       isError: false,
       isFetching: false,
       refetch: mockRefetch,
-    } as unknown as ReturnType<typeof usePublishedListings>);
+    } as unknown as ReturnType<typeof usePublishedListingPage>);
 
     renderSearchAt('/?keyword=does-not-exist');
 
@@ -143,16 +147,71 @@ describe('SearchScreen', () => {
     expect(within(results).getByRole('link', { name: 'Sunny garden room' })).toHaveAttribute('href', '/listings/listing-1');
   });
 
-  it('filters results by trimmed, case-insensitive location and keyword', async () => {
+  it('keeps the applied search in the URL when moving between result pages', async () => {
     const user = userEvent.setup();
-    mockedUsePublishedListings.mockReturnValue({
-      data: [
-        makeSearchResult({ id: 'chiang-mai', location: 'Chiang Mai, Hang Dong', title: 'Quiet garden home' }),
-        makeSearchResult({ id: 'bangkok', location: 'Bangkok', title: 'City studio' }),
-      ],
+    const firstPage = makeSearchResult({ id: 'page-one', title: 'Garden home page one', location: 'Bangkok' });
+    const secondPage = makeSearchResult({ id: 'page-two', title: 'Garden home page two', location: 'Bangkok' });
+    mockedUsePublishedListingPage.mockImplementation(({ page }) => ({
+      data: makePage([page === 1 ? firstPage : secondPage], 10, page),
       isPending: false,
       isError: false,
-    } as unknown as ReturnType<typeof usePublishedListings>);
+      isFetching: false,
+      refetch: mockRefetch,
+    } as unknown as ReturnType<typeof usePublishedListingPage>));
+
+    renderSearchAt('/?location=Bangkok&keyword=garden');
+
+    expect(screen.getByText('Page 1 of 2')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Next' }));
+
+    expect(urlSearch()).toBe('?location=Bangkok&keyword=garden&page=2');
+    expect(screen.getByText('Page 2 of 2')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Garden home page two' })).toBeInTheDocument();
+  });
+
+  it('resets the page to the first when a new search is submitted', async () => {
+    const user = userEvent.setup();
+    mockedUsePublishedListingPage.mockImplementation(({ page }) => ({
+      data: makePage([makeSearchResult({ id: `page-${page}` })], 20, page),
+      isPending: false,
+      isError: false,
+      isFetching: false,
+      refetch: mockRefetch,
+    } as unknown as ReturnType<typeof usePublishedListingPage>));
+
+    renderSearchAt('/?location=Bangkok&page=2');
+    await user.clear(screen.getByLabelText('Keyword'));
+    await user.type(screen.getByLabelText('Keyword'), 'garden');
+    await user.click(screen.getByRole('button', { name: 'Search' }));
+
+    expect(urlSearch()).toBe('?location=Bangkok&keyword=garden');
+  });
+
+  it('replaces a page beyond the result range with the last available page', async () => {
+    mockedUsePublishedListingPage.mockImplementation(({ page }) => ({
+      data: makePage([makeSearchResult({ id: 'last-page' })], 10, page > 2 ? 2 : page),
+      isPending: false,
+      isError: false,
+      isFetching: false,
+      refetch: mockRefetch,
+    } as unknown as ReturnType<typeof usePublishedListingPage>));
+
+    renderSearchAt('/?keyword=garden&page=99');
+
+    await waitFor(() => expect(urlSearch()).toBe('?keyword=garden&page=2'));
+    expect(screen.getByText('Page 2 of 2')).toBeInTheDocument();
+  });
+
+  it('filters results by trimmed, case-insensitive location and keyword', async () => {
+    const user = userEvent.setup();
+    mockedUsePublishedListingPage.mockReturnValue({
+      data: makePage([
+        makeSearchResult({ id: 'chiang-mai', location: 'Chiang Mai, Hang Dong', title: 'Quiet garden home' }),
+        makeSearchResult({ id: 'bangkok', location: 'Bangkok', title: 'City studio' }),
+      ]),
+      isPending: false,
+      isError: false,
+    } as unknown as ReturnType<typeof usePublishedListingPage>);
 
     renderSearchAt('/');
     await user.type(screen.getByLabelText('Location'), '  CHIANG mai  ');
@@ -166,14 +225,14 @@ describe('SearchScreen', () => {
 
   it('treats wildcard characters as literal keyword text', async () => {
     const user = userEvent.setup();
-    mockedUsePublishedListings.mockReturnValue({
-      data: [
+    mockedUsePublishedListingPage.mockReturnValue({
+      data: makePage([
         makeSearchResult({ id: 'literal', title: '100% safe (indoors)' }),
         makeSearchResult({ id: 'ordinary', title: 'Garden home' }),
-      ],
+      ]),
       isPending: false,
       isError: false,
-    } as unknown as ReturnType<typeof usePublishedListings>);
+    } as unknown as ReturnType<typeof usePublishedListingPage>);
 
     renderSearchAt('/');
     await user.type(screen.getByLabelText('Keyword'), '%');
@@ -185,15 +244,15 @@ describe('SearchScreen', () => {
   });
 
   it('never renders a draft or deleted row even if one reaches the search response', () => {
-    mockedUsePublishedListings.mockReturnValue({
-      data: [
+    mockedUsePublishedListingPage.mockReturnValue({
+      data: makePage([
         makeSearchResult({ id: 'published' }),
         makeSearchResult({ id: 'draft', title: 'Private draft', status: 'draft' }),
         makeSearchResult({ id: 'deleted', title: 'Deleted place', status: 'deleted', deleted_at: '2026-10-01T00:00:00.000Z' }),
-      ],
+      ]),
       isPending: false,
       isError: false,
-    } as unknown as ReturnType<typeof usePublishedListings>);
+    } as unknown as ReturnType<typeof usePublishedListingPage>);
 
     renderSearchAt('/');
 
@@ -204,11 +263,11 @@ describe('SearchScreen', () => {
   });
 
   it('shows only the published matches when hidden listings match the search too', () => {
-    mockedUsePublishedListings.mockReturnValue({
-      data: [...searchMatchListings, ...hiddenSearchListings],
+    mockedUsePublishedListingPage.mockReturnValue({
+      data: makePage([...searchMatchListings, ...hiddenSearchListings]),
       isPending: false,
       isError: false,
-    } as unknown as ReturnType<typeof usePublishedListings>);
+    } as unknown as ReturnType<typeof usePublishedListingPage>);
 
     renderSearchAt('/?keyword=garden');
 
@@ -219,11 +278,11 @@ describe('SearchScreen', () => {
   });
 
   it('shows the no-results state when only a hidden listing matches', () => {
-    mockedUsePublishedListings.mockReturnValue({
-      data: [...searchMatchListings, ...hiddenSearchListings],
+    mockedUsePublishedListingPage.mockReturnValue({
+      data: makePage([...searchMatchListings, ...hiddenSearchListings]),
       isPending: false,
       isError: false,
-    } as unknown as ReturnType<typeof usePublishedListings>);
+    } as unknown as ReturnType<typeof usePublishedListingPage>);
 
     renderSearchAt('/?keyword=suite');
 

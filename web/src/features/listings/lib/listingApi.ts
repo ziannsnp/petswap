@@ -56,6 +56,20 @@ export type Listing = Database['public']['Tables']['listings']['Row'] & {
   host: ListingHost | null;
 };
 
+export interface PublishedListingQuery {
+  location: string;
+  keyword: string;
+  page: number;
+}
+
+export interface PublishedListingPage {
+  listings: Listing[];
+  page: number;
+  pageSize: number;
+  totalCount: number;
+}
+
+export const PUBLISHED_LISTINGS_PAGE_SIZE = 9;
 export type ListingDetailResponse = Listing;
 
 const LISTING_PHOTO_SIGNED_URL_TTL_SECONDS = 3_600;
@@ -351,6 +365,73 @@ async function addSignedPhotoUrls(
   };
 }
 
+export async function searchPublishedListings(query: PublishedListingQuery): Promise<PublishedListingPage> {
+  const { data, error } = await getSupabaseClient().rpc('search_published_listings', {
+    p_location: query.location,
+    p_keyword: query.keyword,
+    p_page: query.page,
+    p_page_size: PUBLISHED_LISTINGS_PAGE_SIZE,
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  const pageRows = data ?? [];
+  const listingIds = pageRows.map((listing) => listing.id);
+  let imageRows: Database['public']['Tables']['listing_images']['Row'][] = [];
+
+  if (listingIds.length > 0) {
+    const imageResponse = await getSupabaseClient()
+      .from('listing_images')
+      .select('*')
+      .in('listing_id', listingIds)
+      .order('sort_order', { ascending: true })
+      .order('id', { ascending: true });
+
+    if (imageResponse.error) {
+      throw imageResponse.error;
+    }
+    imageRows = imageResponse.data ?? [];
+  }
+
+  const imagesByListing = new Map<string, Database['public']['Tables']['listing_images']['Row'][]>();
+  for (const image of imageRows) {
+    const images = imagesByListing.get(image.listing_id) ?? [];
+    images.push(image);
+    imagesByListing.set(image.listing_id, images);
+  }
+
+  const listings = await Promise.all(pageRows.map((row) => {
+    const listing: Database['public']['Tables']['listings']['Row'] = {
+      id: row.id,
+      owner_id: row.owner_id,
+      title: row.title,
+      location: row.location,
+      description: row.description,
+      capacity: row.capacity,
+      accepted_pet_types: row.accepted_pet_types,
+      facilities: row.facilities,
+      status: row.status,
+      deleted_at: row.deleted_at,
+      published_at: row.published_at,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+    };
+    return addSignedPhotoUrls({
+      ...listing,
+      listing_images: imagesByListing.get(listing.id) ?? [],
+    });
+  }));
+
+  return {
+    listings,
+    page: pageRows[0]?.page_number ?? 1,
+    pageSize: PUBLISHED_LISTINGS_PAGE_SIZE,
+    totalCount: Number(pageRows[0]?.total_count ?? 0),
+  };
+}
+
 async function getListingHost(listingId: string): Promise<ListingHost | null> {
   try {
     const { data, error } = await getSupabaseClient().rpc('get_listing_host', {
@@ -372,11 +453,10 @@ export async function listPublishedListings(): Promise<Listing[]> {
     .select('*, listing_images(*)')
     .eq('status', 'published')
     .is('deleted_at', null)
-    .order('published_at', { ascending: false });
+    .order('published_at', { ascending: false })
+    .order('id', { ascending: false });
 
-  if (error) {
-    throw error;
-  }
+  if (error) throw error;
 
   return Promise.all((data ?? []).map((listing) => addSignedPhotoUrls({
     ...listing,

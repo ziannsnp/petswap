@@ -56,6 +56,32 @@ describe('parsePetForm', () => {
     expect(parsePetForm({ ...validValues, age: '99999999999' }).ok).toBe(false);
   });
 
+  it.each([
+    ['surrounding spaces', '  3  ', 3],
+    ['leading zeros', '007', 7],
+  ])('accepts an age with %s', (_, age, ageYear) => {
+    expect(parsePetForm({ ...validValues, age })).toEqual({
+      ok: true,
+      values: expect.objectContaining({ ageYear }),
+    });
+  });
+
+  it('reports an invalid age together with the missing required fields', () => {
+    const result = parsePetForm({ ...validValues, name: '', age: '-2' });
+    expect(result).toEqual({
+      ok: false,
+      errors: { name: 'Pet name is required.', age: 'Age must be a whole number of years, 0 or more.' },
+    });
+  });
+
+  // Photo changes come from the photo picker, so parsing the text fields must never
+  // produce a photo value that could replace or clear the stored one.
+  it('never returns photo fields', () => {
+    const result = parsePetForm(validValues);
+    expect(result.ok && result.values).not.toHaveProperty('photo');
+    expect(result.ok && result.values).not.toHaveProperty('removePhoto');
+  });
+
   it('reports every missing required field at once', () => {
     const result = parsePetForm({ name: '', species: '', breed: '', age: '', description: '' });
     expect(result.ok).toBe(false);

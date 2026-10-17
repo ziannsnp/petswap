@@ -1,8 +1,9 @@
 /** @jest-environment jsdom */
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import type { Pet } from '../lib/petApi';
+import { cropPhoto } from '@/shared/lib/photoCrop';
 import { EditPetScreen } from './EditPetScreen';
 
 // jest.mock is hoisted above these declarations, so referenced state must be named mock*.
@@ -18,9 +19,11 @@ const mockUsePet = jest.fn((petId: string) => {
   void petId;
   return mockPetState;
 });
+const mockPhotoUrlState: { data: string | undefined } = { data: undefined };
 
 jest.mock('../hooks/usePets', () => ({
   usePet: (petId: string) => mockUsePet(petId),
+  usePetPhotoUrl: () => mockPhotoUrlState,
   useUpdatePet: () => ({
     mutateAsync: mockMutateAsync,
     reset: mockReset,
@@ -28,6 +31,26 @@ jest.mock('../hooks/usePets', () => ({
     isError: mockMutationState.isError,
   }),
 }));
+
+// Canvas is not implemented in jsdom; photoCrop.test.ts covers the drawing itself.
+jest.mock('@/shared/lib/photoCrop', () => ({
+  ...jest.requireActual('@/shared/lib/photoCrop'),
+  cropPhoto: jest.fn(),
+}));
+
+const mockCropPhoto = jest.mocked(cropPhoto);
+const croppedPhoto = new File(['cropped'], 'cropped.jpg', { type: 'image/jpeg' });
+
+/** Chooses a photo and accepts the default crop, as an owner pressing "Use photo" would. */
+async function chooseAndCropPhoto(user: ReturnType<typeof userEvent.setup>, file: File) {
+  await user.upload(screen.getByLabelText('Pet photo'), file);
+  const image = await screen.findByAltText('Photo being cropped');
+  Object.defineProperty(image, 'naturalWidth', { value: 400, configurable: true });
+  Object.defineProperty(image, 'naturalHeight', { value: 300, configurable: true });
+  fireEvent.load(image);
+  await user.click(screen.getByRole('button', { name: 'Use photo' }));
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+}
 
 const PET_ID = '20000000-0000-4000-8000-000000000004';
 
@@ -74,6 +97,9 @@ beforeEach(() => {
   jest.clearAllMocks();
   Object.assign(mockPetState, { data: rocket, isPending: false, isError: false });
   Object.assign(mockMutationState, { isPending: false, isError: false });
+  mockPhotoUrlState.data = 'https://signed.example/rocket.png';
+  URL.createObjectURL = jest.fn(() => 'blob:pet-photo-preview');
+  URL.revokeObjectURL = jest.fn();
   mockMutateAsync.mockResolvedValue(rocket);
 });
 
@@ -142,6 +168,71 @@ describe('EditPetScreen', () => {
     expect(mockMutateAsync.mock.calls[0][0].values).not.toHaveProperty('photo');
     expect(mockMutateAsync.mock.calls[0][0].values).not.toHaveProperty('removePhoto');
     expect(await screen.findByText('Pets page after save')).toBeInTheDocument();
+  });
+
+  it('shows the stored photo', () => {
+    renderScreen();
+
+    expect(screen.getByRole('img', { name: 'Current pet photo' })).toHaveAttribute('src', 'https://signed.example/rocket.png');
+    expect(screen.getByRole('button', { name: 'Change photo' })).toBeInTheDocument();
+  });
+
+  it('offers to change the stored photo while its URL is still loading', () => {
+    mockPhotoUrlState.data = undefined;
+    renderScreen();
+
+    expect(screen.queryByRole('img')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Change photo' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Remove photo' })).toBeInTheDocument();
+  });
+
+  it('saves a cropped replacement photo', async () => {
+    const user = userEvent.setup();
+    mockCropPhoto.mockResolvedValue(croppedPhoto);
+    renderScreen();
+
+    await chooseAndCropPhoto(user, new File(['photo'], 'rocket-new.webp', { type: 'image/webp' }));
+    expect(screen.getByRole('img', { name: 'Preview of the chosen pet photo' })).toHaveAttribute('src', 'blob:pet-photo-preview');
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    expect(mockMutateAsync).toHaveBeenCalledWith({
+      petId: PET_ID,
+      values: expect.objectContaining({ name: 'Rocket', photo: croppedPhoto }),
+    });
+    expect(mockMutateAsync.mock.calls[0][0].values).not.toHaveProperty('removePhoto');
+  });
+
+  it('removes the stored photo on save', async () => {
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.click(screen.getByRole('button', { name: 'Remove photo' }));
+
+    expect(screen.queryByRole('img')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Choose photo' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    expect(mockMutateAsync).toHaveBeenCalledWith({
+      petId: PET_ID,
+      values: expect.objectContaining({ removePhoto: true }),
+    });
+    expect(mockMutateAsync.mock.calls[0][0].values).not.toHaveProperty('photo');
+  });
+
+  it('does not ask to remove a photo the pet never had', async () => {
+    const user = userEvent.setup();
+    mockPetState.data = { ...rocket, photo_url: null };
+    mockPhotoUrlState.data = undefined;
+    renderScreen();
+
+    mockCropPhoto.mockResolvedValue(croppedPhoto);
+    await chooseAndCropPhoto(user, new File(['photo'], 'rocket.png', { type: 'image/png' }));
+    await user.click(screen.getByRole('button', { name: 'Remove photo' }));
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    expect(mockMutateAsync.mock.calls[0][0].values).not.toHaveProperty('photo');
+    expect(mockMutateAsync.mock.calls[0][0].values).not.toHaveProperty('removePhoto');
   });
 
   it('blocks saving when a required field is cleared', async () => {

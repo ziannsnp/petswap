@@ -14,6 +14,7 @@ const mockPetsState: { data: Pet[] | undefined; isPending: boolean; isError: boo
 jest.mock('../hooks/usePets', () => ({
   useMyPets: () => mockPetsState,
   useDeletePet: () => ({ mutateAsync: jest.fn(), isPending: false }),
+  usePetPhotoUrl: () => ({ data: undefined }),
 }));
 
 function pet(overrides: Partial<Pet>): Pet {

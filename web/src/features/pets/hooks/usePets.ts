@@ -4,7 +4,9 @@ import {
   createPet,
   deletePet,
   getPet,
+  getPetPhotoSignedUrl,
   listMyPets,
+  PET_PHOTO_SIGNED_URL_TTL_SECONDS,
   updatePet,
   type CreatePetValues,
   type UpdatePetValues,
@@ -15,7 +17,20 @@ export const petKeys = {
   mine: (ownerId: string) => [...petKeys.all, 'mine', ownerId] as const,
   allDetails: (petId: string) => [...petKeys.all, 'detail', petId] as const,
   detail: (petId: string, ownerId: string) => [...petKeys.allDetails(petId), ownerId] as const,
+  photo: (photoPath: string) => [...petKeys.all, 'photo', photoPath] as const,
 };
+
+/** Pet photos sit in a private bucket, so they are shown through short-lived signed URLs. */
+export function usePetPhotoUrl(photoPath: string | null) {
+  return useQuery({
+    queryKey: petKeys.photo(photoPath ?? ''),
+    // enabled guarantees photoPath is set whenever the query runs.
+    queryFn: () => getPetPhotoSignedUrl(photoPath as string),
+    enabled: Boolean(photoPath),
+    // Sign a fresh URL five minutes before the cached one expires.
+    staleTime: (PET_PHOTO_SIGNED_URL_TTL_SECONDS - 300) * 1000,
+  });
+}
 
 export function useMyPets() {
   const { user, isLoading } = useAuth();

@@ -1,21 +1,20 @@
 import { ArrowLeft, PawPrint } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { usePet, useUpdatePet } from '../hooks/usePets';
-import type { CreatePetValues, Pet } from '../lib/petApi';
+import { usePet, usePetPhotoUrl, useUpdatePet } from '../hooks/usePets';
+import type { Pet, UpdatePetValues } from '../lib/petApi';
 import { petToFormValues } from '../lib/petForm';
 import { PetForm } from './PetForm';
 
 function EditPetForm({ pet }: { pet: Pet }) {
   const navigate = useNavigate();
   const updatePetMutation = useUpdatePet();
+  const { data: savedPhotoUrl } = usePetPhotoUrl(pet.photo_url);
 
-  const handleSubmit = async ({ name, species, breed, ageYear, description }: CreatePetValues) => {
+  const handleSubmit = async (values: UpdatePetValues) => {
     try {
-      // Only the text fields: photo changes belong to the photo picker, so saving here never removes a photo.
-      await updatePetMutation.mutateAsync({
-        petId: pet.id,
-        values: { name, species, breed, ageYear, description },
-      });
+      // PetForm adds photo or removePhoto only when the owner changed the photo, so an
+      // untouched picker keeps the stored photo.
+      await updatePetMutation.mutateAsync({ petId: pet.id, values });
       // replace, so browser Back from My Pets does not reopen the form that was just saved.
       void navigate('/pets', { replace: true, state: { petSaved: true } });
     } catch {
@@ -26,6 +25,8 @@ function EditPetForm({ pet }: { pet: Pet }) {
   return (
     <PetForm
       initialValues={petToFormValues(pet)}
+      hasSavedPhoto={Boolean(pet.photo_url)}
+      savedPhotoUrl={savedPhotoUrl}
       submitLabel="Save changes"
       pendingLabel="Saving changes..."
       isSubmitting={updatePetMutation.isPending}

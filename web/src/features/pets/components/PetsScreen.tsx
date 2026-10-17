@@ -1,12 +1,19 @@
+import { useEffect, useState } from 'react';
 import { PawPrint, Plus } from 'lucide-react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useMyPets } from '../hooks/usePets';
 import { PetCard } from './PetCard';
 
 export function PetsScreen() {
   const location = useLocation();
-  const { data: pets = [], isPending, isError } = useMyPets();
-  const petSaved = location.state?.petSaved === true;
+  const navigate = useNavigate();
+  const { data: pets, isPending, isError } = useMyPets();
+  // Read once, then cleared from the history entry, so a refresh does not confirm the save again.
+  const [petSaved] = useState(location.state?.petSaved === true);
+
+  useEffect(() => {
+    if (location.state?.petSaved) void navigate(location.pathname, { replace: true, state: null });
+  }, [location.pathname, location.state, navigate]);
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900">
@@ -37,7 +44,10 @@ export function PetsScreen() {
           </div>
         )}
 
-        {isError && (
+        {/* A failed background refetch keeps the loaded pets, so the error only replaces the list
+            when there is none. Otherwise a failed delete would unmount the card, and with it the
+            dialog that explains the failure. */}
+        {isError && !pets && (
           <section className="flex min-h-80 flex-col items-center justify-center rounded-lg border border-dashed border-gray-300 bg-white p-6 text-center" role="alert">
             <PawPrint className="h-10 w-10 text-brand-600" aria-hidden="true" />
             <h2 className="mt-4 text-lg font-semibold">We could not load your pets</h2>
@@ -45,7 +55,7 @@ export function PetsScreen() {
           </section>
         )}
 
-        {!isPending && !isError && pets.length === 0 && (
+        {pets?.length === 0 && (
           <section className="flex min-h-80 flex-col items-center justify-center rounded-lg border border-dashed border-gray-300 bg-white p-6 text-center">
             <PawPrint className="h-10 w-10 text-brand-600" aria-hidden="true" />
             <h2 className="mt-4 text-lg font-semibold">No pets yet</h2>
@@ -54,7 +64,7 @@ export function PetsScreen() {
           </section>
         )}
 
-        {!isPending && !isError && pets.length > 0 && (
+        {pets && pets.length > 0 && (
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
             {pets.map((pet) => <PetCard key={pet.id} pet={pet} />)}
           </div>

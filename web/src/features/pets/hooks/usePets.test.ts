@@ -214,6 +214,17 @@ describe('useCreatePet', () => {
 
     await expectToWaitFor(Promise.resolve(options?.onSettled?.({} as never, null, values, undefined, undefined as never)), [refetch]);
   });
+
+  it('starts the refetch after a failed create but does not make the error wait for it', () => {
+    const invalidateQueries = jest.fn(() => new Promise(() => {}));
+    mockedUseQueryClient.mockReturnValue({ invalidateQueries } as never);
+
+    useCreatePet();
+    const options = mockedUseMutation.mock.lastCall?.[0];
+
+    expect(options?.onSettled?.(undefined, new Error('network down'), values, undefined, undefined as never)).toBeUndefined();
+    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['pets'], refetchType: 'all' });
+  });
 });
 
 describe('useUpdatePet', () => {
@@ -257,6 +268,15 @@ describe('useUpdatePet', () => {
     );
 
     await expectToWaitFor(settled, [petsRefetch, bookingsRefetch]);
+  });
+
+  it('does not make a failed update wait for the refetches', () => {
+    mockedUseQueryClient.mockReturnValue({ invalidateQueries: jest.fn(() => new Promise(() => {})) } as never);
+
+    useUpdatePet();
+    const options = mockedUseMutation.mock.lastCall?.[0];
+
+    expect(options?.onSettled?.(undefined, new Error('network down'), { petId: 'pet-1', values }, undefined, undefined as never)).toBeUndefined();
   });
 });
 

@@ -161,3 +161,17 @@ After `npx supabase db reset`, configure `web/.env.local` with the local API URL
 4. Verify a non-owner cannot call the delete RPC for that listing, and direct API updates or deletes cannot restore or hard-delete it.
 
 Public listing details, host/owner profiles, search, pet profiles, and bookings belong to their separate user stories and are not acceptance evidence for US-2.2 listing editing.
+
+## Manual pet edit and delete journey
+
+After `npx supabase db reset`, run `npm run dev` from `web/` and sign in as `alex@petswap.test`. Alex owns Miso (no bookings) and Nimbus (a pending booking), and can read Casey's Rocket and Blair's Pixel only because they are booked at Alex's listing. Run it on desktop and mobile, resetting the database between passes. Recorded evidence: [`qa/pet-edit-delete-2026-10-17.md`](qa/pet-edit-delete-2026-10-17.md).
+
+1. Open **My Pets**, choose **Edit** on Miso, change every text field, and save. Confirm **Pet saved successfully.**, the new values on the card, and that they persist after a refresh. **Cancel** must leave the pet unchanged.
+2. Try a blank name or description and an age below 0, fractional, or above 100. Each must be rejected without saving or losing the rest of the form.
+3. Change the photo (with **Adjust crop**), then remove it, saving each time. An unsupported file type or a photo above 10 MB must be rejected straight away, keeping the current photo.
+4. Save with the browser offline: the save waits and must complete once the browser is back online. Save with the browser online but Supabase unreachable: the form must keep the input and show an error.
+5. Open the edit URL for a pet that does not exist, a malformed id, and Rocket. Each must show **Pet not found**. Signed out, the URL must redirect to `/login`.
+6. Choose **Delete** on a pet. Focus must start on **Cancel**, and Cancel, Escape, and the backdrop must each close the dialog, keep the pet, and return focus to the **Delete** button.
+7. Delete Nimbus after giving it a photo. Any booking, whatever its status, blocks the delete, since the booking keeps a reference to the pet. The dialog must stay open with **Nimbus has bookings, so it can't be deleted.**, and the pet and its photo must remain.
+8. Delete Miso with Supabase unreachable. The dialog must explain the failure, and the pet must remain.
+9. Open Miso's edit screen, return to My Pets, and delete Miso. It must disappear from My Pets, also after a refresh, and browser Back to its edit URL must show **Pet not found** without first showing the deleted pet.

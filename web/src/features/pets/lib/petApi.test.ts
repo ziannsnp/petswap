@@ -14,6 +14,7 @@ import {
   type UpdatePetValues,
 } from './petApi';
 import { PetHasBookingsError } from './petErrors';
+import { validatePetPhoto as validatePetPhotoRule } from './petPhoto';
 
 jest.mock('@/shared/lib/supabase', () => ({
   getSupabaseClient: jest.fn(),
@@ -29,18 +30,10 @@ afterEach(() => {
   jest.clearAllMocks();
 });
 
-describe('validatePetPhoto', () => {
-  it.each(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])('accepts valid MIME type %s', (type) => {
-    expect(validatePetPhoto({ type, size: 1024 })).toBeNull();
-  });
-
-  it.each(['image/svg+xml', 'application/pdf', 'application/octet-stream', ''])('rejects unsupported MIME type %p', (type) => {
-    expect(validatePetPhoto({ type, size: 1024 })).toMatch(/unsupported file type/i);
-  });
-
-  it('accepts photos up to the 10 MB limit and rejects photos exceeding it', () => {
-    expect(validatePetPhoto({ type: 'image/png', size: PET_PHOTO_MAX_BYTES })).toBeNull();
-    expect(validatePetPhoto({ type: 'image/png', size: PET_PHOTO_MAX_BYTES + 1 })).toMatch(/10 MB limit/);
+// The rules themselves are tested in petPhoto.test.ts; this checks petApi still exposes them.
+describe('validatePetPhoto re-export', () => {
+  it('is the same function the form uses', () => {
+    expect(validatePetPhoto).toBe(validatePetPhotoRule);
   });
 });
 
@@ -810,6 +803,90 @@ describe('createPet', () => {
     );
     expect((caughtError as Error).cause).toBe(updateError);
     expect(deleteMethod).toHaveBeenCalled();
+  });
+});
+
+// A dropped connection rejects the storage promise instead of resolving with `error`,
+// so rollback must handle both shapes.
+describe('createPet rollback when a storage call throws', () => {
+  const values = {
+    name: 'Rocket',
+    species: 'dog' as const,
+    breed: '',
+    ageYear: null,
+    description: 'Loves agility',
+  };
+
+  function setupCreateMocks({
+    upload,
+    updateError = null as Error | null,
+    remove = jest.fn().mockImplementation((paths: string[]) => Promise.resolve({
+      data: paths.map((path) => ({ name: path.split('/').pop() })),
+      error: null,
+    })),
+  }: { upload: jest.Mock; updateError?: Error | null; remove?: jest.Mock }) {
+    const insertSingle = jest.fn().mockResolvedValue({ data: { id: 'pet-1', photo_url: null }, error: null });
+    const insert = jest.fn().mockReturnValue({ select: jest.fn().mockReturnValue({ single: insertSingle }) });
+
+    const updateSingle = jest.fn().mockResolvedValue({ data: null, error: updateError });
+    const update = jest.fn().mockReturnValue({
+      eq: jest.fn().mockReturnValue({ select: jest.fn().mockReturnValue({ single: updateSingle }) }),
+    });
+
+    const deleteSelect = jest.fn().mockResolvedValue({ data: [{ id: 'pet-1' }], error: null });
+    const deleteEq = jest.fn().mockReturnValue({ select: deleteSelect });
+    const deleteMethod = jest.fn().mockReturnValue({ eq: deleteEq });
+
+    mockedGetSupabaseClient.mockReturnValue({
+      auth: { getUser: signedIn('owner-123') },
+      from: jest.fn().mockReturnValue({ insert, update, delete: deleteMethod }),
+      storage: { from: jest.fn().mockReturnValue({ upload, remove }) },
+    } as never);
+
+    return { update, remove, deleteMethod, deleteEq };
+  }
+
+  function photo() {
+    return new File(['image-bytes'], 'rocket.png', { type: 'image/png' });
+  }
+
+  it('deletes the new pet, and removes no file, when the upload throws', async () => {
+    const networkError = new TypeError('Failed to fetch');
+    const { update, remove, deleteEq } = setupCreateMocks({ upload: jest.fn().mockRejectedValue(networkError) });
+
+    await expect(createPet({ ...values, photo: photo() })).rejects.toBe(networkError);
+
+    expect(update).not.toHaveBeenCalled();
+    expect(remove).not.toHaveBeenCalled();
+    expect(deleteEq).toHaveBeenCalledWith('id', 'pet-1');
+  });
+
+  it('removes the upload before deleting the pet when the photo_url update fails', async () => {
+    const updateError = new Error('Update failed');
+    const upload = jest.fn().mockResolvedValue({ data: { path: 'uploaded' }, error: null });
+    const { remove, deleteMethod } = setupCreateMocks({ upload, updateError });
+
+    await expect(createPet({ ...values, photo: photo() })).rejects.toBe(updateError);
+
+    expect(remove).toHaveBeenCalledWith([upload.mock.calls[0][0]]);
+    // Storage RLS checks that the pet row exists, so the file has to go first.
+    expect(remove.mock.invocationCallOrder[0]).toBeLessThan(deleteMethod.mock.invocationCallOrder[0]);
+  });
+
+  it('keeps the pet and reports an incomplete rollback when removing the upload throws', async () => {
+    const updateError = new Error('Update failed');
+    const { deleteMethod } = setupCreateMocks({
+      upload: jest.fn().mockResolvedValue({ data: { path: 'uploaded' }, error: null }),
+      updateError,
+      remove: jest.fn().mockRejectedValue(new Error('socket hang up')),
+    });
+
+    const result = createPet({ ...values, photo: photo() });
+
+    await expect(result).rejects.toThrow('Update failed (rollback incomplete: photo cleanup failed: socket hang up)');
+    await expect(result).rejects.toHaveProperty('cause', updateError);
+    // Deleting the pet would leave a file nobody may remove any more.
+    expect(deleteMethod).not.toHaveBeenCalled();
   });
 });
 

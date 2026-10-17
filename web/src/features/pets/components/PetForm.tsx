@@ -1,18 +1,28 @@
-import { useState } from 'react';
-import type { FormEvent } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import type { ChangeEvent, FormEvent } from 'react';
 import { LoaderCircle } from 'lucide-react';
 import { PET_SPECIES_OPTIONS, type PetSpecies } from '@/shared/lib/petSpecies';
 import { EMPTY_PET_FORM_VALUES, parsePetForm, type PetFormErrors, type PetFormValues } from '../lib/petForm';
-import type { CreatePetValues } from '../lib/petApi';
+import type { UpdatePetValues } from '../lib/petApi';
+import { PET_PHOTO_MAX_BYTES, PET_PHOTO_MIME_TYPES, validatePetPhoto } from '../lib/petPhoto';
+import type { PhotoCrop } from '@/shared/lib/photoCrop';
+import { PetAvatar } from './PetAvatar';
+import { PhotoCropDialog } from '@/shared/components/PhotoCropDialog';
 
 interface PetFormProps {
   initialValues?: PetFormValues;
+  /** True when the pet already has a stored photo, even while its URL is still loading. */
+  hasSavedPhoto?: boolean;
+  /** Signed URL of the stored photo, used for the preview. */
+  savedPhotoUrl?: string;
   submitLabel: string;
   pendingLabel: string;
   isSubmitting: boolean;
   /** Shown above the actions when the last save failed; the caller owns the wording. */
   submitError: string | null;
-  onSubmit: (values: CreatePetValues) => void;
+  /** `photo` is set only for a newly chosen photo, and `removePhoto` only when a stored photo
+   * should be removed, so leaving the picker alone keeps the current photo. */
+  onSubmit: (values: UpdatePetValues) => void;
   onCancel: () => void;
   /** Called on every edit so the caller can clear a stale submit error. */
   onEdit?: () => void;
@@ -28,9 +38,20 @@ function RequiredMark() {
   return <span className="text-red-700" aria-hidden="true">*</span>;
 }
 
-/** Shared by pet creation and (later) pet editing, so both enforce the same rules. */
+/** Shared by pet creation and pet editing, so both enforce the same rules. */
+const PHOTO_ACCEPT = PET_PHOTO_MIME_TYPES.join(',');
+const PHOTO_MAX_MB = PET_PHOTO_MAX_BYTES / 1_048_576;
+
+/** An original photo and the crop last applied to it, kept so the owner can adjust the crop. */
+interface PhotoSource {
+  file: File;
+  crop?: PhotoCrop;
+}
+
 export function PetForm({
   initialValues = EMPTY_PET_FORM_VALUES,
+  hasSavedPhoto = false,
+  savedPhotoUrl,
   submitLabel,
   pendingLabel,
   isSubmitting,
@@ -41,9 +62,63 @@ export function PetForm({
 }: PetFormProps) {
   const [values, setValues] = useState<PetFormValues>(initialValues);
   const [hasSubmitted, setHasSubmitted] = useState(false);
+  /** The cropped photo that will be uploaded. */
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoSource, setPhotoSource] = useState<PhotoSource | null>(null);
+  /** Set while the crop dialog is open. */
+  const [cropTarget, setCropTarget] = useState<PhotoSource | null>(null);
+  const [photoPreviewUrl, setPhotoPreviewUrl] = useState<string | null>(null);
+  const [removeSavedPhoto, setRemoveSavedPhoto] = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const parsed = parsePetForm(values);
   // Errors stay hidden until the first submit so an untouched form is not all red.
   const errors: PetFormErrors = hasSubmitted && !parsed.ok ? parsed.errors : {};
+
+  // Revokes the previous blob URL whenever it is replaced, and on unmount.
+  useEffect(() => {
+    if (!photoPreviewUrl) return;
+    return () => URL.revokeObjectURL(photoPreviewUrl);
+  }, [photoPreviewUrl]);
+
+  const showsSavedPhoto = hasSavedPhoto && !removeSavedPhoto;
+  const hasPhoto = Boolean(photoFile) || showsSavedPhoto;
+  const photoSrc = photoPreviewUrl ?? (showsSavedPhoto ? savedPhotoUrl : null);
+
+  const handlePhotoChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    // Reset now so choosing the same file again still fires this handler.
+    event.target.value = '';
+    if (!file) return;
+
+    onEdit?.();
+    const error = validatePetPhoto(file);
+    // A rejected file never replaces the photo already shown.
+    setPhotoError(error);
+    if (error) return;
+
+    setCropTarget({ file });
+  };
+
+  // Cancelling the crop keeps whatever photo was shown before the file was chosen.
+  const handleCropConfirm = (croppedPhoto: File, crop: PhotoCrop) => {
+    if (!cropTarget) return;
+    onEdit?.();
+    setPhotoFile(croppedPhoto);
+    setPhotoPreviewUrl(URL.createObjectURL(croppedPhoto));
+    setPhotoSource({ file: cropTarget.file, crop });
+    setRemoveSavedPhoto(false);
+    setCropTarget(null);
+  };
+
+  const handleRemovePhoto = () => {
+    onEdit?.();
+    setPhotoFile(null);
+    setPhotoSource(null);
+    setPhotoPreviewUrl(null);
+    setRemoveSavedPhoto(hasSavedPhoto);
+    setPhotoError(null);
+  };
 
   const update = <K extends keyof PetFormValues>(field: K, value: PetFormValues[K]) => {
     onEdit?.();
@@ -53,7 +128,15 @@ export function PetForm({
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setHasSubmitted(true);
-    if (parsed.ok) onSubmit(parsed.values);
+    if (!parsed.ok) return;
+
+    if (photoFile) {
+      onSubmit({ ...parsed.values, photo: photoFile });
+    } else if (removeSavedPhoto) {
+      onSubmit({ ...parsed.values, removePhoto: true });
+    } else {
+      onSubmit(parsed.values);
+    }
   };
 
   const describedBy = (field: keyof PetFormValues, hintId?: string) =>
@@ -65,6 +148,74 @@ export function PetForm({
 
   return (
     <form className="space-y-6 rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-6" onSubmit={handleSubmit} noValidate>
+      <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start">
+        <PetAvatar
+          src={photoSrc}
+          alt={photoFile ? 'Preview of the chosen pet photo' : 'Current pet photo'}
+          className="h-24 w-24"
+          iconClassName="h-10 w-10"
+        />
+        <div className="min-w-0 text-center sm:text-left">
+          <p className="text-sm font-medium text-gray-700">
+            Photo <span className="font-normal text-gray-500">(optional)</span>
+          </p>
+          <p className="form-hint" id="pet-photo-help">JPG, PNG, WebP, or GIF, up to {PHOTO_MAX_MB} MB.</p>
+          <div className="mt-3 flex flex-wrap justify-center gap-2 sm:justify-start">
+            <button
+              className="btn-secondary min-h-11 disabled:cursor-not-allowed disabled:opacity-60"
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isSubmitting}
+              aria-describedby={['pet-photo-help', photoError ? 'pet-photo-error' : null].filter(Boolean).join(' ')}
+            >
+              {hasPhoto ? 'Change photo' : 'Choose photo'}
+            </button>
+            {/* Only a photo chosen in this session can be re-cropped: the stored one is
+                already cropped, and its original was never uploaded. */}
+            {photoFile && photoSource && (
+              <button
+                className="btn-secondary min-h-11 disabled:cursor-not-allowed disabled:opacity-60"
+                type="button"
+                onClick={() => setCropTarget(photoSource)}
+                disabled={isSubmitting}
+              >
+                Adjust crop
+              </button>
+            )}
+            {hasPhoto && (
+              <button
+                className="btn-secondary min-h-11 text-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+                type="button"
+                onClick={handleRemovePhoto}
+                disabled={isSubmitting}
+              >
+                Remove photo
+              </button>
+            )}
+          </div>
+          {/* Announced right away: the error follows choosing a file, not pressing Save. */}
+          {photoError && <p className="form-error" id="pet-photo-error" role="alert">{photoError}</p>}
+          <input
+            ref={fileInputRef}
+            className="hidden"
+            type="file"
+            accept={PHOTO_ACCEPT}
+            onChange={handlePhotoChange}
+            disabled={isSubmitting}
+            aria-label="Pet photo"
+          />
+        </div>
+      </div>
+
+      {cropTarget && (
+        <PhotoCropDialog
+          file={cropTarget.file}
+          initialCrop={cropTarget.crop}
+          onConfirm={handleCropConfirm}
+          onCancel={() => setCropTarget(null)}
+        />
+      )}
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>
           <label className={labelClassName} htmlFor="pet-name">Name <RequiredMark /></label>

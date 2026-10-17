@@ -2,19 +2,14 @@ import { getSupabaseClient } from '@/shared/lib/supabase';
 import type { PetSpecies } from '@/shared/lib/petSpecies';
 import type { Database } from '@/shared/types/database.types';
 import { PetHasBookingsError } from './petErrors';
+import { validatePetPhoto } from './petPhoto';
+
+export { PET_PHOTO_MAX_BYTES, PET_PHOTO_MIME_TYPES, validatePetPhoto } from './petPhoto';
 
 export type Pet = Database['public']['Tables']['pets']['Row'];
 
 export const PET_PHOTO_BUCKET = 'pet-photos';
 export const PET_PHOTO_SIGNED_URL_TTL_SECONDS = 3_600;
-export const PET_PHOTO_MAX_BYTES = 10_485_760;
-
-export const PET_PHOTO_MIME_TYPES = [
-  'image/jpeg',
-  'image/png',
-  'image/webp',
-  'image/gif',
-] as const;
 
 export const MIME_TO_EXTENSION: Record<string, string> = {
   'image/jpeg': '.jpg',
@@ -56,19 +51,6 @@ function toPetRowAttributes(values: Omit<CreatePetValues, 'photo'>) {
     age_year: values.ageYear,
     description: blankToNull(values.description),
   };
-}
-
-/** Validates photo MIME type and size against the storage bucket limits. */
-export function validatePetPhoto(file: Pick<File, 'type' | 'size'>): string | null {
-  if (!(PET_PHOTO_MIME_TYPES as readonly string[]).includes(file.type)) {
-    return 'Unsupported file type. Choose a JPG, PNG, WebP, or GIF file.';
-  }
-
-  if (file.size > PET_PHOTO_MAX_BYTES) {
-    return `Photo is larger than the ${PET_PHOTO_MAX_BYTES / 1_048_576} MB limit.`;
-  }
-
-  return null;
 }
 
 /** Generates a storage path satisfying the pet-photos bucket RLS contract (<pet_id>/<uuid>.<ext>). */

@@ -3,7 +3,16 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, useLocation, useNavigate, useNavigationType } from 'react-router-dom';
 import { usePublishedListingPage } from '@/features/listings';
-import { hiddenSearchListings, makeSearchResult, searchMatchListings } from '../testing/searchFixtures';
+import {
+  SEARCH_RESULTS_PAGE_SIZE,
+  hiddenSearchListings,
+  makeSearchPage,
+  makeSearchResult,
+  pageBoundaryCases,
+  paginatedSearchListings,
+  searchMatchListings,
+  searchPageCases,
+} from '../testing/searchFixtures';
 import { SearchScreen } from './SearchScreen';
 
 // Only the data hook is replaced. Pet-type labels come from @/shared/lib/petSpecies, which
@@ -377,5 +386,60 @@ describe('SearchScreen', () => {
 
     expect(urlSearch()).toBe('?location=Bangkok');
     expect(screen.getByLabelText('Location')).toHaveValue('Bangkok');
+  });
+});
+
+describe('SearchScreen pagination fixtures', () => {
+  // Serves every requested page from the fixture listings, resolved like the search RPC.
+  function servePagesOf(listings: typeof paginatedSearchListings) {
+    mockedUsePublishedListingPage.mockImplementation(({ page }) => ({
+      data: makeSearchPage(listings, page),
+      isPending: false,
+      isError: false,
+      isFetching: false,
+      refetch: mockRefetch,
+    } as unknown as ReturnType<typeof usePublishedListingPage>));
+  }
+
+  const shownIds = () => within(screen.getByRole('region', { name: 'Listings' }))
+    .getAllByRole('link')
+    .map((link) => link.getAttribute('href')?.replace('/listings/', ''));
+
+  it.each(searchPageCases)('shows $name', async ({ requestedPage, expectedPage, expectedIds }) => {
+    servePagesOf(paginatedSearchListings);
+
+    renderSearchAt(`/?page=${requestedPage}`);
+
+    expect(shownIds()).toEqual(expectedIds);
+    expect(screen.getByText(`Page ${expectedPage} of 3`)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Previous' })).toHaveProperty('disabled', expectedPage === 1);
+    expect(screen.getByRole('button', { name: 'Next' })).toHaveProperty('disabled', expectedPage === 3);
+    await waitFor(() => expect(urlSearch()).toBe(expectedPage === 1 ? '' : `?page=${expectedPage}`));
+  });
+
+  it.each(pageBoundaryCases)('$name', ({ listings, pageLabel }) => {
+    servePagesOf(listings);
+
+    renderSearchAt('/');
+
+    expect(shownIds()).toHaveLength(Math.min(listings.length, SEARCH_RESULTS_PAGE_SIZE));
+    expect(screen.queryByText(/^Page \d+ of \d+$/)?.textContent ?? null).toBe(pageLabel);
+  });
+
+  it('steps forward to the last page and back again without losing the search', async () => {
+    const user = userEvent.setup();
+    servePagesOf(paginatedSearchListings);
+
+    renderSearchAt('/?keyword=paged');
+    await user.click(screen.getByRole('button', { name: 'Next' }));
+    await user.click(screen.getByRole('button', { name: 'Next' }));
+
+    expect(urlSearch()).toBe('?keyword=paged&page=3');
+    expect(shownIds()).toEqual(['paged-02', 'paged-01']);
+
+    await user.click(screen.getByRole('button', { name: 'Previous' }));
+
+    expect(urlSearch()).toBe('?keyword=paged&page=2');
+    expect(shownIds()).toHaveLength(SEARCH_RESULTS_PAGE_SIZE);
   });
 });

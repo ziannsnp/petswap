@@ -117,8 +117,23 @@ describe('saving a pet and the cache', () => {
       await expect(cache.result.current.update.mutateAsync({ petId: rocket.id, values })).rejects.toBe(lostResponse);
     });
 
-    expect(cache.cachedPet(rocket.id)).toEqual(renamedRocket);
+    // A failed save does not wait for the refresh, so it lands just after the error.
+    await waitFor(() => expect(cache.cachedPet(rocket.id)).toEqual(renamedRocket));
     expect(cache.myPets()).toEqual([renamedRocket, luna]);
+  });
+
+  it('shows a failed save\'s error without waiting for the refresh, which retries for seconds when the server is down', async () => {
+    const cache = await renderEditScreen();
+    const networkDown = new Error('network down');
+    jest.mocked(updatePet).mockRejectedValue(networkDown);
+    jest.mocked(listMyPets).mockReturnValue(new Promise(() => {}));
+    jest.mocked(getPet).mockReturnValue(new Promise(() => {}));
+
+    let error: unknown;
+    void cache.result.current.update.mutateAsync({ petId: rocket.id, values }).catch((caught: unknown) => { error = caught; });
+
+    await waitFor(() => expect(error).toBe(networkDown));
+    expect(listMyPets).toHaveBeenCalled();
   });
 
   it('keeps the pets as they were when a failed save did not commit', async () => {
@@ -129,7 +144,7 @@ describe('saving a pet and the cache', () => {
       await expect(cache.result.current.update.mutateAsync({ petId: rocket.id, values })).rejects.toThrow('network down');
     });
 
-    expect(listMyPets).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(listMyPets).toHaveBeenCalledTimes(1));
     expect(cache.cachedPet(rocket.id)).toEqual(rocket);
     expect(cache.myPets()).toEqual([rocket, luna]);
   });
@@ -185,8 +200,22 @@ describe('deleting a pet and the cache', () => {
     });
 
     // The list is still refetched, since deletePet may have changed the pet before failing.
-    expect(listMyPets).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(listMyPets).toHaveBeenCalledTimes(1));
     expect(cache.myPets()).toEqual([rocket, luna]);
+    expect(cache.cachedPet(rocket.id)).toEqual(rocket);
+  });
+
+  it('shows a failed delete\'s error without waiting for the refresh, which retries for seconds when the server is down', async () => {
+    const cache = await renderMyPetsScreen();
+    const networkDown = new Error('network down');
+    jest.mocked(deletePet).mockRejectedValue(networkDown);
+    jest.mocked(listMyPets).mockReturnValue(new Promise(() => {}));
+
+    let error: unknown;
+    void cache.result.current.remove.mutateAsync(rocket.id).catch((caught: unknown) => { error = caught; });
+
+    await waitFor(() => expect(error).toBe(networkDown));
+    expect(listMyPets).toHaveBeenCalled();
     expect(cache.cachedPet(rocket.id)).toEqual(rocket);
   });
 

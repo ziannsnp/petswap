@@ -147,9 +147,13 @@ export const paginatedSearchListings: Listing[] = Array.from({ length: 20 }, (_,
 /**
  * One page of `listings` as `usePublishedListingPage` returns it. The page is resolved the
  * way the search RPC resolves it: a page past the end becomes the last page, and no
- * results is an empty first page.
+ * results is an empty first page. Like the RPC, it refuses a page below 1 or a fraction;
+ * `readSearchPage` never asks for one.
  */
 export function makeSearchPage(listings: readonly Listing[], requestedPage: number): PublishedListingPage {
+  if (!Number.isInteger(requestedPage) || requestedPage < 1) {
+    throw new Error('Page must be a positive integer.');
+  }
   const pageSize = SEARCH_RESULTS_PAGE_SIZE;
   const lastPage = Math.max(1, Math.ceil(listings.length / pageSize));
   const page = Math.min(requestedPage, lastPage);

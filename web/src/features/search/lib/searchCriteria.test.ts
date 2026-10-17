@@ -3,8 +3,10 @@ import { EMPTY_SEARCH_CRITERIA, filterPublishedListings, isSameSearch, readSearc
 import {
   SEARCH_RESULTS_PAGE_SIZE,
   hiddenSearchListings,
+  makeSearchPage,
   makeSearchResult,
   noResultSearches,
+  paginatedSearchListings,
   searchMatchCases,
   searchMatchListings,
 } from '../testing/searchFixtures';
@@ -111,5 +113,9 @@ describe('search fixtures', () => {
 describe('pagination fixtures', () => {
   it('build pages the size the app requests', () => {
     expect(SEARCH_RESULTS_PAGE_SIZE).toBe(PUBLISHED_LISTINGS_PAGE_SIZE);
+  });
+
+  it.each([0, -1, 1.5])('refuse page %s, as the search RPC does', (page) => {
+    expect(() => makeSearchPage(paginatedSearchListings, page)).toThrow('Page must be a positive integer.');
   });
 });

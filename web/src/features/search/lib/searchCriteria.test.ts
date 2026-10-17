@@ -1,11 +1,17 @@
+import { PUBLISHED_LISTINGS_PAGE_SIZE } from '@/features/listings';
 import { EMPTY_SEARCH_CRITERIA, filterPublishedListings, isSameSearch, readSearchCriteria, readSearchPage, toSearchParams } from './searchCriteria';
 import {
+  SEARCH_RESULTS_PAGE_SIZE,
   hiddenSearchListings,
   makeSearchResult,
   noResultSearches,
   searchMatchCases,
   searchMatchListings,
 } from '../testing/searchFixtures';
+
+// The listings module is loaded only for its page size. Its Supabase client module reads
+// `import.meta`, which Jest cannot parse, so it is replaced.
+jest.mock('@/shared/lib/supabase', () => ({ getSupabaseClient: jest.fn() }));
 
 describe('search criteria in the URL', () => {
   it('reads a trimmed location and keyword, treating a missing one as empty', () => {
@@ -99,5 +105,11 @@ describe('search fixtures', () => {
 
   it('browses every published listing and none of the hidden ones', () => {
     expect(ids(filterPublishedListings(listings, EMPTY_SEARCH_CRITERIA))).toEqual(ids(searchMatchListings));
+  });
+});
+
+describe('pagination fixtures', () => {
+  it('build pages the size the app requests', () => {
+    expect(SEARCH_RESULTS_PAGE_SIZE).toBe(PUBLISHED_LISTINGS_PAGE_SIZE);
   });
 });

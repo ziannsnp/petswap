@@ -258,7 +258,7 @@ it('does not offer cancellation for terminal bookings or incoming requests', () 
   expect(screen.queryByRole('button', { name: 'Cancel booking' })).not.toBeInTheDocument();
 });
 
-it('lets the owner mark an ended confirmed incoming booking as completed', () => {
+it('lets the owner mark an ended confirmed incoming booking as completed', async () => {
   jest.useFakeTimers().setSystemTime(new Date('2026-10-15T12:00:00.000Z'));
   const mutateAsync = jest.fn().mockResolvedValue({});
   mockUseUpdateBookingStatus.mockReturnValue({ mutateAsync });
@@ -271,10 +271,10 @@ it('lets the owner mark an ended confirmed incoming booking as completed', () =>
 
   render(<BookingsScreen />);
 
+  expect(screen.getAllByRole('button', { name: 'Mark completed' })).toHaveLength(1);
   fireEvent.click(screen.getByRole('button', { name: 'Mark completed' }));
 
-  expect(mutateAsync).toHaveBeenCalledWith({ bookingId: 'ended-confirmed', status: 'completed' });
-  expect(screen.getAllByRole('button', { name: 'Mark completed' })).toHaveLength(1);
+  await waitFor(() => expect(mutateAsync).toHaveBeenCalledWith({ bookingId: 'ended-confirmed', status: 'completed' }));
 });
 
 it('shows an error on the affected card when a status update fails', async () => {

@@ -1,21 +1,60 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { QueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/features/auth';
-import { deleteListing, getListing, listMyListings, listPublishedListings, setListingPublicationStatus } from '../lib/listingApi';
-import type { ListingPublicationMode } from '../lib/listingApi';
+import { deleteListing, getListing, listMyListings, listPublishedListings, searchPublishedListings, setListingPublicationStatus } from '../lib/listingApi';
+import type { Listing, ListingPublicationMode, PublishedListingPage, PublishedListingQuery } from '../lib/listingApi';
 
 export const listingKeys = {
   all: ['listings'] as const,
   published: () => [...listingKeys.all, 'published'] as const,
-  mine: (ownerId: string) => [...listingKeys.all, 'mine', ownerId] as const,
+  publishedPages: () => [...listingKeys.published(), 'page'] as const,
+  publishedPage: (query: PublishedListingQuery) => [...listingKeys.publishedPages(), query] as const,
+  allMine: () => [...listingKeys.all, 'mine'] as const,
+  mine: (ownerId: string) => [...listingKeys.allMine(), ownerId] as const,
+  allDetails: (listingId: string) => [...listingKeys.all, 'detail', listingId] as const,
   detail: (listingId: string, viewerId: string) => (
-    [...listingKeys.all, 'detail', listingId, viewerId] as const
+    [...listingKeys.allDetails(listingId), viewerId] as const
   ),
 };
+
+// A listing that has just been hidden must leave search and the detail cache straight away:
+// the refetch that follows runs in the background, and until it lands the cached copy would
+// still offer the hidden listing to anyone browsing in this tab.
+function hideListingFromCaches(
+  queryClient: QueryClient,
+  listingId: string,
+  updateOwnerCopy: (listings: Listing[]) => Listing[],
+) {
+  queryClient.setQueryData<Listing[]>(
+    listingKeys.published(),
+    (listings) => listings?.filter((listing) => listing.id !== listingId),
+  );
+  queryClient.setQueriesData<PublishedListingPage>(
+    { queryKey: listingKeys.publishedPages() },
+    (page) => page && ({
+      ...page,
+      listings: page.listings.filter((listing) => listing.id !== listingId),
+      totalCount: Math.max(0, page.totalCount - (page.listings.some((listing) => listing.id === listingId) ? 1 : 0)),
+    }),
+  );
+  queryClient.setQueriesData<Listing[]>(
+    { queryKey: listingKeys.allMine() },
+    (listings) => (listings ? updateOwnerCopy(listings) : listings),
+  );
+  queryClient.removeQueries({ queryKey: listingKeys.allDetails(listingId) });
+}
 
 export function usePublishedListings() {
   return useQuery({
     queryKey: listingKeys.published(),
     queryFn: listPublishedListings,
+  });
+}
+
+export function usePublishedListingPage(query: PublishedListingQuery) {
+  return useQuery({
+    queryKey: listingKeys.publishedPage(query),
+    queryFn: () => searchPublishedListings(query),
   });
 }
 
@@ -49,7 +88,20 @@ export function useSetListingPublicationStatus() {
     mutationFn: ({ listingId, status }: { listingId: string; status: ListingPublicationMode }) => (
       setListingPublicationStatus(listingId, status)
     ),
-    onSuccess: () => {
+    onSuccess: (savedListing, { listingId, status }) => {
+      // My listings shows the saved row at once either way, so its status badge agrees with
+      // the confirmation message instead of lagging until the refetch lands.
+      const showSavedCopy = (listings: Listing[]) => listings.map(
+        (listing) => (listing.id === listingId ? savedListing : listing),
+      );
+      if (status === 'draft') {
+        hideListingFromCaches(queryClient, listingId, showSavedCopy);
+      } else {
+        queryClient.setQueriesData<Listing[]>(
+          { queryKey: listingKeys.allMine() },
+          (listings) => (listings ? showSavedCopy(listings) : listings),
+        );
+      }
       void queryClient.invalidateQueries({ queryKey: listingKeys.all });
     },
   });
@@ -60,7 +112,10 @@ export function useDeleteListing() {
 
   return useMutation({
     mutationFn: (listingId: string) => deleteListing(listingId),
-    onSuccess: () => {
+    onSuccess: (_, listingId) => {
+      hideListingFromCaches(queryClient, listingId, (listings) => listings.filter(
+        (listing) => listing.id !== listingId,
+      ));
       void queryClient.invalidateQueries({ queryKey: listingKeys.all });
     },
   });

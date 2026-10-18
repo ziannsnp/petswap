@@ -1,3 +1,5 @@
+import type { Listing } from '@/features/listings';
+
 /**
  * The applied search lives in the URL (`/?location=…&keyword=…`) rather than in component
  * state, so a search survives a reload, can be shared as a link, and the back button steps
@@ -17,16 +19,55 @@ export function readSearchCriteria(params: URLSearchParams): SearchCriteria {
   };
 }
 
+export function readSearchPage(params: URLSearchParams): number {
+  const value = params.get('page');
+  if (!value || !/^[1-9]\d*$/.test(value)) return 1;
+
+  const page = Number(value);
+  return Number.isSafeInteger(page) ? Math.min(page, 2_147_483_647) : 1;
+}
+
 /** Blank fields are left out, so an empty search is the plain browse-all URL. */
-export function toSearchParams(criteria: SearchCriteria): URLSearchParams {
+export function toSearchParams(criteria: SearchCriteria, page = 1): URLSearchParams {
   const params = new URLSearchParams();
   const location = criteria.location.trim();
   const keyword = criteria.keyword.trim();
   if (location) params.set('location', location);
   if (keyword) params.set('keyword', keyword);
+  if (Number.isSafeInteger(page) && page > 1) params.set('page', String(page));
   return params;
 }
 
 export function isSameSearch(left: SearchCriteria, right: SearchCriteria): boolean {
   return toSearchParams(left).toString() === toSearchParams(right).toString();
+}
+
+function normalizeSearchText(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+/**
+ * Applies the browse/search contract to the published response. Matching is deliberately
+ * done as literal text rather than constructing a PostgREST `or` filter: `%`, `_`, `\\`,
+ * commas, parentheses, and quotes therefore stay ordinary user input instead of becoming
+ * wildcard or filter syntax. The API still enforces the same publication predicate, while
+ * this second boundary keeps a stale/mocked response from leaking a hidden listing.
+ */
+export function filterPublishedListings(
+  listings: readonly Listing[],
+  criteria: SearchCriteria,
+): Listing[] {
+  const location = normalizeSearchText(criteria.location);
+  const keyword = normalizeSearchText(criteria.keyword);
+
+  return listings.filter((listing) => {
+    if (listing.status !== 'published' || listing.deleted_at !== null) return false;
+
+    const normalizedLocation = normalizeSearchText(listing.location);
+    const normalizedTitle = normalizeSearchText(listing.title);
+    const normalizedDescription = normalizeSearchText(listing.description);
+
+    return (!location || normalizedLocation.includes(location))
+      && (!keyword || normalizedTitle.includes(keyword) || normalizedDescription.includes(keyword));
+  });
 }

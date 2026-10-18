@@ -24,14 +24,27 @@ The result should be integration-heavy, with fewer focused unit tests and very f
 tests. "Fewer" never means leaving a high-risk contract — like the booking overlap rule —
 unprotected.
 
+## Who writes the tests
+
+The squad that builds a feature also builds its tests, at every layer the feature needs: Jest
+unit tests, component tests, SQL contract checks under `supabase/tests/`, Playwright journeys,
+and manual evidence. Tests ship in the same pull request as the behavior they protect.
+
+The QA / Scrum / Infra squad owns the standard, not per-feature coverage: this strategy and the
+quality contract below, the Jest and Playwright harnesses, the deterministic seed data in
+`supabase/seed.sql`, the CI gates, the evidence templates, and the cross-feature regression pass
+before a demo or release. QA may pair on or contribute tests for another squad's feature when
+asked or when a backlog card says so. That is help, not a transfer of ownership: the feature
+squad still owns those tests and keeps them passing.
+
 ## Test layers
 
 | Layer | Tool | Owner and expectation |
 | --- | --- | --- |
-| Pure business rules | Jest | Unit-test booking conflict and status-transition rules; add tests for validation and transformations. |
-| React components | Jest + React Testing Library | Cover form validation, empty/error states, and protected UI behaviour. |
-| End-to-end flow | Playwright | Cover login → booking request → confirmation → status verification once Supabase test data is available. |
-| Manual UI checks | Markdown evidence | Squad B records listing/search cases; QA records regressions using the template. |
+| Pure business rules | Jest | Feature squad. Unit-test booking conflict and status-transition rules; add tests for validation and transformations. |
+| React components | Jest + React Testing Library | Feature squad. Cover form validation, empty/error states, and protected UI behaviour. |
+| End-to-end flow | Playwright | Feature squad for its own journeys, on the harness and seed data QA maintains. Cover login → booking request → confirmation → status verification once Supabase test data is available. |
+| Manual UI checks | Markdown evidence | Feature squad records cases for its own features; QA records the cross-feature regression pass using the template. |
 
 [`RegisterScreen.test.tsx`](../web/src/features/auth/components/RegisterScreen.test.tsx) and
 [`ProtectedRoute.test.tsx`](../web/src/features/auth/components/ProtectedRoute.test.tsx) are the
@@ -101,7 +114,7 @@ npx supabase db reset
 
 Then inspect the local database in Studio at `http://127.0.0.1:54323` and verify the actor cases listed in [environments](environments.md).
 
-The SQL contract checks in `supabase/tests/` now run automatically: `database_contract.sql` (schema catalogue), `booking_rules.test.sql` (overlap-rule behaviour), `listing_rules.test.sql` (required accepted-pet behaviour), `listing_facility_migration.test.sql` (legacy facility-label backfill), `listing_photo_access.test.sql` (draft and published photo access), `listing_edit_rules.test.sql` (valid, invalid, unauthorized, and photo-order edit behaviour), `avatar_storage_access.test.sql` (public avatar reads and owner-only writes), `pet_photo_access.test.sql` (private pet photo reads for owners and booked listing hosts, owner-only writes), and `profile_rules.test.sql` (profile owner updates, non-owner edit prevention, and deletion protection). Run them locally after a reset, or let [`db-contract.yml`](ci-cd.md#database-contract-workflow) run them on every change under `supabase/`. They still read as a review checklist for a migration; see [`supabase/tests/README.md`](../supabase/tests/README.md). Actor-specific RLS cases not covered there still need Studio or JWT impersonation until the Playwright journey exists.
+The SQL contract checks in `supabase/tests/` now run automatically: `database_contract.sql` (schema catalogue), `booking_rules.test.sql` (overlap-rule behaviour), `listing_rules.test.sql` (required accepted-pet behaviour), `listing_facility_migration.test.sql` (legacy facility-label backfill), `listing_photo_access.test.sql` (draft and published photo access), `listing_host_access.test.sql` (published host projection and draft privacy), `listing_edit_rules.test.sql` (valid, invalid, unauthorized, and photo-order edit behaviour), `listing_search.test.sql` (matching, literal special characters, deterministic order, page boundaries, and an `EXPLAIN ANALYZE` query plan), `listing_deletion.test.sql` (owner-only delete and unpublish, active-booking protection, and deletion/publication audit timestamps), `avatar_storage_access.test.sql` (public avatar reads and owner-only writes), `pet_photo_access.test.sql` (private pet photo reads for owners and booked listing hosts, owner-only writes), `profile_rules.test.sql` (profile owner updates, non-owner edit prevention, and deletion protection), and `pet_rules.test.sql` (pet owner updates, unbooked pet deletion, non-owner and host mutation blocks, and booked pet deletion restriction). Run them locally after a reset, or let [`db-contract.yml`](ci-cd.md#database-contract-workflow) run them on every change under `supabase/`. They still read as a review checklist for a migration; see [`supabase/tests/README.md`](../supabase/tests/README.md). Actor-specific RLS cases not covered there still need Studio or JWT impersonation until the Playwright journey exists.
 
 The `avatars` bucket is public-read for profile photos; its Storage policies still limit uploads, replacements, and deletes to the authenticated user's own folder. The `pet-photos` bucket is private; its Storage policies grant full CRUD to the pet owner and read access to listing hosts who have a booking for that pet.
 
@@ -110,7 +123,7 @@ The booking overlap rule is verified at both levels:
 - Jest covers the TypeScript end-exclusive conflict helper.
 - Postgres enforces `bookings_no_confirmed_overlap` for confirmed bookings on the same listing, and `booking_rules.test.sql` exercises it (overlap, back-to-back, non-confirmed, different listing).
 
-Playwright is wired up: [`web/playwright.config.ts`](../web/playwright.config.ts) starts `npm run dev` and runs `web/e2e/` on desktop and mobile Chromium. `e2e/smoke.spec.ts` covers the public shell (no auth or Supabase needed) and runs on every `web/**` change via the non-required [`e2e-smoke.yml`](ci-cd.md#e2e-smoke-workflow) workflow.
+Playwright is wired up: [`web/playwright.config.ts`](../web/playwright.config.ts) starts `npm run dev` and runs `web/e2e/` on desktop and mobile Chromium, and desktop Firefox. `e2e/smoke.spec.ts` covers the public shell (no auth or Supabase needed) and runs on every `web/**` change via the non-required [`e2e-smoke.yml`](ci-cd.md#e2e-smoke-workflow) workflow.
 
 `web/e2e/booking-flow.spec.ts` — the login → request → confirm journey — runs against the local Supabase stack (`npx supabase db reset`, then `npm run test:e2e`); it needs the `sign-in` Edge Function's local origin allowlist populated (`cp supabase/functions/.env.example supabase/functions/.env`) or username sign-in returns a 403. Before a demo or release, run the [regression checklist](templates/regression-checklist.md) on desktop and mobile and link the filled copy from the release-readiness PR.
 
@@ -125,6 +138,12 @@ After `npx supabase db reset`, configure `web/.env.local` with the local API URL
 3. Create another listing and choose **Publish listing**. Confirm the success message and new card are marked Published, and the database row has `published` status.
 4. In Supabase Studio Storage, confirm `listing-photos` is private. In the My Listings browser requests, photo access should use a signed URL rather than a public object URL.
 5. Try no accepted pet type, zero/fractional capacity, an unsupported file, a file above 10 MB, and an eleventh photo. Each should be rejected without losing the rest of the form.
+
+## Manual listing detail journey
+
+1. Open a published listing as a visitor and verify its description, facilities, capacity, accepted pet types, ordered photos, and host's display name, avatar, and location are shown.
+2. Confirm listing photos load from short-lived signed URLs while the `listing-photos` bucket remains private. If a photo is missing or signing fails, the listing's text and host details should still render.
+3. Open a draft listing as its owner and verify the owner can see the listing and host projection; try the same URL as another account and anonymously, and confirm neither can read the draft or the host profile directly.
 
 ## Manual listing edit journey
 
@@ -142,3 +161,17 @@ After `npx supabase db reset`, configure `web/.env.local` with the local API URL
 4. Verify a non-owner cannot call the delete RPC for that listing, and direct API updates or deletes cannot restore or hard-delete it.
 
 Public listing details, host/owner profiles, search, pet profiles, and bookings belong to their separate user stories and are not acceptance evidence for US-2.2 listing editing.
+
+## Manual pet edit and delete journey
+
+After `npx supabase db reset`, run `npm run dev` from `web/` and sign in as `alex@petswap.test`. Alex owns Miso (no bookings) and Nimbus (a pending booking), and can read Casey's Rocket and Blair's Pixel only because they are booked at Alex's listing. Run it on desktop and mobile, resetting the database between passes. Recorded evidence: [`qa/pet-edit-delete-2026-10-17.md`](qa/pet-edit-delete-2026-10-17.md).
+
+1. Open **My Pets**, choose **Edit** on Miso, change every text field, and save. Confirm **Pet saved successfully.**, the new values on the card, and that they persist after a refresh. **Cancel** must leave the pet unchanged.
+2. Try a blank name or description and an age below 0, fractional, or above 100. Each must be rejected without saving or losing the rest of the form.
+3. Change the photo (with **Adjust crop**), then remove it, saving each time. An unsupported file type or a photo above 10 MB must be rejected straight away, keeping the current photo.
+4. Save with the browser offline: the save waits and must complete once the browser is back online. Save with the browser online but Supabase unreachable: the form must keep the input and show an error.
+5. Open the edit URL for a pet that does not exist, a malformed id, and Rocket. Each must show **Pet not found**. Signed out, the URL must redirect to `/login`.
+6. Choose **Delete** on a pet. Focus must start on **Cancel**, and Cancel, Escape, and the backdrop must each close the dialog, keep the pet, and return focus to the **Delete** button.
+7. Delete Nimbus after giving it a photo. Any booking, whatever its status, blocks the delete, since the booking keeps a reference to the pet. The dialog must stay open with **Nimbus has bookings, so it can't be deleted.**, and the pet and its photo must remain.
+8. Delete Miso with Supabase unreachable. The dialog must explain the failure, and the pet must remain.
+9. Open Miso's edit screen, return to My Pets, and delete Miso. It must disappear from My Pets, also after a refresh, and browser Back to its edit URL must show **Pet not found** without first showing the deleted pet.

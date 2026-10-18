@@ -3,7 +3,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes, useParams } from 'react-router-dom';
 import type { Listing } from '@/features/listings';
-import { makeSearchResult } from '../testing/searchFixtures';
+import { makeSearchResult, noPhotoSearchResult } from '../testing/searchFixtures';
 import { SearchResultCard } from './SearchResultCard';
 
 const mainPhoto = {
@@ -77,10 +77,11 @@ describe('SearchResultCard', () => {
   });
 
   it('shows a placeholder when the listing has no photo', () => {
-    renderCard(makeSearchResult());
+    renderCard(noPhotoSearchResult);
 
     expect(screen.queryByRole('img')).not.toBeInTheDocument();
     expect(screen.getByText('No photo yet')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: noPhotoSearchResult.title })).toBeInTheDocument();
   });
 
   it('swaps a photo that fails to load for a placeholder and keeps the rest of the card', () => {

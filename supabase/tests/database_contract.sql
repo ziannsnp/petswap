@@ -143,6 +143,27 @@ insert into _contract (check_name, passed) values
     )
   ),
   (
+    'listing host retrieval is a restricted security definer projection',
+    exists (
+      select 1 from pg_proc
+      where oid = 'public.get_listing_host(uuid)'::regprocedure
+        and prosecdef
+        and proargnames = array['target_listing_id', 'id', 'display_name', 'photo_url', 'location']
+    )
+    and has_function_privilege('anon', 'public.get_listing_host(uuid)', 'EXECUTE')
+    and has_function_privilege('authenticated', 'public.get_listing_host(uuid)', 'EXECUTE')
+    and not exists (
+      select 1
+      from pg_proc as p
+      cross join lateral aclexplode(
+        coalesce(p.proacl, acldefault('f', p.proowner))
+      ) as acl
+      where p.oid = 'public.get_listing_host(uuid)'::regprocedure
+        and acl.grantee = 0
+        and acl.privilege_type = 'EXECUTE'
+    )
+  ),
+  (
     'direct listing updates cannot bypass the soft-delete booking check',
     exists (
       select 1 from pg_policies
@@ -176,6 +197,23 @@ insert into _contract (check_name, passed) values
     not has_function_privilege('anon', 'public.lock_listing_for_booking_insert()', 'EXECUTE')
       and not has_function_privilege('authenticated', 'public.lock_listing_for_booking_insert()', 'EXECUTE')
       and not has_function_privilege('service_role', 'public.lock_listing_for_booking_insert()', 'EXECUTE')
+  ),
+  (
+    'owner-only listing operations are callable by signed-in users only',
+    not has_function_privilege('anon', 'public.delete_listing_with_active_booking_check(uuid)', 'EXECUTE')
+      and not has_function_privilege('anon', 'public.reorder_listing_images(uuid, uuid[])', 'EXECUTE')
+      and not has_function_privilege(
+        'anon',
+        'public.update_listing_with_images(uuid, text, text, text, integer, public.pet_species[], text, public.listing_status, timestamptz, uuid[], jsonb, uuid[])',
+        'EXECUTE'
+      )
+      and has_function_privilege('authenticated', 'public.delete_listing_with_active_booking_check(uuid)', 'EXECUTE')
+      and has_function_privilege('authenticated', 'public.reorder_listing_images(uuid, uuid[])', 'EXECUTE')
+      and has_function_privilege(
+        'authenticated',
+        'public.update_listing_with_images(uuid, text, text, text, integer, public.pet_species[], text, public.listing_status, timestamptz, uuid[], jsonb, uuid[])',
+        'EXECUTE'
+      )
   ),
   (
     'the listing-photos storage bucket exists and is private',
@@ -357,6 +395,52 @@ select
       and cmd = 'DELETE'
       and qual like '%auth.uid()%'
   ) as passed;
+
+insert into _contract (check_name, passed) values
+  (
+    'published listing search has a stable ordering index',
+    exists (
+      select 1 from pg_indexes
+      where schemaname = 'public'
+        and tablename = 'listings'
+        and indexname = 'listings_published_order_idx'
+        and indexdef like '%published_at DESC NULLS LAST, id DESC%'
+        and indexdef like '%status = ''published''%'
+        and indexdef like '%deleted_at IS NULL%'
+    )
+  ),
+  (
+    'published listing location, title, and description have trigram indexes',
+    (
+      select count(*) = 3
+      from pg_indexes
+      where schemaname = 'public'
+        and tablename = 'listings'
+        and indexname in (
+          'listings_published_location_trgm_idx',
+          'listings_published_title_trgm_idx',
+          'listings_published_description_trgm_idx'
+        )
+        and indexdef like '%USING gin%'
+        and indexdef like '%gin_trgm_ops%'
+    )
+  ),
+  (
+    'published listing search RPC has explicit app-role grants and no PUBLIC grant',
+    to_regprocedure('public.search_published_listings(text,text,integer,integer)') is not null
+      and has_function_privilege('anon', 'public.search_published_listings(text,text,integer,integer)', 'EXECUTE')
+      and has_function_privilege('authenticated', 'public.search_published_listings(text,text,integer,integer)', 'EXECUTE')
+      and has_function_privilege('service_role', 'public.search_published_listings(text,text,integer,integer)', 'EXECUTE')
+      and not exists (
+        select 1
+        from pg_proc as procedure,
+        lateral aclexplode(coalesce(procedure.proacl, acldefault('f', procedure.proowner))) as privilege
+        where procedure.oid = 'public.search_published_listings(text,text,integer,integer)'::regprocedure
+          and privilege.grantee = 0
+          and privilege.privilege_type = 'EXECUTE'
+      )
+  );
+
 select check_name, passed
 from _contract
 order by passed nulls first, check_name;

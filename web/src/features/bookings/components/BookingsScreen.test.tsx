@@ -4,6 +4,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { BookingsScreen } from './BookingsScreen';
 import { useIncomingBookings, useOutgoingBookings, useUpdateBookingStatus } from '../hooks/useBookings';
+import { BookingConflictError } from '../lib/bookingErrors';
 import type { BookingWithDetails } from '../lib/bookingApi';
 
 // Explicit factory so the real hooks module (and its supabase/import.meta.env chain) never loads under Jest.
@@ -231,6 +232,31 @@ it('declines a pending incoming booking', async () => {
   await waitFor(() => expect(mutateAsync).toHaveBeenCalledWith({ bookingId: 'in-1', status: 'declined' }));
 });
 
+it.each(['pending', 'confirmed'] as const)('lets the requester cancel a %s outgoing booking', async (status) => {
+  const mutateAsync = jest.fn().mockResolvedValue({});
+  mockUseUpdateBookingStatus.mockReturnValue({ mutateAsync });
+  mockUseOutgoingBookings.mockReturnValue(successResult([makeBooking({ id: 'out-1', status })]));
+  mockUseIncomingBookings.mockReturnValue(successResult([]));
+
+  render(<BookingsScreen />);
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel booking' }));
+
+  await waitFor(() => expect(mutateAsync).toHaveBeenCalledWith({ bookingId: 'out-1', status: 'cancelled' }));
+});
+
+it('does not offer cancellation for terminal bookings or incoming requests', () => {
+  mockUseOutgoingBookings.mockReturnValue(successResult([
+    makeBooking({ id: 'declined', status: 'declined' }),
+    makeBooking({ id: 'cancelled', status: 'cancelled' }),
+    makeBooking({ id: 'completed', status: 'completed' }),
+  ]));
+  mockUseIncomingBookings.mockReturnValue(successResult([makeBooking({ id: 'incoming', status: 'pending' })]));
+
+  render(<BookingsScreen />);
+
+  expect(screen.queryByRole('button', { name: 'Cancel booking' })).not.toBeInTheDocument();
+});
+
 it('shows an error on the affected card when a status update fails', async () => {
   const mutateAsync = jest.fn().mockRejectedValue(new Error('network down'));
   mockUseUpdateBookingStatus.mockReturnValue({ mutateAsync });
@@ -241,4 +267,18 @@ it('shows an error on the affected card when a status update fails', async () =>
   fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
 
   expect(await screen.findByRole('alert')).toHaveTextContent(/could not update this booking/i);
+});
+
+it('shows an overlap conflict on the booking card when its owner cannot confirm', async () => {
+  const mutateAsync = jest.fn().mockRejectedValue(new BookingConflictError());
+  mockUseUpdateBookingStatus.mockReturnValue({ mutateAsync });
+  mockUseOutgoingBookings.mockReturnValue(successResult([]));
+  mockUseIncomingBookings.mockReturnValue(successResult([makeBooking({ id: 'in-1', status: 'pending' })]));
+
+  render(<BookingsScreen />);
+  fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'This request overlaps another confirmed booking on this listing. Choose different dates before confirming.',
+  );
 });

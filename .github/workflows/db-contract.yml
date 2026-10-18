@@ -59,11 +59,17 @@ jobs:
       - name: Listing photo access behavioural checks
         run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/listing_photo_access.test.sql
 
+      - name: Listing host access behavioural checks
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/listing_host_access.test.sql
+
       - name: Listing edit behavioural checks
         run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/listing_edit_rules.test.sql
 
       - name: Listing deletion behavioural checks
         run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/listing_deletion.test.sql
+
+      - name: Listing search and pagination checks
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/listing_search.test.sql
 
       - name: Avatar storage access behavioural checks
         run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/avatar_storage_access.test.sql
@@ -73,6 +79,9 @@ jobs:
 
       - name: Profile rules behavioural checks
         run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/profile_rules.test.sql
+
+      - name: Pet rules behavioural checks
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/pet_rules.test.sql
 
       - name: Stop local Supabase stack
         if: always()

@@ -1,7 +1,7 @@
 export { CreatePetScreen } from './components/CreatePetScreen';
 export { EditPetScreen } from './components/EditPetScreen';
 export { PetsScreen } from './components/PetsScreen';
-export { petKeys, useCreatePet, useDeletePet, useMyPets, usePet, useUpdatePet } from './hooks/usePets';
+export { petKeys, useCreatePet, useDeletePet, useMyPets, usePet, usePetPhotoUrl, useUpdatePet } from './hooks/usePets';
 export {
   createPet,
   deletePet,

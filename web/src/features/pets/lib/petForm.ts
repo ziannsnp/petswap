@@ -14,7 +14,7 @@ export interface PetFormValues {
 export type PetFormErrors = Partial<Record<keyof PetFormValues, string>>;
 
 export type ParsedPetForm =
-  | { ok: true; values: CreatePetValues }
+  | { ok: true; values: Omit<CreatePetValues, 'photo'> }
   | { ok: false; errors: PetFormErrors };
 
 export const EMPTY_PET_FORM_VALUES: PetFormValues = {

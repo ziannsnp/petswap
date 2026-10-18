@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { act, renderHook } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { deleteListing, setListingPublicationStatus } from '../lib/listingApi';
-import type { Listing } from '../lib/listingApi';
+import type { Listing, PublishedListingPage, PublishedListingQuery } from '../lib/listingApi';
 import { deleteListingRpcErrors, LISTING_OWNER_ID, ownerActionListings } from '../testing/listingFixtures';
 import { listingKeys, useDeleteListing, useSetListingPublicationStatus } from './useListings';
 
@@ -13,16 +13,24 @@ jest.mock('../lib/listingApi', () => ({
   getListing: jest.fn(),
   listMyListings: jest.fn(),
   listPublishedListings: jest.fn(),
+  searchPublishedListings: jest.fn(),
   setListingPublicationStatus: jest.fn(),
 }));
 
 const { owned, ownedByOtherUser, alreadyDeleted } = ownerActionListings;
+const publishedSearch: PublishedListingQuery = { location: '', keyword: '', page: 1 };
 
 // Search holds the owner's listing next to someone else's, My listings holds it next to an
 // earlier deleted one, and two viewers have its detail page cached.
 function renderWithCachedListings<Result>(useHook: () => Result) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  queryClient.setQueryData(listingKeys.published(), [owned, ownedByOtherUser]);
+  queryClient.setQueryData<Listing[]>(listingKeys.published(), [owned, ownedByOtherUser]);
+  queryClient.setQueryData<PublishedListingPage>(listingKeys.publishedPage(publishedSearch), {
+    listings: [owned, ownedByOtherUser],
+    page: 1,
+    pageSize: 9,
+    totalCount: 2,
+  } satisfies PublishedListingPage);
   queryClient.setQueryData(listingKeys.mine(LISTING_OWNER_ID), [owned, alreadyDeleted]);
   queryClient.setQueryData(listingKeys.detail(owned.id, 'public'), owned);
   queryClient.setQueryData(listingKeys.detail(owned.id, LISTING_OWNER_ID), owned);
@@ -34,7 +42,8 @@ function renderWithCachedListings<Result>(useHook: () => Result) {
   return {
     queryClient,
     result,
-    searchIds: () => queryClient.getQueryData<Listing[]>(listingKeys.published())?.map(({ id }) => id),
+    searchIds: () => queryClient.getQueryData<PublishedListingPage>(listingKeys.publishedPage(publishedSearch))?.listings.map(({ id }) => id),
+    cachedPublishedIds: () => queryClient.getQueryData<Listing[]>(listingKeys.published())?.map(({ id }) => id),
     myListings: () => queryClient.getQueryData<Listing[]>(listingKeys.mine(LISTING_OWNER_ID)),
     cachedDetail: (viewerId: string) => queryClient.getQueryData(listingKeys.detail(owned.id, viewerId)),
   };
@@ -52,6 +61,7 @@ describe('listing owner actions and the cache', () => {
     await act(() => cache.result.current.mutateAsync(owned.id));
 
     expect(cache.searchIds()).toEqual([ownedByOtherUser.id]);
+    expect(cache.cachedPublishedIds()).toEqual([ownedByOtherUser.id]);
     expect(cache.myListings()?.map(({ id }) => id)).toEqual([alreadyDeleted.id]);
     expect(cache.cachedDetail('public')).toBeUndefined();
     expect(cache.cachedDetail(LISTING_OWNER_ID)).toBeUndefined();
@@ -65,6 +75,7 @@ describe('listing owner actions and the cache', () => {
     await act(() => cache.result.current.mutateAsync({ listingId: owned.id, status: 'draft' }));
 
     expect(cache.searchIds()).toEqual([ownedByOtherUser.id]);
+    expect(cache.cachedPublishedIds()).toEqual([ownedByOtherUser.id]);
     expect(cache.myListings()).toEqual([draft, alreadyDeleted]);
     expect(cache.cachedDetail('public')).toBeUndefined();
   });
@@ -79,6 +90,7 @@ describe('listing owner actions and the cache', () => {
 
     expect(cache.myListings()).toEqual([owned, alreadyDeleted]);
     expect(cache.searchIds()).toEqual([owned.id, ownedByOtherUser.id]);
+    expect(cache.cachedPublishedIds()).toEqual([owned.id, ownedByOtherUser.id]);
     expect(cache.cachedDetail('public')).toBe(owned);
   });
 

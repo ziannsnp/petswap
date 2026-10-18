@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import { ArrowLeft, AtSign, Camera, Mail, User } from 'lucide-react';
+import { PhotoCropDialog } from '@/shared/components/PhotoCropDialog';
 import { getInitials } from '@/shared/lib/initials';
+import type { PhotoCrop } from '@/shared/lib/photoCrop';
 import { useDeleteAvatar, useUpdateProfile, useUploadAvatar } from '../hooks/useProfile';
 import { validateProfileForm, type ProfileValidationErrors } from '../lib/profileValidation';
 import type { Profile } from '../lib/profileApi';
@@ -23,6 +25,12 @@ const AVATAR_TOO_LARGE_MESSAGE = 'Photo must be 5MB or smaller.';
 const INVALID_AVATAR_TYPE_MESSAGE = 'Choose a JPG, PNG, or WebP image.';
 const AVATAR_UPLOAD_FAILURE_MESSAGE = "Couldn't upload your photo. Please try again.";
 
+/** An original photo and the crop last applied to it, kept so the user can adjust the crop. */
+interface AvatarSource {
+  file: File;
+  crop?: PhotoCrop;
+}
+
 export function ProfileEditLayout({
   profile,
   email,
@@ -34,7 +42,11 @@ export function ProfileEditLayout({
   const [phoneNumber, setPhoneNumber] = useState(profile.phone_number ?? '');
   const [location, setLocation] = useState(profile.location ?? '');
   const [fieldErrors, setFieldErrors] = useState<ProfileValidationErrors>({});
+  /** The cropped photo that will be uploaded. */
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [avatarSource, setAvatarSource] = useState<AvatarSource | null>(null);
+  /** Set while the crop dialog is open. */
+  const [cropTarget, setCropTarget] = useState<AvatarSource | null>(null);
   const [avatarPreviewUrl, setAvatarPreviewUrl] = useState<string | null>(null);
   const [removePhoto, setRemovePhoto] = useState(false);
   const [photoError, setPhotoError] = useState<string | null>(null);
@@ -98,13 +110,24 @@ export function ProfileEditLayout({
     }
 
     setPhotoError(null);
-    setAvatarFile(file);
-    setAvatarPreviewUrl(URL.createObjectURL(file));
+    setCropTarget({ file });
+  }
+
+  // Cancelling the crop keeps whatever photo was shown before the file was chosen.
+  function handleCropConfirm(croppedPhoto: File, crop: PhotoCrop) {
+    if (!cropTarget) {
+      return;
+    }
+    setAvatarFile(croppedPhoto);
+    setAvatarPreviewUrl(URL.createObjectURL(croppedPhoto));
+    setAvatarSource({ file: cropTarget.file, crop });
     setRemovePhoto(false);
+    setCropTarget(null);
   }
 
   function handleRemovePhoto() {
     setAvatarFile(null);
+    setAvatarSource(null);
     setAvatarPreviewUrl(null);
     setRemovePhoto(true);
     setPhotoError(null);
@@ -250,16 +273,30 @@ export function ProfileEditLayout({
             <p className="text-sm text-gray-500 mt-1 max-w-sm">
               Your photo appears on your profile and booking requests. JPG, PNG, or WebP, up to 5MB.
             </p>
-            {canRemovePhoto && (
-              <button
-                type="button"
-                onClick={handleRemovePhoto}
-                disabled={isSaving || !canEdit}
-                className="mt-2 text-sm font-medium text-red-600 hover:text-red-700 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Remove photo
-              </button>
-            )}
+            <div className="mt-2 flex justify-center gap-4 sm:justify-start">
+              {/* Only a photo chosen in this session can be re-cropped: the stored one is
+                  already cropped, and its original was never uploaded. */}
+              {avatarFile && avatarSource && (
+                <button
+                  type="button"
+                  onClick={() => setCropTarget(avatarSource)}
+                  disabled={isSaving || !canEdit}
+                  className="text-sm font-medium text-brand-700 hover:text-brand-800 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Adjust crop
+                </button>
+              )}
+              {canRemovePhoto && (
+                <button
+                  type="button"
+                  onClick={handleRemovePhoto}
+                  disabled={isSaving || !canEdit}
+                  className="text-sm font-medium text-red-600 hover:text-red-700 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Remove photo
+                </button>
+              )}
+            </div>
             {photoError && (
               <p role="alert" className="form-error mt-2">
                 {photoError}
@@ -267,6 +304,15 @@ export function ProfileEditLayout({
             )}
           </div>
         </div>
+
+        {cropTarget && (
+          <PhotoCropDialog
+            file={cropTarget.file}
+            initialCrop={cropTarget.crop}
+            onConfirm={handleCropConfirm}
+            onCancel={() => setCropTarget(null)}
+          />
+        )}
 
         <div className="space-y-6">
           {/* Read-only account identifiers: username is a permanent handle, email lives on

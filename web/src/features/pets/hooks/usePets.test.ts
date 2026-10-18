@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useCreatePet, useDeletePet, useMyPets, usePet, useUpdatePet } from './usePets';
-import { createPet, deletePet, getPet, listMyPets, updatePet } from '../lib/petApi';
+import { useCreatePet, useDeletePet, useMyPets, usePet, usePetPhotoUrl, useUpdatePet } from './usePets';
+import { createPet, deletePet, getPet, getPetPhotoSignedUrl, listMyPets, updatePet } from '../lib/petApi';
 import { useAuth } from '@/features/auth';
 
 jest.mock('@tanstack/react-query', () => ({
@@ -13,7 +13,9 @@ jest.mock('../lib/petApi', () => ({
   createPet: jest.fn(),
   deletePet: jest.fn(),
   getPet: jest.fn(),
+  getPetPhotoSignedUrl: jest.fn(),
   listMyPets: jest.fn(),
+  PET_PHOTO_SIGNED_URL_TTL_SECONDS: 3_600,
   updatePet: jest.fn(),
 }));
 
@@ -23,6 +25,7 @@ const mockedUseQueryClient = jest.mocked(useQueryClient);
 const mockedCreatePet = jest.mocked(createPet);
 const mockedDeletePet = jest.mocked(deletePet);
 const mockedGetPet = jest.mocked(getPet);
+const mockedGetPetPhotoSignedUrl = jest.mocked(getPetPhotoSignedUrl);
 const mockedListMyPets = jest.mocked(listMyPets);
 const mockedUpdatePet = jest.mocked(updatePet);
 
@@ -157,6 +160,26 @@ describe('usePet', () => {
   });
 });
 
+describe('usePetPhotoUrl', () => {
+  it('signs the stored photo path under a key scoped to that path', async () => {
+    mockedGetPetPhotoSignedUrl.mockResolvedValue('https://signed.example/photo.png');
+
+    const options = usePetPhotoUrl('pet-1/photo.png') as unknown as { queryKey: unknown; queryFn: () => Promise<string>; enabled: boolean };
+
+    expect(options).toMatchObject({ queryKey: ['pets', 'photo', 'pet-1/photo.png'], enabled: true });
+    await expect(options.queryFn()).resolves.toBe('https://signed.example/photo.png');
+    expect(mockedGetPetPhotoSignedUrl).toHaveBeenCalledWith('pet-1/photo.png');
+  });
+
+  it('refreshes the signed URL before it expires', () => {
+    expect(usePetPhotoUrl('pet-1/photo.png')).toMatchObject({ staleTime: 3_300_000 });
+  });
+
+  it('does not query for a pet without a photo', () => {
+    expect(usePetPhotoUrl(null)).toMatchObject({ enabled: false });
+  });
+});
+
 describe('useCreatePet', () => {
   const values = { name: 'Rocket', species: 'dog' as const, breed: '', ageYear: 3, description: 'Friendly' };
 
@@ -190,6 +213,17 @@ describe('useCreatePet', () => {
     const options = mockedUseMutation.mock.lastCall?.[0];
 
     await expectToWaitFor(Promise.resolve(options?.onSettled?.({} as never, null, values, undefined, undefined as never)), [refetch]);
+  });
+
+  it('starts the refetch after a failed create but does not make the error wait for it', () => {
+    const invalidateQueries = jest.fn(() => new Promise(() => {}));
+    mockedUseQueryClient.mockReturnValue({ invalidateQueries } as never);
+
+    useCreatePet();
+    const options = mockedUseMutation.mock.lastCall?.[0];
+
+    expect(options?.onSettled?.(undefined, new Error('network down'), values, undefined, undefined as never)).toBeUndefined();
+    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['pets'], refetchType: 'all' });
   });
 });
 
@@ -234,6 +268,15 @@ describe('useUpdatePet', () => {
     );
 
     await expectToWaitFor(settled, [petsRefetch, bookingsRefetch]);
+  });
+
+  it('does not make a failed update wait for the refetches', () => {
+    mockedUseQueryClient.mockReturnValue({ invalidateQueries: jest.fn(() => new Promise(() => {})) } as never);
+
+    useUpdatePet();
+    const options = mockedUseMutation.mock.lastCall?.[0];
+
+    expect(options?.onSettled?.(undefined, new Error('network down'), { petId: 'pet-1', values }, undefined, undefined as never)).toBeUndefined();
   });
 });
 

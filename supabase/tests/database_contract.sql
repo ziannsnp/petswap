@@ -395,6 +395,52 @@ select
       and cmd = 'DELETE'
       and qual like '%auth.uid()%'
   ) as passed;
+
+insert into _contract (check_name, passed) values
+  (
+    'published listing search has a stable ordering index',
+    exists (
+      select 1 from pg_indexes
+      where schemaname = 'public'
+        and tablename = 'listings'
+        and indexname = 'listings_published_order_idx'
+        and indexdef like '%published_at DESC NULLS LAST, id DESC%'
+        and indexdef like '%status = ''published''%'
+        and indexdef like '%deleted_at IS NULL%'
+    )
+  ),
+  (
+    'published listing location, title, and description have trigram indexes',
+    (
+      select count(*) = 3
+      from pg_indexes
+      where schemaname = 'public'
+        and tablename = 'listings'
+        and indexname in (
+          'listings_published_location_trgm_idx',
+          'listings_published_title_trgm_idx',
+          'listings_published_description_trgm_idx'
+        )
+        and indexdef like '%USING gin%'
+        and indexdef like '%gin_trgm_ops%'
+    )
+  ),
+  (
+    'published listing search RPC has explicit app-role grants and no PUBLIC grant',
+    to_regprocedure('public.search_published_listings(text,text,integer,integer)') is not null
+      and has_function_privilege('anon', 'public.search_published_listings(text,text,integer,integer)', 'EXECUTE')
+      and has_function_privilege('authenticated', 'public.search_published_listings(text,text,integer,integer)', 'EXECUTE')
+      and has_function_privilege('service_role', 'public.search_published_listings(text,text,integer,integer)', 'EXECUTE')
+      and not exists (
+        select 1
+        from pg_proc as procedure,
+        lateral aclexplode(coalesce(procedure.proacl, acldefault('f', procedure.proowner))) as privilege
+        where procedure.oid = 'public.search_published_listings(text,text,integer,integer)'::regprocedure
+          and privilege.grantee = 0
+          and privilege.privilege_type = 'EXECUTE'
+      )
+  );
+
 select check_name, passed
 from _contract
 order by passed nulls first, check_name;

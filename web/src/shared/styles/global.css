@@ -36,6 +36,10 @@
   .form-alert { @apply rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700; }
   .form-status { @apply rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 text-sm text-brand-700; }
 
+  /* Dims everything outside a round crop guide; the spread only needs to cover its frame,
+     which clips it with overflow-hidden. */
+  .photo-crop-mask { box-shadow: 0 0 0 100vmax color-mix(in oklab, var(--color-gray-900) 55%, transparent); }
+
   .badge-brand { @apply bg-brand-50 text-brand-700 px-2 py-1 rounded-full text-xs font-medium; }
   .badge-green { @apply bg-green-50 text-green-700 px-2 py-1 rounded-full text-xs font-medium; }
   .badge-yellow { @apply bg-yellow-50 text-yellow-700 px-2 py-1 rounded-full text-xs font-medium; }

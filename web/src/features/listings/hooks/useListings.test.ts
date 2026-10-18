@@ -1,7 +1,7 @@
-import { useDeleteListing, useMyListings, useSetListingPublicationStatus } from './useListings';
-import { deleteListing, listMyListings, setListingPublicationStatus } from '../lib/listingApi';
+import { useDeleteListing, useMyListings, usePublishedListingPage, useSetListingPublicationStatus } from './useListings';
+import { deleteListing, listMyListings, listPublishedListings, searchPublishedListings, setListingPublicationStatus } from '../lib/listingApi';
 import { useAuth } from '@/features/auth';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 const mockInvalidateQueries = jest.fn();
 // The mutations also prune the hidden listing from cached data (covered with a real
@@ -23,11 +23,13 @@ jest.mock('../lib/listingApi', () => ({
   deleteListing: jest.fn(),
   listMyListings: jest.fn(),
   listPublishedListings: jest.fn(),
+  searchPublishedListings: jest.fn(),
   setListingPublicationStatus: jest.fn(),
 }));
 
 const mockedUseAuth = jest.mocked(useAuth);
 const mockedUseMutation = jest.mocked(useMutation);
+const mockedUseQuery = jest.mocked(useQuery);
 const mockedUseQueryClient = jest.mocked(useQueryClient);
 const mockedDeleteListing = jest.mocked(deleteListing);
 const mockedSetListingPublicationStatus = jest.mocked(setListingPublicationStatus);
@@ -57,6 +59,24 @@ describe('useMyListings', () => {
       queryFn: listMyListings,
       enabled: false,
     });
+  });
+});
+
+describe('usePublishedListingPage', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('scopes cached results by search criteria and page', async () => {
+    const query = { location: 'Bangkok', keyword: 'garden', page: 2 };
+    usePublishedListingPage(query);
+    const queryOptions = mockedUseQuery.mock.calls[0][0];
+
+    expect(queryOptions.queryKey).toEqual(['listings', 'published', 'page', query]);
+    if (typeof queryOptions.queryFn !== 'function') {
+      throw new Error('Expected the listing query to provide a query function.');
+    }
+    await queryOptions.queryFn({} as never);
+    expect(listPublishedListings).not.toHaveBeenCalled();
+    expect(searchPublishedListings).toHaveBeenCalledWith(query);
   });
 });
 

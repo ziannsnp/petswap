@@ -1,11 +1,19 @@
-import { EMPTY_SEARCH_CRITERIA, filterPublishedListings, isSameSearch, readSearchCriteria, toSearchParams } from './searchCriteria';
+import { PUBLISHED_LISTINGS_PAGE_SIZE } from '@/features/listings';
+import { EMPTY_SEARCH_CRITERIA, filterPublishedListings, isSameSearch, readSearchCriteria, readSearchPage, toSearchParams } from './searchCriteria';
 import {
+  SEARCH_RESULTS_PAGE_SIZE,
   hiddenSearchListings,
+  makeSearchPage,
   makeSearchResult,
   noResultSearches,
+  paginatedSearchListings,
   searchMatchCases,
   searchMatchListings,
 } from '../testing/searchFixtures';
+
+// The listings module is loaded only for its page size. Its Supabase client module reads
+// `import.meta`, which Jest cannot parse, so it is replaced.
+jest.mock('@/shared/lib/supabase', () => ({ getSupabaseClient: jest.fn() }));
 
 describe('search criteria in the URL', () => {
   it('reads a trimmed location and keyword, treating a missing one as empty', () => {
@@ -17,6 +25,22 @@ describe('search criteria in the URL', () => {
   it('leaves blank fields out, so an empty search is the plain browse-all URL', () => {
     expect(toSearchParams({ location: '   ', keyword: '' }).toString()).toBe('');
     expect(toSearchParams({ location: ' Bangkok ', keyword: '' }).toString()).toBe('location=Bangkok');
+  });
+
+  it('reads only positive safe-integer page values and defaults invalid values to the first page', () => {
+    expect(readSearchPage(new URLSearchParams('page=3'))).toBe(3);
+    expect(readSearchPage(new URLSearchParams('page=0'))).toBe(1);
+    expect(readSearchPage(new URLSearchParams('page=-2'))).toBe(1);
+    expect(readSearchPage(new URLSearchParams('page=2.5'))).toBe(1);
+    expect(readSearchPage(new URLSearchParams('page=9007199254740992'))).toBe(1);
+    expect(readSearchPage(new URLSearchParams('page=2147483648'))).toBe(2147483647);
+    expect(readSearchPage(new URLSearchParams(''))).toBe(1);
+  });
+
+  it('stores later pages beside the applied search while omitting the first page', () => {
+    const criteria = { location: 'Bangkok', keyword: 'garden' };
+    expect(toSearchParams(criteria).toString()).toBe('location=Bangkok&keyword=garden');
+    expect(toSearchParams(criteria, 2).toString()).toBe('location=Bangkok&keyword=garden&page=2');
   });
 
   it('treats searches that differ only in surrounding spaces as the same search', () => {
@@ -83,5 +107,15 @@ describe('search fixtures', () => {
 
   it('browses every published listing and none of the hidden ones', () => {
     expect(ids(filterPublishedListings(listings, EMPTY_SEARCH_CRITERIA))).toEqual(ids(searchMatchListings));
+  });
+});
+
+describe('pagination fixtures', () => {
+  it('build pages the size the app requests', () => {
+    expect(SEARCH_RESULTS_PAGE_SIZE).toBe(PUBLISHED_LISTINGS_PAGE_SIZE);
+  });
+
+  it.each([0, -1, 1.5])('refuse page %s, as the search RPC does', (page) => {
+    expect(() => makeSearchPage(paginatedSearchListings, page)).toThrow('Page must be a positive integer.');
   });
 });

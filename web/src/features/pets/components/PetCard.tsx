@@ -1,9 +1,11 @@
 import { useState } from 'react';
-import { PawPrint, SquarePen, Trash2 } from 'lucide-react';
+import { SquarePen, Trash2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { petSpeciesLabel } from '@/shared/lib/petSpecies';
+import { usePetPhotoUrl } from '../hooks/usePets';
 import type { Pet } from '../lib/petApi';
 import { DeletePetDialog } from './DeletePetDialog';
+import { PetAvatar } from './PetAvatar';
 
 interface PetCardProps {
   pet: Pet;
@@ -19,10 +21,10 @@ function formatAge(ageYear: number | null): string | null {
 // readers can announce, since the icons alone have no text.
 const actionClassName = 'flex h-11 w-11 items-center justify-center rounded-lg text-gray-400 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600';
 
-// Photos are private storage paths that need signed URLs; until photo upload is wired
-// in, every card shows the placeholder avatar.
 export function PetCard({ pet }: PetCardProps) {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  // Shows the paw placeholder while the signed URL loads, or when there is no photo.
+  const { data: photoUrl } = usePetPhotoUrl(pet.photo_url);
   const age = formatAge(pet.age_year);
   const details = [petSpeciesLabel(pet.species), pet.breed, age].filter(Boolean).join(' · ');
 
@@ -30,9 +32,7 @@ export function PetCard({ pet }: PetCardProps) {
     <article className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
       <div className="flex items-start justify-between gap-2">
         <div className="flex min-w-0 items-center gap-4">
-          <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full border-2 border-brand-100 bg-brand-50">
-            <PawPrint className="h-7 w-7 text-brand-600" aria-hidden="true" />
-          </div>
+          <PetAvatar src={photoUrl} className="h-16 w-16" iconClassName="h-7 w-7" />
           <div className="min-w-0">
             <h2 className="text-base font-semibold text-gray-900 break-words">{pet.name}</h2>
             <p className="text-sm text-gray-500 break-words">{details}</p>

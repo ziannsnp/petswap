@@ -4,7 +4,9 @@ import {
   createPet,
   deletePet,
   getPet,
+  getPetPhotoSignedUrl,
   listMyPets,
+  PET_PHOTO_SIGNED_URL_TTL_SECONDS,
   updatePet,
   type CreatePetValues,
   type UpdatePetValues,
@@ -13,8 +15,22 @@ import {
 export const petKeys = {
   all: ['pets'] as const,
   mine: (ownerId: string) => [...petKeys.all, 'mine', ownerId] as const,
-  detail: (petId: string, ownerId: string) => [...petKeys.all, 'detail', petId, ownerId] as const,
+  allDetails: (petId: string) => [...petKeys.all, 'detail', petId] as const,
+  detail: (petId: string, ownerId: string) => [...petKeys.allDetails(petId), ownerId] as const,
+  photo: (photoPath: string) => [...petKeys.all, 'photo', photoPath] as const,
 };
+
+/** Pet photos sit in a private bucket, so they are shown through short-lived signed URLs. */
+export function usePetPhotoUrl(photoPath: string | null) {
+  return useQuery({
+    queryKey: petKeys.photo(photoPath ?? ''),
+    // enabled guarantees photoPath is set whenever the query runs.
+    queryFn: () => getPetPhotoSignedUrl(photoPath as string),
+    enabled: Boolean(photoPath),
+    // Sign a fresh URL five minutes before the cached one expires.
+    staleTime: (PET_PHOTO_SIGNED_URL_TTL_SECONDS - 300) * 1000,
+  });
+}
 
 export function useMyPets() {
   const { user, isLoading } = useAuth();
@@ -51,14 +67,26 @@ export function usePet(petId: string) {
   });
 }
 
+/**
+ * Returning the refetch from onSettled makes mutateAsync wait for it, so the next screen
+ * already shows the change. A failure still starts the refetch but does not wait for it:
+ * against an unreachable server its retries would hold the error back for about 15 seconds.
+ */
+function waitOnlyAfterSuccess(error: Error | null, refetch: Promise<unknown>) {
+  return error ? undefined : refetch;
+}
+
 export function useCreatePet() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (values: CreatePetValues) => createPet(values),
-    // Returning the promise makes mutateAsync wait for the refetch, and 'all' includes the
-    // My Pets list, which is not mounted on this screen, so it shows the new pet on arrival.
-    onSettled: () => queryClient.invalidateQueries({ queryKey: petKeys.all, refetchType: 'all' }),
+    // 'all' includes the My Pets list, which is not mounted on this screen, so waiting for it
+    // means the list shows the new pet on arrival.
+    onSettled: (_data, error) => waitOnlyAfterSuccess(
+      error,
+      queryClient.invalidateQueries({ queryKey: petKeys.all, refetchType: 'all' }),
+    ),
   });
 }
 
@@ -70,13 +98,12 @@ export function useUpdatePet() {
       updatePet(petId, values)
     ),
     // A save whose response is lost may still have committed, so refresh after failures too.
-    // Waiting for the refetch (including the unmounted My Pets list) means the screen
-    // navigated to next already shows the saved values.
-    onSettled: () => Promise.all([
+    // 'all' includes the unmounted My Pets list, which the screen navigates to next.
+    onSettled: (_data, error) => waitOnlyAfterSuccess(error, Promise.all([
       queryClient.invalidateQueries({ queryKey: petKeys.all, refetchType: 'all' }),
       // Bookings show the pet's name, so they must not keep the old details.
       queryClient.invalidateQueries({ queryKey: ['bookings'] }),
-    ]),
+    ])),
   });
 }
 
@@ -85,9 +112,18 @@ export function useDeletePet() {
 
   return useMutation({
     mutationFn: (petId: string) => deletePet(petId),
+    // Invalidating only refetches mounted queries, so the edit screen's cached copy would
+    // otherwise flash the deleted pet before 'Pet not found'. A blocked delete keeps the pet,
+    // so only a successful one drops it.
+    onSuccess: (_data, petId) => {
+      queryClient.removeQueries({ queryKey: petKeys.allDetails(petId) });
+    },
     // deletePet removes the photo before the row, so a failed delete can still change the pet.
     // Bookings are not refreshed: deletePet refuses to delete a pet that has bookings.
-    // Returning the promise keeps the dialog open until My Pets has dropped the card.
-    onSettled: () => queryClient.invalidateQueries({ queryKey: petKeys.all }),
+    // After a success, waiting keeps the dialog open until My Pets has dropped the card.
+    onSettled: (_data, error) => waitOnlyAfterSuccess(
+      error,
+      queryClient.invalidateQueries({ queryKey: petKeys.all }),
+    ),
   });
 }

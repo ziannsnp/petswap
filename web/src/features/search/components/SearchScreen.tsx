@@ -1,8 +1,8 @@
-import { useTransition } from 'react';
+import { useEffect, useTransition } from 'react';
 import { Home, RefreshCw } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
-import { usePublishedListings } from '@/features/listings';
-import { EMPTY_SEARCH_CRITERIA, filterPublishedListings, isSameSearch, readSearchCriteria, toSearchParams } from '../lib/searchCriteria';
+import { usePublishedListingPage } from '@/features/listings';
+import { EMPTY_SEARCH_CRITERIA, filterPublishedListings, isSameSearch, readSearchCriteria, readSearchPage, toSearchParams } from '../lib/searchCriteria';
 import type { SearchCriteria } from '../lib/searchCriteria';
 import { SearchForm } from './SearchForm';
 import { SearchResultCard } from './SearchResultCard';
@@ -10,15 +10,18 @@ import { SearchResultCard } from './SearchResultCard';
 export function SearchScreen() {
   const [searchParams, setSearchParams] = useSearchParams();
   const criteria = readSearchCriteria(searchParams);
+  const page = readSearchPage(searchParams);
+  const pageParam = searchParams.get('page');
   const [isSearchPending, startSearchTransition] = useTransition();
   const {
-    data: allPublishedListings = [],
+    data: listingPage,
     isError,
     isFetching,
     isPending,
     refetch,
-  } = usePublishedListings();
-  const listings = filterPublishedListings(allPublishedListings, criteria);
+  } = usePublishedListingPage({ ...criteria, page });
+  const listings = filterPublishedListings(listingPage?.listings ?? [], criteria);
+  const totalPages = Math.ceil((listingPage?.totalCount ?? 0) / (listingPage?.pageSize ?? 1));
   const hasSearchCriteria = Boolean(criteria.location || criteria.keyword);
   const isActiveSearchLoading = !isPending && (isSearchPending || isFetching);
 
@@ -30,6 +33,22 @@ export function SearchScreen() {
     startSearchTransition(() => {
       setSearchParams(nextParams, { replace: isSameSearch(next, criteria) });
     });
+  };
+
+  useEffect(() => {
+    if (!listingPage) return;
+    const resolvedPage = listingPage.page;
+    const shouldNormalizeUrl = resolvedPage !== page
+      || (pageParam !== null && (page === 1 || pageParam !== String(page)));
+    if (!shouldNormalizeUrl) return;
+    setSearchParams(toSearchParams({
+      location: criteria.location,
+      keyword: criteria.keyword,
+    }, resolvedPage), { replace: true });
+  }, [criteria.keyword, criteria.location, listingPage, page, pageParam, setSearchParams]);
+
+  const goToPage = (nextPage: number) => {
+    setSearchParams(toSearchParams(criteria, nextPage));
   };
 
   return (
@@ -74,13 +93,38 @@ export function SearchScreen() {
                 <p className="mt-6 text-sm text-gray-600" role="status" aria-label="Updating search results" aria-live="polite">Updating search results…</p>
               )}
               {listings.length > 0 ? (
-                <ul className="mt-8 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-                  {listings.map((listing) => (
-                    <li key={listing.id}>
-                      <SearchResultCard listing={listing} />
-                    </li>
-                  ))}
-                </ul>
+                <>
+                  <ul className="mt-8 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+                    {listings.map((listing) => (
+                      <li key={listing.id}>
+                        <SearchResultCard listing={listing} />
+                      </li>
+                    ))}
+                  </ul>
+                  {totalPages > 1 && (
+                    <nav className="mt-8 flex items-center justify-center gap-4 pb-8" aria-label="Search result pages">
+                      <button
+                        className="btn-secondary min-h-11"
+                        type="button"
+                        onClick={() => goToPage(page - 1)}
+                        disabled={page <= 1}
+                      >
+                        Previous
+                      </button>
+                      <p aria-live="polite" className="text-sm text-gray-700">
+                        Page {listingPage?.page ?? page} of {totalPages}
+                      </p>
+                      <button
+                        className="btn-secondary min-h-11"
+                        type="button"
+                        onClick={() => goToPage(page + 1)}
+                        disabled={page >= totalPages}
+                      >
+                        Next
+                      </button>
+                    </nav>
+                  )}
+                </>
               ) : (
                 <section className="mt-8 flex min-h-64 flex-col items-center justify-center rounded-xl border border-dashed border-gray-300 bg-white p-6 text-center" role="status" aria-label={hasSearchCriteria ? 'No search results' : 'No listings available'}>
                   <Home className="h-10 w-10 text-brand-600" aria-hidden="true" />

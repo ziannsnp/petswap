@@ -1,4 +1,4 @@
-# ADR 0008: Public availability through the existing Cloudflare Workers deployment
+# ADR 0009: Public availability through the existing Cloudflare Workers deployment
 
 **Status:** Accepted
 

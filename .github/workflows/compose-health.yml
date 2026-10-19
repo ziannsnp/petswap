@@ -36,6 +36,14 @@ jobs:
       - name: Write .env with generated secrets
         run: sh scripts/stack-env.sh
 
+      - name: Pull images, retrying on registry rate limiting
+        run: |
+          for attempt in 1 2 3; do
+            docker compose pull && break
+            echo "Pull attempt $attempt failed, waiting before retry..."
+            sleep 30
+          done
+
       - name: Build and start the stack
         run: docker compose up -d --build
 

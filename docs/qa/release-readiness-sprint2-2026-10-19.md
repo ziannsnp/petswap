@@ -4,7 +4,7 @@ Sprint / date: Sprint 2, 2026-10-19 (sprint end). Author: Kasidech (Team D), via
 
 ## CI results
 
-All on `main` tip `e72e2e9` unless noted. The `Quality` check is required by the repo's branch ruleset ([`main branch ruleset`](https://github.com/ziannsnp/petswap/rules/21811058)); `Database contract`, `E2E smoke`, `E2E booking`, and the new `Compose health` (below) are not.
+All on `main` tip `e72e2e9` unless noted. None of these workflows is a required status check in the repo's [`main branch ruleset`](https://github.com/ziannsnp/petswap/rules/21811058) (see below); `Quality` is the gate the team treats as mandatory by convention.
 
 | Workflow | Status | Notes |
 | --- | --- | --- |
@@ -12,7 +12,7 @@ All on `main` tip `e72e2e9` unless noted. The `Quality` check is required by the
 | Database contract | Green | [Latest run](https://github.com/ziannsnp/petswap/actions/runs/39191001813), includes the new `booking_lifecycle.test.sql` |
 | E2E smoke | Green | [Latest run](https://github.com/ziannsnp/petswap/actions/runs/39191001843) |
 | E2E booking | Green | [Latest run](https://github.com/ziannsnp/petswap/actions/runs/39191001898) — added by [PR #78](https://github.com/ziannsnp/petswap/pull/78), not yet merged |
-| Compose health | **Red, external cause** | Added by [PR #85](https://github.com/ziannsnp/petswap/pull/85), not yet merged. Every run so far has failed on `public.ecr.aws`'s anonymous-pull throttle (`toomanyrequests: Data limit exceeded`), including after 5 retries with backoff. Real fix needs an AWS credential as a repo secret — see [Known blockers](#known-blockers-not-fixable-by-team-d-this-sprint) |
+| Compose health | **Intermittent, external cause** | Added by [PR #85](https://github.com/ziannsnp/petswap/pull/85), merged 2026-10-20. [Green](https://github.com/ziannsnp/petswap/actions/runs/39286857821) when the image pulls get through; [red](https://github.com/ziannsnp/petswap/actions/runs/39299596089) when `public.ecr.aws`'s anonymous-pull throttle (`toomanyrequests: Data limit exceeded`) outlasts all 5 retries. Not a stack bug — see [Known blockers](#known-blockers-not-fixable-by-team-d-this-sprint) |
 
 The branch ruleset currently requires **one approving review and thread resolution only** — no status check is marked required. This has been true since the ruleset was created (2026-08-29); promoting `Database contract` or `E2E smoke` to required needs repo **admin**, which the Team D account does not have (see [Known blockers](#known-blockers-not-fixable-by-team-d-this-sprint)).
 
@@ -29,17 +29,17 @@ Reflects the actual repository state on 2026-10-19, not the (stale) sheet.
 | 1 | Author `docker-compose.yml` | **Done** — merged, [PR #60](https://github.com/ziannsnp/petswap/pull/60) |
 | 2 | Health/smoke check script | **Done** — same PR |
 | 3 | Verify on a clean machine + document | **Done** — same PR |
-| 4 | Run the compose health check in CI | **Open PR, red** — [PR #85](https://github.com/ziannsnp/petswap/pull/85); the workflow is correct but blocked on the `public.ecr.aws` throttle above, not a stack bug |
+| 4 | Run the compose health check in CI | **Done** — merged, [PR #85](https://github.com/ziannsnp/petswap/pull/85) |
 | 5 | Promote `db-contract`/`e2e-smoke` to required checks | **Blocked** — needs repo admin access this account doesn't have |
 | 6 | Release step blocking publish on a failed required check | **Blocked** — depends on #5; also collides with [ADR 0005](../decisions/0005-cloudflare-workers-hosting.md)'s ban on a second deploy workflow, needing a team decision on approach |
 | 7 | Document release/rollback with a fresh drill | **Blocked** — a real drill needs the Cloudflare dashboard, owned by the Platform Account Owner |
 | 8 | Prove the required-check gate works | **Blocked** — depends on #5 |
-| 9 | Extend e2e coverage for cancel/complete/decline + search | **Open PR** — [PR #78](https://github.com/ziannsnp/petswap/pull/78), rebased and green, awaiting review |
+| 9 | Extend e2e coverage for cancel/complete/decline + search | **Open PR** — [PR #78](https://github.com/ziannsnp/petswap/pull/78), green at `aa04470` but now conflicts with `main` and needs another rebase before review |
 | 10 | Run the Sprint 2 regression checklist | **Done, with caveats** — see regression evidence above; several rows blocked on this environment's Docker, not on the product |
 | 11 | Publish this report | **Done** — this document |
-| 12 | ADR spike: public-availability target | **Done** — ADR 0009, pending in [PR #73](https://github.com/ziannsnp/petswap/pull/73) (not yet merged, so not linkable here) |
+| 12 | ADR spike: public-availability target | **Done** — [ADR 0009](../decisions/0009-public-availability-via-cloudflare.md), merged via [PR #73](https://github.com/ziannsnp/petswap/pull/73) |
 
-4 of 12 are merged or ready to merge pending review only (1–3, 12); 9 is rebased and green, also pending review; 4 and 5–8 (5 tasks) are blocked on access or credentials no Team D account holds this sprint; 10 and 11 are this document and its companion.
+5 of 12 are merged (1–4, 12); 9 is an open PR that needs a rebase; 5–8 (4 tasks) are blocked on access no Team D account holds this sprint; 10 and 11 are this document and its companion.
 
 ## Known defects
 
@@ -51,8 +51,8 @@ Reflects the actual repository state on 2026-10-19, not the (stale) sheet.
 
 - **Repo admin.** The `tonpia` account has `write`, not `admin`, on `ziannsnp/petswap` (`current_user_can_bypass: "never"` on the branch ruleset). Promoting any check to required needs the repo owner.
 - **Cloudflare dashboard.** Deployment, rollback, and build configuration live in the Platform Account Owner's Cloudflare account, not in this repository.
-- **Docker in this environment.** `docker info` did not return after several minutes in the session that produced this report, blocking a live regression click-through and a local Compose-stack test of [PR #85](https://github.com/ziannsnp/petswap/pull/85). CI was meant to cover the latter instead, but see the next point.
-- **AWS credentials for `public.ecr.aws`.** [PR #85](https://github.com/ziannsnp/petswap/pull/85)'s new Compose-health workflow is red on every attempt because the Supabase images it pulls come from AWS public ECR, which throttles anonymous pulls on GitHub's shared runner IPs. The documented fix is authenticating the pull with any AWS credentials (no ECR permission needed) via a repo secret — adding one needs whoever administers the repo's secrets, not this account.
+- **Docker in this environment.** `docker info` did not return after several minutes in the session that produced this report, blocking a live regression click-through and a local Compose-stack test of [PR #85](https://github.com/ziannsnp/petswap/pull/85). CI covered the latter instead.
+- **AWS credentials for `public.ecr.aws`.** The Compose-health workflow pulls Supabase images from AWS public ECR, which throttles anonymous pulls on GitHub's shared runner IPs. Retries with backoff get it green on some runs but not others, so a red Compose health run should be checked for `toomanyrequests` before blaming the change. The durable fix is authenticating the pull with any AWS credentials (no ECR permission needed) via a repo secret — adding one needs whoever administers the repo's secrets, not this account.
 
 ## Ready for release / demo?
 

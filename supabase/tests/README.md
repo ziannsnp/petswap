@@ -8,6 +8,7 @@ automated form of the database review points in
 | --- | --- | --- |
 | `database_contract.sql` | Catalogue checks: RLS is on, booking policies exist, the confirmed-overlap and consent-pair constraints exist, the listing accepted-pet contract and storage policies exist, the booking status enum and guard triggers are present, owner-only listing RPCs are not executable by `anon`, the listing-photo and pet-photos buckets are private, and the avatar bucket is public. | No |
 | `booking_rules.test.sql` | Behaviour of the confirmed-overlap rule: overlap rejected, back-to-back allowed, non-confirmed and different-listing bookings allowed, zero-length window rejected. Runs in one transaction that is rolled back. | No (rolled back) |
+| `booking_lifecycle.test.sql` | Behaviour of the booking status guard and RLS, signed in as each actor: only the listing owner confirms or declines a pending request (and an overlapping confirmation is refused), only the requester cancels a pending or confirmed booking, only the owner completes a confirmed booking on or after its end date, terminal statuses stay terminal, and strangers or anonymous callers change nothing. | No (rolled back) |
 | `listing_rules.test.sql` | Behaviour of the required accepted-pet rule: an empty accepted-pet array is rejected by the named constraint. Runs in one transaction that is rolled back. | No (rolled back) |
 | `listing_facility_migration.test.sql` | Behaviour of the legacy facility-label backfill: old labels map to the prototype vocabulary, unknown values survive, and replacement duplicates are removed. | No (rolled back) |
 | `listing_photo_access.test.sql` | Storage RLS behaviour: an owner can select draft photos for signing, other authenticated and anonymous users cannot read drafts, and anonymous users can select published photos for signing. | No (rolled back) |
@@ -35,6 +36,8 @@ psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" \
   -v ON_ERROR_STOP=1 -f supabase/tests/database_contract.sql
 psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" \
   -v ON_ERROR_STOP=1 -f supabase/tests/booking_rules.test.sql
+psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" \
+  -v ON_ERROR_STOP=1 -f supabase/tests/booking_lifecycle.test.sql
 psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" \
   -v ON_ERROR_STOP=1 -f supabase/tests/listing_rules.test.sql
 psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" \

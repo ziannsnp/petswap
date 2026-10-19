@@ -36,7 +36,7 @@ jobs:
       - name: Set up Supabase CLI
         uses: supabase/setup-cli@v1
         with:
-          version: latest
+          version: 2.117.0 # keep in step with web/package-lock.json; "latest" calls the rate-limited GitHub API
 
       - name: Start local Supabase stack
         run: supabase start
@@ -49,6 +49,9 @@ jobs:
 
       - name: Booking rules behavioural checks
         run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/booking_rules.test.sql
+
+      - name: Booking lifecycle behavioural checks
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/booking_lifecycle.test.sql
 
       - name: Listing rules behavioural checks
         run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/listing_rules.test.sql

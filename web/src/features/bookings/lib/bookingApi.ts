@@ -1,8 +1,8 @@
 import { getSupabaseClient } from '@/shared/lib/supabase';
 import type { Database } from '@/shared/types/database.types';
-import { BookingConflictError } from './bookingErrors';
+import { BookingCompletionError, BookingConflictError } from './bookingErrors';
 
-export { BookingConflictError };
+export { BookingCompletionError, BookingConflictError };
 
 export type Booking = Database['public']['Tables']['bookings']['Row'];
 export type BookingInsert = Database['public']['Tables']['bookings']['Insert'];
@@ -98,6 +98,11 @@ export async function updateBookingStatus(
     // The database exclusion constraint is the authoritative, concurrency-safe overlap check.
     if (status === 'confirmed' && error.code === '23P01') {
       throw new BookingConflictError();
+    }
+
+    // guard_booking_change() raises P0001 when the stay has not ended or the booking is not confirmed.
+    if (status === 'completed' && error.code === 'P0001') {
+      throw new BookingCompletionError();
     }
 
     throw error;

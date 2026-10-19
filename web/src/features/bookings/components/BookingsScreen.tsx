@@ -53,7 +53,10 @@ function BookingCard({
 }: BookingCardProps) {
   const canRespond = booking.status !== 'completed';
   const canConfirm = variant === 'incoming' && booking.status === 'pending';
-  const canCancel = booking.status === 'confirmed' || (variant === 'outgoing' && booking.status === 'pending');
+  const canCancel = variant === 'outgoing' && [
+    'pending',
+    'completed'
+    ].includes(booking.status);
 
   return (
     <li className="booking-card">

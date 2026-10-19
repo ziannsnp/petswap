@@ -36,16 +36,27 @@ jobs:
       - name: Write .env with generated secrets
         run: sh scripts/stack-env.sh
 
-      - name: Pull images, retrying on registry rate limiting
+      - name: Build and start the stack, retrying on registry throttling
+        # The Supabase images come from public.ecr.aws, which throttles
+        # anonymous pulls per source IP ("toomanyrequests: Data limit
+        # exceeded"). GitHub-hosted runners share a pool of IPs, so this can
+        # trip even on a first attempt with no prior pulls from this job.
+        # Retry with backoff; a failure after all attempts is a real problem.
         run: |
-          for attempt in 1 2 3; do
-            docker compose pull && break
-            echo "Pull attempt $attempt failed, waiting before retry..."
-            sleep 30
+          attempt=1
+          max_attempts=5
+          delay=20
+          until docker compose up -d --build; do
+            if [ "$attempt" -ge "$max_attempts" ]; then
+              echo "Giving up after $attempt attempts." >&2
+              exit 1
+            fi
+            echo "Attempt $attempt failed, waiting ${delay}s before retry..."
+            docker compose down -v
+            sleep "$delay"
+            attempt=$((attempt + 1))
+            delay=$((delay * 2))
           done
-
-      - name: Build and start the stack
-        run: docker compose up -d --build
 
       - name: Health and smoke check
         run: sh scripts/stack-health.sh --wait 180

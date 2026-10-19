@@ -221,6 +221,28 @@ insert into _contract (check_name, passed) values
     )
   ),
   (
+    'a deleted pet photo cannot be read by past hosts or uploaded or replaced by its owner',
+    exists (
+      select 1 from pg_policies
+      where schemaname = 'storage' and tablename = 'objects'
+        and policyname = 'Listing owners can read booked pet photos'
+        and qual like '%active_pet_is_booked_at_own_listing%'
+    )
+    and exists (
+      select 1 from pg_policies
+      where schemaname = 'storage' and tablename = 'objects'
+        and policyname = 'Pet owners can upload pet photos'
+        and with_check like '%current_user_owns_active_pet%'
+    )
+    and exists (
+      select 1 from pg_policies
+      where schemaname = 'storage' and tablename = 'objects'
+        and policyname = 'Pet owners can update pet photos'
+        and qual like '%current_user_owns_active_pet%'
+        and with_check like '%current_user_owns_active_pet%'
+    )
+  ),
+  (
     'booking inserts serialize against pet deletion',
     exists (
       select 1 from pg_trigger

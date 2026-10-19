@@ -694,4 +694,79 @@ begin
 end;
 $$;
 
+-- ---------------------------------------------------------------------------
+-- 16. A file left in a deleted pet's photo folder (a failed cleanup) stays
+-- private: the past host cannot read it, and the owner cannot add or replace
+-- files there. The owner can still read it, which Storage needs to remove it.
+-- ---------------------------------------------------------------------------
+reset role;
+insert into storage.objects (id, bucket_id, name)
+values (
+  '50000000-0000-4000-8000-000000000102',
+  'pet-photos',
+  '20000000-0000-4000-8000-000000000104/leftover.jpg'
+);
+
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"10000000-0000-4000-8000-000000000001","role":"authenticated"}',
+  true
+);
+set local role authenticated;
+
+do $$
+begin
+  if exists (
+    select 1 from storage.objects
+    where bucket_id = 'pet-photos'
+      and name = '20000000-0000-4000-8000-000000000104/leftover.jpg'
+  ) then
+    raise exception 'pet deletion: the past host can still read a deleted pet photo';
+  end if;
+end;
+$$;
+
+reset role;
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"10000000-0000-4000-8000-000000000003","role":"authenticated"}',
+  true
+);
+set local role authenticated;
+
+do $$
+declare
+  changed_rows integer;
+  rejected boolean := false;
+begin
+  if not exists (
+    select 1 from storage.objects
+    where bucket_id = 'pet-photos'
+      and name = '20000000-0000-4000-8000-000000000104/leftover.jpg'
+  ) then
+    raise exception 'pet deletion: the owner can no longer read a deleted pet photo, so it cannot be removed';
+  end if;
+
+  update storage.objects
+  set metadata = '{"replaced": true}'::jsonb
+  where bucket_id = 'pet-photos'
+    and name = '20000000-0000-4000-8000-000000000104/leftover.jpg';
+  get diagnostics changed_rows = row_count;
+  if changed_rows <> 0 then
+    raise exception 'pet deletion: the owner replaced a deleted pet photo';
+  end if;
+
+  begin
+    insert into storage.objects (bucket_id, name)
+    values ('pet-photos', '20000000-0000-4000-8000-000000000104/new.jpg');
+  exception
+    when insufficient_privilege then rejected := true;
+  end;
+
+  if not rejected then
+    raise exception 'pet deletion: the owner uploaded a photo for a deleted pet';
+  end if;
+end;
+$$;
+
 rollback;

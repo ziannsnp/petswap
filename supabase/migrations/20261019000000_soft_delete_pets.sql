@@ -115,6 +115,75 @@ begin
 end;
 $$;
 
+-- Pet photos of a deleted pet: nobody may add or replace one, and past hosts may
+-- no longer read one, so a file left behind by a failed cleanup stays private.
+-- The owner keeps read and delete, because the Storage API needs both to remove
+-- the file after the RPC above (its remove() selects the object before deleting).
+-- Like current_user_owns_pet() and pet_is_booked_at_own_listing(), each helper only
+-- answers about the caller's own pets or listings, so it reveals nothing new.
+create or replace function public.current_user_owns_active_pet(target_pet_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.pets
+    where id = target_pet_id
+      and owner_id = auth.uid()
+      and deleted_at is null
+  );
+$$;
+
+create or replace function public.active_pet_is_booked_at_own_listing(target_pet_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select public.pet_is_booked_at_own_listing(target_pet_id)
+    and exists (
+      select 1
+      from public.pets
+      where id = target_pet_id
+        and deleted_at is null
+    );
+$$;
+
+grant execute on function public.current_user_owns_active_pet(uuid) to authenticated, anon;
+grant execute on function public.active_pet_is_booked_at_own_listing(uuid) to authenticated, anon;
+
+drop policy if exists "Listing owners can read booked pet photos" on storage.objects;
+create policy "Listing owners can read booked pet photos"
+on storage.objects for select
+using (
+  bucket_id = 'pet-photos'
+  and public.active_pet_is_booked_at_own_listing(public.storage_folder_pet_id(name))
+);
+
+drop policy if exists "Pet owners can upload pet photos" on storage.objects;
+create policy "Pet owners can upload pet photos"
+on storage.objects for insert
+with check (
+  bucket_id = 'pet-photos'
+  and public.current_user_owns_active_pet(public.storage_folder_pet_id(name))
+);
+
+drop policy if exists "Pet owners can update pet photos" on storage.objects;
+create policy "Pet owners can update pet photos"
+on storage.objects for update
+using (
+  bucket_id = 'pet-photos'
+  and public.current_user_owns_active_pet(public.storage_folder_pet_id(name))
+)
+with check (
+  bucket_id = 'pet-photos'
+  and public.current_user_owns_active_pet(public.storage_folder_pet_id(name))
+);
+
 revoke all on function public.delete_pet_with_active_booking_check(uuid) from public;
 -- Supabase grants EXECUTE on new public functions to anon directly; see
 -- 20261015000000_revoke_anon_owner_rpc_access.sql.

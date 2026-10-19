@@ -37,7 +37,7 @@ Reflects the actual repository state on 2026-10-19, not the (stale) sheet.
 | 9 | Extend e2e coverage for cancel/complete/decline + search | **Open PR** — [PR #78](https://github.com/ziannsnp/petswap/pull/78), rebased and green, awaiting review |
 | 10 | Run the Sprint 2 regression checklist | **Done, with caveats** — see regression evidence above; several rows blocked on this environment's Docker, not on the product |
 | 11 | Publish this report | **Done** — this document |
-| 12 | ADR spike: public-availability target | **Done** — [PR #73](https://github.com/ziannsnp/petswap/pull/73), [ADR 0009](../decisions/0009-public-availability-via-cloudflare.md), awaiting review |
+| 12 | ADR spike: public-availability target | **Done** — ADR 0009, pending in [PR #73](https://github.com/ziannsnp/petswap/pull/73) (not yet merged, so not linkable here) |
 
 5 of 12 are merged or ready to merge pending review only (1–3, 12, and 9/4 once reviewed); 4 (5–8) are structurally blocked on access no Team D account holds this sprint.
 

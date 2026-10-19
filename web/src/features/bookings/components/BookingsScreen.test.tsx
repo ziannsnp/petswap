@@ -186,7 +186,7 @@ it('shows a single combined empty state when both lists are completely empty', (
   expect(screen.queryByRole('heading', { name: 'Outgoing requests' })).not.toBeInTheDocument();
 });
 
-it('offers Confirm/Decline only on pending incoming requests, never on outgoing ones', () => {
+it('offers Confirm/Decline on pending incoming requests, and Mark as complete on confirmed outgoing requests', () => {
   const pendingIncoming = makeBooking({ id: 'in-pending', status: 'pending' });
   const confirmedOutgoing = makeBooking({ id: 'out-confirmed', status: 'confirmed' });
   mockUseOutgoingBookings.mockReturnValue(successResult([confirmedOutgoing]));
@@ -196,6 +196,7 @@ it('offers Confirm/Decline only on pending incoming requests, never on outgoing 
 
   expect(screen.getAllByRole('button', { name: 'Confirm' })).toHaveLength(1);
   expect(screen.getAllByRole('button', { name: 'Decline' })).toHaveLength(1);
+  expect(screen.getAllByRole('button', { name: 'Mark as complete' })).toHaveLength(1);
 });
 
 it('does not offer actions on an incoming booking that is already confirmed', () => {
@@ -242,6 +243,18 @@ it.each(['pending', 'confirmed'] as const)('lets the requester cancel a %s outgo
   fireEvent.click(screen.getByRole('button', { name: 'Cancel booking' }));
 
   await waitFor(() => expect(mutateAsync).toHaveBeenCalledWith({ bookingId: 'out-1', status: 'cancelled' }));
+});
+
+it('lets the requester mark a confirmed outgoing booking as complete', async () => {
+  const mutateAsync = jest.fn().mockResolvedValue({});
+  mockUseUpdateBookingStatus.mockReturnValue({ mutateAsync });
+  mockUseOutgoingBookings.mockReturnValue(successResult([makeBooking({ id: 'out-1', status: 'confirmed' })]));
+  mockUseIncomingBookings.mockReturnValue(successResult([]));
+
+  render(<BookingsScreen />);
+  fireEvent.click(screen.getByRole('button', { name: 'Mark as complete' }));
+
+  await waitFor(() => expect(mutateAsync).toHaveBeenCalledWith({ bookingId: 'out-1', status: 'completed' }));
 });
 
 it('does not offer cancellation for terminal bookings or incoming requests', () => {

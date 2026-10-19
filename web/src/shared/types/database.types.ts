@@ -60,6 +60,7 @@ export type Database = {
           special_requirement: string | null;
           created_at: string;
           updated_at: string;
+          deleted_at: string | null;
         };
         Insert: {
           id?: string;
@@ -78,6 +79,7 @@ export type Database = {
           special_requirement?: string | null;
           created_at?: string;
           updated_at?: string;
+          deleted_at?: string | null;
         };
         Update: Partial<Database['public']['Tables']['pets']['Insert']>;
         Relationships: [
@@ -260,6 +262,10 @@ export type Database = {
           photo_url: string | null;
           location: string | null;
         }[];
+      };
+      delete_pet_with_active_booking_check: {
+        Args: { target_pet_id: string };
+        Returns: string | null;
       };
       current_user_owns_listing: {
         Args: { target_listing_id: string };

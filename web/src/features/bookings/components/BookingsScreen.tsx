@@ -37,13 +37,15 @@ interface BookingCardProps {
   readonly onConfirm?: (bookingId: string) => void;
   readonly onDecline?: (bookingId: string) => void;
   readonly onCancel?: (bookingId: string) => void;
+  readonly onComplete?: (bookingId: string) => void;
   readonly isResponding?: boolean;
   readonly responseError?: string | null;
 }
 
-function BookingCard({ booking, variant, onConfirm, onDecline, onCancel, isResponding, responseError }: BookingCardProps) {
+function BookingCard({ booking, variant, onConfirm, onDecline, onCancel, onComplete, isResponding, responseError }: BookingCardProps) {
   const canRespond = variant === 'incoming' && booking.status === 'pending';
   const canCancel = variant === 'outgoing' && (booking.status === 'pending' || booking.status === 'confirmed');
+  const canComplete = variant === 'outgoing' && booking.status === 'confirmed' && Date.parse(booking.end_date) <= Date.now();
 
   return (
     <li className="booking-card">
@@ -59,7 +61,7 @@ function BookingCard({ booking, variant, onConfirm, onDecline, onCancel, isRespo
       <p className="booking-card__dates">
         {formatBookingDate(booking.start_date)} &ndash; {formatBookingDate(booking.end_date)}
       </p>
-      {(canRespond || canCancel) && (
+      {(canRespond || canCancel || canComplete) && (
         <div className="booking-card__actions">
           {canRespond && (
             <>
@@ -89,6 +91,16 @@ function BookingCard({ booking, variant, onConfirm, onDecline, onCancel, isRespo
               disabled={isResponding}
             >
               {isResponding ? 'Saving...' : 'Cancel booking'}
+            </button>
+          )}
+          {canComplete && (
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => onComplete?.(booking.id)}
+              disabled={isResponding}
+            >
+              {isResponding ? 'Saving...' : 'Mark as complete'}
             </button>
           )}
           {responseError && (
@@ -141,6 +153,7 @@ interface BookingSectionProps {
   readonly onConfirm?: (bookingId: string) => void;
   readonly onDecline?: (bookingId: string) => void;
   readonly onCancel?: (bookingId: string) => void;
+  readonly onComplete?: (bookingId: string) => void;
   readonly respondingId?: string | null;
   readonly responseError?: { bookingId: string; message: string } | null;
 }
@@ -153,6 +166,7 @@ function BookingSection({
   onConfirm,
   onDecline,
   onCancel,
+  onComplete,
   respondingId,
   responseError,
 }: BookingSectionProps) {
@@ -185,6 +199,7 @@ function BookingSection({
               onConfirm={onConfirm}
               onDecline={onDecline}
               onCancel={onCancel}
+              onComplete={onComplete}
               isResponding={respondingId === booking.id}
               responseError={responseError?.bookingId === booking.id ? responseError.message : null}
             />
@@ -236,6 +251,7 @@ export function BookingsScreen() {
             query={outgoing}
             variant="outgoing"
             onCancel={(bookingId) => void changeStatus(bookingId, 'cancelled')}
+            onComplete={(bookingId) => void changeStatus(bookingId, 'completed')}
             respondingId={respondingId}
             responseError={responseError}
           />

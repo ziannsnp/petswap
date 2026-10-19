@@ -23,6 +23,12 @@ It is deliberately separate from `Quality` and not a required check: it starts c
 
 `.github/workflows/e2e-smoke.yml` runs the Playwright smoke suite (`web/e2e/smoke.spec.ts`) on desktop and mobile Chromium, and desktop Firefox for every `web/**` change and on demand. It builds a browser and starts the dev server, so it is a separate, non-required workflow rather than part of `Quality`. A red run means the app shell or router regressed and the change author owns the fix. The full Playwright journey (`booking-flow.spec.ts`) stays skipped until its screens exist; see [testing.md](testing.md).
 
+## Compose health workflow
+
+`.github/workflows/compose-health.yml` builds and starts the self-contained `docker-compose.yml` stack ([Docker Compose stack](environments.md#docker-compose-stack)) and runs `scripts/stack-health.sh` against it. It runs on pull requests that touch `docker-compose.yml`, `docker/**`, `.env.example`, or either `scripts/stack-*.sh` script, weekly on a schedule, and on demand.
+
+It is not a required check, for the same reason as `db-contract` and `e2e-smoke`: it builds images and starts containers, which is slower than the required gate. Its purpose is narrower than those two — it exists so the documented Compose setup path cannot silently rot between the times someone actually runs it by hand. A red run means a service, image, or `.env.example` change broke the stack; the change author owns the fix.
+
 ## Main branch protection
 
 The protected `main` branch is the only shared integration branch. GitHub requires a pull request, one approving review, current Quality checks, and resolution of review conversations before merge. New commits dismiss earlier approvals; administrators follow the same rules. Direct pushes, force pushes, and branch deletion are blocked.

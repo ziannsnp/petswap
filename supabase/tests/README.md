@@ -6,7 +6,7 @@ automated form of the database review points in
 
 | File | What it checks | Writes data? |
 | --- | --- | --- |
-| `database_contract.sql` | Catalogue checks: RLS is on, booking policies exist, the confirmed-overlap and consent-pair constraints exist, the listing accepted-pet contract and storage policies exist, the booking status enum and guard triggers are present, owner-only listing RPCs are not executable by `anon`, the listing-photo and pet-photos buckets are private, and the avatar bucket is public. | No |
+| `database_contract.sql` | Catalogue checks: RLS is on, booking policies exist, the confirmed-overlap and consent-pair constraints exist, the listing accepted-pet contract and storage policies exist, the booking status enum and guard triggers are present, owner-only listing RPCs and the pet-deletion RPC are not executable by `anon`, direct pet updates cannot soft-delete or restore a pet, booking inserts lock the pet against deletion, the listing-photo and pet-photos buckets are private, and the avatar bucket is public. | No |
 | `booking_rules.test.sql` | Behaviour of the confirmed-overlap rule: overlap rejected, back-to-back allowed, non-confirmed and different-listing bookings allowed, zero-length window rejected. Runs in one transaction that is rolled back. | No (rolled back) |
 | `listing_rules.test.sql` | Behaviour of the required accepted-pet rule: an empty accepted-pet array is rejected by the named constraint. Runs in one transaction that is rolled back. | No (rolled back) |
 | `listing_facility_migration.test.sql` | Behaviour of the legacy facility-label backfill: old labels map to the prototype vocabulary, unknown values survive, and replacement duplicates are removed. | No (rolled back) |
@@ -18,7 +18,7 @@ automated form of the database review points in
 | `avatar_storage_access.test.sql` | Avatar storage behaviour: avatars are publicly readable; users may create and replace their own avatars but cannot upload into or delete another user's folder. | No (rolled back) |
 | `pet_photo_access.test.sql` | Pet photo storage behaviour: private bucket; pet owners have full CRUD over their pet photos; listing hosts with a booking for that pet can read photos; unrelated users and anonymous requests are blocked. | No (rolled back) |
 | `profile_rules.test.sql` | Profile RLS behaviour: users can update their own profile; non-owners and anonymous users cannot update or delete other profiles. | No (rolled back) |
-| `pet_rules.test.sql` | Behaviour of pet management and integrity rules: the owner can update and delete a pet; a non-owner, including a listing host who can read a booked pet, cannot; a pet with a booking cannot be deleted. Runs in one transaction that is rolled back. | No (rolled back) |
+| `pet_rules.test.sql` | Behaviour of pet management and integrity rules: the owner can update and delete a pet; a non-owner, including a listing host who can read a booked pet, cannot; a pet with any booking cannot be hard-deleted; through the deletion RPC a pending or confirmed booking blocks deletion while a declined, cancelled, or completed one does not (one fixture pet per status); a soft-deleted pet stays readable to its owner and past hosts but cannot be edited, restored, or booked, its owner can still read and remove a leftover photo file, but cannot upload or replace one, and its past hosts can no longer read it; booking another user's deleted pet does not reveal that it was deleted. Runs in one transaction that is rolled back. | No (rolled back) |
 
 ## Run locally
 

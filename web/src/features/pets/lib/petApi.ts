@@ -25,6 +25,12 @@ export interface CreatePetValues {
   ageYear: number | null;
   description: string;
   photo?: File | null;
+  feeding_instruction?: string | null;
+  medical_note?: string | null;
+  behavior_note?: string | null;
+  allergies?: string | null;
+  vaccination_info?: string | null;
+  special_requirement?: string | null;
 }
 
 /**

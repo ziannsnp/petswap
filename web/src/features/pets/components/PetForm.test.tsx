@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import userEvent from '@testing-library/user-event';
 import type { ComponentProps } from 'react';
 import type { PetFormValues } from '../lib/petForm';
+import * as petFormModule from '../lib/petForm';
 import { cropPhoto } from '@/shared/lib/photoCrop';
 import { PetForm } from './PetForm';
 
@@ -385,7 +386,7 @@ describe('PetForm Care information collapsible section', () => {
 
     const careToggle = screen.getByRole('button', { name: /care information/i });
     expect(careToggle).toHaveAttribute('aria-expanded', 'false');
-    expect(careToggle).toHaveAttribute('aria-controls', 'pet-care-section');
+    expect(careToggle).not.toHaveAttribute('aria-controls');
     expect(screen.queryByLabelText(/feeding instruction/i)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/medical note/i)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/behavior note/i)).not.toBeInTheDocument();
@@ -402,6 +403,7 @@ describe('PetForm Care information collapsible section', () => {
     await user.click(careToggle);
 
     expect(careToggle).toHaveAttribute('aria-expanded', 'true');
+    expect(careToggle).toHaveAttribute('aria-controls', 'pet-care-section');
     expect(screen.getByLabelText(/feeding instruction/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/medical note/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/behavior note/i)).toBeInTheDocument();
@@ -420,6 +422,7 @@ describe('PetForm Care information collapsible section', () => {
     // Clicking again collapses it
     await user.click(careToggle);
     expect(careToggle).toHaveAttribute('aria-expanded', 'false');
+    expect(careToggle).not.toHaveAttribute('aria-controls');
     expect(screen.queryByLabelText(/feeding instruction/i)).not.toBeInTheDocument();
   });
 
@@ -434,6 +437,7 @@ describe('PetForm Care information collapsible section', () => {
 
     const careToggle = screen.getByRole('button', { name: /care information/i });
     expect(careToggle).toHaveAttribute('aria-expanded', 'true');
+    expect(careToggle).toHaveAttribute('aria-controls', 'pet-care-section');
     expect(screen.getByLabelText(/feeding instruction/i)).toHaveValue('2 cups twice daily');
     expect(screen.getByLabelText(/allergies/i)).toHaveValue('Chicken');
     expect(screen.getByLabelText(/medical note/i)).toHaveValue('');
@@ -490,6 +494,7 @@ describe('PetForm Care information collapsible section', () => {
     // Collapse the section before clicking save
     await user.click(careToggle);
     expect(careToggle).toHaveAttribute('aria-expanded', 'false');
+    expect(careToggle).not.toHaveAttribute('aria-controls');
 
     await user.click(screen.getByRole('button', { name: 'Save pet' }));
 
@@ -513,6 +518,50 @@ describe('PetForm Care information collapsible section', () => {
     expect(screen.getByLabelText(/allergies/i)).toBeDisabled();
     expect(screen.getByLabelText(/vaccination/i)).toBeDisabled();
     expect(screen.getByLabelText(/special requirement/i)).toBeDisabled();
+  });
+
+  it('opens care section on submit when care errors exist, and re-opens if collapsed', async () => {
+    const user = userEvent.setup();
+    const spy = jest.spyOn(petFormModule, 'parsePetForm').mockReturnValue({
+      ok: false,
+      errors: { feeding_instruction: 'Feeding instructions are too long.' },
+    });
+
+    renderForm({ initialValues: rocketValues });
+
+    const careToggle = screen.getByRole('button', { name: /care information/i });
+    expect(careToggle).toHaveAttribute('aria-expanded', 'false');
+    expect(careToggle).not.toHaveAttribute('aria-controls');
+
+    // First failed submit opens the care section
+    await user.click(screen.getByRole('button', { name: 'Save pet' }));
+    expect(careToggle).toHaveAttribute('aria-expanded', 'true');
+    expect(careToggle).toHaveAttribute('aria-controls', 'pet-care-section');
+    expect(screen.getByText('Feeding instructions are too long.')).toBeInTheDocument();
+
+    // User collapses the care section
+    await user.click(careToggle);
+    expect(careToggle).toHaveAttribute('aria-expanded', 'false');
+    expect(careToggle).not.toHaveAttribute('aria-controls');
+
+    // Second failed submit re-opens the care section instead of leaving error hidden
+    await user.click(screen.getByRole('button', { name: 'Save pet' }));
+    expect(careToggle).toHaveAttribute('aria-expanded', 'true');
+    expect(careToggle).toHaveAttribute('aria-controls', 'pet-care-section');
+    expect(screen.getByText('Feeding instructions are too long.')).toBeInTheDocument();
+
+    spy.mockRestore();
+  });
+
+  it('does not open care section on submit when errors only affect core fields', async () => {
+    const user = userEvent.setup();
+    renderForm();
+
+    await user.click(screen.getByRole('button', { name: 'Save pet' }));
+
+    const careToggle = screen.getByRole('button', { name: /care information/i });
+    expect(careToggle).toHaveAttribute('aria-expanded', 'false');
+    expect(careToggle).not.toHaveAttribute('aria-controls');
   });
 });
 

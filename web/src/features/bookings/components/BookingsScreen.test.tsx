@@ -97,6 +97,7 @@ beforeEach(() => {
 
 afterEach(() => {
   jest.clearAllMocks();
+  jest.useRealTimers();
 });
 
 it('renders outgoing and incoming items with their pet and listing details', () => {
@@ -230,6 +231,50 @@ it('declines a pending incoming booking', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Decline' }));
 
   await waitFor(() => expect(mutateAsync).toHaveBeenCalledWith({ bookingId: 'in-1', status: 'declined' }));
+});
+
+it.each(['pending', 'confirmed'] as const)('lets the requester cancel a %s outgoing booking', async (status) => {
+  const mutateAsync = jest.fn().mockResolvedValue({});
+  mockUseUpdateBookingStatus.mockReturnValue({ mutateAsync });
+  mockUseOutgoingBookings.mockReturnValue(successResult([makeBooking({ id: 'out-1', status })]));
+  mockUseIncomingBookings.mockReturnValue(successResult([]));
+
+  render(<BookingsScreen />);
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel booking' }));
+
+  await waitFor(() => expect(mutateAsync).toHaveBeenCalledWith({ bookingId: 'out-1', status: 'cancelled' }));
+});
+
+it('does not offer cancellation for terminal bookings or incoming requests', () => {
+  mockUseOutgoingBookings.mockReturnValue(successResult([
+    makeBooking({ id: 'declined', status: 'declined' }),
+    makeBooking({ id: 'cancelled', status: 'cancelled' }),
+    makeBooking({ id: 'completed', status: 'completed' }),
+  ]));
+  mockUseIncomingBookings.mockReturnValue(successResult([makeBooking({ id: 'incoming', status: 'pending' })]));
+
+  render(<BookingsScreen />);
+
+  expect(screen.queryByRole('button', { name: 'Cancel booking' })).not.toBeInTheDocument();
+});
+
+it('lets the owner mark an ended confirmed incoming booking as completed', async () => {
+  jest.useFakeTimers().setSystemTime(new Date('2026-10-15T12:00:00.000Z'));
+  const mutateAsync = jest.fn().mockResolvedValue({});
+  mockUseUpdateBookingStatus.mockReturnValue({ mutateAsync });
+  mockUseOutgoingBookings.mockReturnValue(successResult([]));
+  mockUseIncomingBookings.mockReturnValue(successResult([
+    makeBooking({ id: 'ended-confirmed', status: 'confirmed', end_date: '2026-10-14' }),
+    makeBooking({ id: 'future-confirmed', status: 'confirmed', end_date: '2026-10-16' }),
+    makeBooking({ id: 'ended-pending', status: 'pending', end_date: '2026-10-14' }),
+  ]));
+
+  render(<BookingsScreen />);
+
+  expect(screen.getAllByRole('button', { name: 'Mark completed' })).toHaveLength(1);
+  fireEvent.click(screen.getByRole('button', { name: 'Mark completed' }));
+
+  await waitFor(() => expect(mutateAsync).toHaveBeenCalledWith({ bookingId: 'ended-confirmed', status: 'completed' }));
 });
 
 it('shows an error on the affected card when a status update fails', async () => {

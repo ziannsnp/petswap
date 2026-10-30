@@ -1,2 +1,9 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Files that run or are parsed inside Linux containers must keep LF endings even
+# on a Windows checkout: a CRLF shell script fails with "not found" errors.
+*.sh text eol=lf
+docker/** text eol=lf
+docker-compose.yml text eol=lf
+.env.example text eol=lf

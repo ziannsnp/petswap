@@ -2,7 +2,7 @@
 
 ## Continuous integration
 
-GitHub Actions runs for pull requests that change the React app, Supabase configuration, or workflow itself. The gate runs:
+The `Quality` workflow runs on every pull request to `main`, whatever it changes, and on pushes to `main` that change the React app, Supabase configuration, docs, or the workflow itself. Its `web-quality` job runs:
 
 ```bash
 npm run lint
@@ -11,7 +11,7 @@ npm test -- --runInBand
 npm run build
 ```
 
-The same workflow also verifies that Markdown links under docs resolve. No pull request should merge into `main` while this gate is failing. Tonpai owns investigating CI/environment failures; the feature author owns failures introduced by their change.
+Its `docs-links` job verifies that Markdown links under docs resolve. No pull request should merge into `main` while this gate is failing. Tonpai owns investigating CI/environment failures; the feature author owns failures introduced by their change.
 
 ## Database contract workflow
 
@@ -23,9 +23,32 @@ It is deliberately separate from `Quality` and not a required check: it starts c
 
 `.github/workflows/e2e-smoke.yml` runs the Playwright smoke suite (`web/e2e/smoke.spec.ts`) on desktop and mobile Chromium, and desktop Firefox for every `web/**` change and on demand. It builds a browser and starts the dev server, so it is a separate, non-required workflow rather than part of `Quality`. A red run means the app shell or router regressed and the change author owns the fix. The full Playwright journey (`booking-flow.spec.ts`) stays skipped until its screens exist; see [testing.md](testing.md).
 
+## Compose health workflow
+
+`.github/workflows/compose-health.yml` builds and starts the self-contained `docker-compose.yml` stack ([Docker Compose stack](environments.md#docker-compose-stack)) and runs `scripts/stack-health.sh` against it. It runs on pull requests that touch `docker-compose.yml`, `docker/**`, `.env.example`, or either `scripts/stack-*.sh` script, weekly on a schedule, and on demand.
+
+It is not a required check, for the same reason as `db-contract` and `e2e-smoke`: it builds images and starts containers, which is slower than the required gate. Its purpose is narrower than those two — it exists so the documented Compose setup path cannot silently rot between the times someone actually runs it by hand. A red run means a service, image, or `.env.example` change broke the stack; the change author owns the fix.
+
 ## Main branch protection
 
-The protected `main` branch is the only shared integration branch. GitHub requires a pull request, one approving review, current Quality checks, and resolution of review conversations before merge. New commits dismiss earlier approvals; administrators follow the same rules. Direct pushes, force pushes, and branch deletion are blocked.
+The protected `main` branch is the only shared integration branch. The [`main` branch ruleset](https://github.com/ziannsnp/petswap/rules/21811058) requires a pull request, one approving review, and resolution of review conversations before merge. Pushing new commits to an approved pull request can dismiss the approval; GitHub's **Update branch** button has kept approvals in practice. The ruleset has no bypass list, so administrators follow the same rules. Direct pushes, force pushes, and branch deletion are blocked.
+
+As of October 2026 the ruleset requires **no status checks**. A pull request with a red or still-running workflow can be merged once it is approved, so "Quality is the gate" is a team rule that reviewers enforce, not something GitHub enforces. Changing the ruleset needs repository admin.
+
+### Proposed required checks
+
+These are the checks Team D proposes for the repository owner to add to the ruleset as required status checks. The names are the job names GitHub reports:
+
+| Check | Workflow | Ready to require? |
+| --- | --- | --- |
+| `web-quality` | Quality | Yes — runs on every pull request |
+| `docs-links` | Quality | Yes — runs on every pull request |
+| `Reset local database and run contract checks` | Database contract | Later, after the same change |
+| `Public route smoke (desktop + mobile)` | E2E smoke | Later, after the same change |
+
+GitHub waits forever for a required check whose workflow never starts, and a pull request stuck like that can only be merged by changing the ruleset. Database contract and E2E smoke still filter on `paths` at the trigger, so a pull request outside those paths, such as one that only touches `docker/**` or another workflow file, never gets the check. Before promoting a check, move its path filtering out of the `on:` trigger. Let the workflow start on every pull request and skip the job with `if:` when nothing relevant changed, the way `Detect changed paths` already gates `Supabase DB Push`. GitHub counts a skipped job as passing a required check. Quality is cheap enough to run unfiltered, so its `pull_request` trigger now has no `paths` filter and both jobs run in full on every pull request. Its `push` trigger keeps its filter, and `Supabase DB Push` still runs only when `supabase/**` changed. Database contract and E2E smoke start containers or browsers, so the job-level skip matters more for them.
+
+`Compose health` and the Cloudflare build check stay informational. Compose health is sometimes red because `public.ecr.aws` limits anonymous image pulls (`toomanyrequests`), not because of the change. The Cloudflare check reports a deploy, not a test.
 
 ## Deployment
 

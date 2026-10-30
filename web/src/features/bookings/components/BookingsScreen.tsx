@@ -37,26 +37,19 @@ interface BookingCardProps {
   readonly variant: 'incoming' | 'outgoing';
   readonly onConfirm?: (bookingId: string) => void;
   readonly onDecline?: (bookingId: string) => void;
+  readonly onCancel?: (bookingId: string) => void;
+  readonly onComplete?: (bookingId: string) => void;
   readonly isResponding?: boolean;
   readonly responseError?: string | null;
   readonly setConfirmingBookingId?: (bookingId: string | null) => void;
 }
 
-function BookingCard({
-  booking,
-  variant,
-  onConfirm,
-  onDecline,
-  isResponding,
-  responseError,
-  setConfirmingBookingId,
-}: BookingCardProps) {
-  const canRespond = booking.status !== 'completed';
-  const canConfirm = variant === 'incoming' && booking.status === 'pending';
-  const canCancel = variant === 'outgoing' && [
-    'pending',
-    'completed'
-    ].includes(booking.status);
+function BookingCard({ booking, variant, onConfirm, onDecline, onCancel, onComplete, isResponding, responseError }: BookingCardProps) {
+  const canRespond = variant === 'incoming' && booking.status === 'pending';
+  const canCancel = variant === 'outgoing' && (booking.status === 'pending' || booking.status === 'confirmed');
+  const canComplete = variant === 'incoming'
+    && booking.status === 'confirmed'
+    && booking.end_date <= new Date().toISOString().slice(0, 10);
 
   return (
     <li className="booking-card">
@@ -72,9 +65,9 @@ function BookingCard({
       <p className="booking-card__dates">
         {formatBookingDate(booking.start_date)} &ndash; {formatBookingDate(booking.end_date)}
       </p>
-      {canRespond && (
+      {(canRespond || canCancel || canComplete) && (
         <div className="booking-card__actions">
-          {canConfirm && (
+          {canRespond && (
             <>
               <button
                 type="button"
@@ -106,6 +99,21 @@ function BookingCard({
               disabled={isResponding}
             >
               Cancel
+              className="btn-secondary"
+              onClick={() => onCancel?.(booking.id)}
+              disabled={isResponding}
+            >
+              {isResponding ? 'Saving...' : 'Cancel booking'}
+            </button>
+          )}
+          {canComplete && (
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={() => onComplete?.(booking.id)}
+              disabled={isResponding}
+            >
+              {isResponding ? 'Saving...' : 'Mark completed'}
             </button>
           )}
           {responseError && (
@@ -157,6 +165,8 @@ interface BookingSectionProps {
   readonly variant: 'incoming' | 'outgoing';
   readonly onConfirm?: (bookingId: string) => void;
   readonly onDecline?: (bookingId: string) => void;
+  readonly onCancel?: (bookingId: string) => void;
+  readonly onComplete?: (bookingId: string) => void;
   readonly respondingId?: string | null;
   readonly responseError?: { bookingId: string; message: string } | null;
   readonly setConfirmingBookingId?: (bookingId: string | null) => void;
@@ -169,6 +179,8 @@ function BookingSection({
   variant,
   onConfirm,
   onDecline,
+  onCancel,
+  onComplete,
   respondingId,
   responseError,
   setConfirmingBookingId,
@@ -201,6 +213,8 @@ function BookingSection({
               variant={variant}
               onConfirm={onConfirm}
               onDecline={onDecline}
+              onCancel={onCancel}
+              onComplete={onComplete}
               isResponding={respondingId === booking.id}
               responseError={responseError?.bookingId === booking.id ? responseError.message : null}
               setConfirmingBookingId={setConfirmingBookingId}
@@ -277,8 +291,9 @@ export function BookingsScreen() {
             emptyMessage="No incoming requests on your listings"
             query={incoming}
             variant="incoming"
-            onConfirm={(bookingId) => void respond(bookingId, 'confirmed')}
-            onDecline={(bookingId) => void respond(bookingId, 'declined')}
+            onConfirm={(bookingId) => void changeStatus(bookingId, 'confirmed')}
+            onDecline={(bookingId) => void changeStatus(bookingId, 'declined')}
+            onComplete={(bookingId) => void changeStatus(bookingId, 'completed')}
             respondingId={respondingId}
             responseError={responseError}
             setConfirmingBookingId={setConfirmingBookingId}

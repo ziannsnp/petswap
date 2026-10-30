@@ -60,6 +60,7 @@ export type Database = {
           special_requirement: string | null;
           created_at: string;
           updated_at: string;
+          deleted_at: string | null;
         };
         Insert: {
           id?: string;
@@ -78,6 +79,7 @@ export type Database = {
           special_requirement?: string | null;
           created_at?: string;
           updated_at?: string;
+          deleted_at?: string | null;
         };
         Update: Partial<Database['public']['Tables']['pets']['Insert']>;
         Relationships: [
@@ -223,6 +225,31 @@ export type Database = {
     };
     Views: Record<string, never>;
     Functions: {
+      search_published_listings: {
+        Args: {
+          p_location: string;
+          p_keyword: string;
+          p_page: number;
+          p_page_size: number;
+        };
+        Returns: {
+          id: string;
+          owner_id: string;
+          title: string;
+          location: string;
+          description: string;
+          capacity: number;
+          accepted_pet_types: Database['public']['Enums']['pet_species'][];
+          facilities: string | null;
+          status: Database['public']['Enums']['listing_status'];
+          deleted_at: string | null;
+          published_at: string | null;
+          created_at: string;
+          updated_at: string;
+          page_number: number;
+          total_count: number;
+        }[];
+      };
       is_username_available: {
         Args: { candidate_username: string };
         Returns: boolean;
@@ -235,6 +262,10 @@ export type Database = {
           photo_url: string | null;
           location: string | null;
         }[];
+      };
+      delete_pet_with_active_booking_check: {
+        Args: { target_pet_id: string };
+        Returns: string | null;
       };
       current_user_owns_listing: {
         Args: { target_listing_id: string };

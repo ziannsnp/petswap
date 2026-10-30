@@ -14,6 +14,7 @@ import {
   type UpdatePetValues,
 } from './petApi';
 import { PetHasBookingsError } from './petErrors';
+import { validatePetPhoto as validatePetPhotoRule } from './petPhoto';
 
 jest.mock('@/shared/lib/supabase', () => ({
   getSupabaseClient: jest.fn(),
@@ -29,18 +30,10 @@ afterEach(() => {
   jest.clearAllMocks();
 });
 
-describe('validatePetPhoto', () => {
-  it.each(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])('accepts valid MIME type %s', (type) => {
-    expect(validatePetPhoto({ type, size: 1024 })).toBeNull();
-  });
-
-  it.each(['image/svg+xml', 'application/pdf', 'application/octet-stream', ''])('rejects unsupported MIME type %p', (type) => {
-    expect(validatePetPhoto({ type, size: 1024 })).toMatch(/unsupported file type/i);
-  });
-
-  it('accepts photos up to the 10 MB limit and rejects photos exceeding it', () => {
-    expect(validatePetPhoto({ type: 'image/png', size: PET_PHOTO_MAX_BYTES })).toBeNull();
-    expect(validatePetPhoto({ type: 'image/png', size: PET_PHOTO_MAX_BYTES + 1 })).toMatch(/10 MB limit/);
+// The rules themselves are tested in petPhoto.test.ts; this checks petApi still exposes them.
+describe('validatePetPhoto re-export', () => {
+  it('is the same function the form uses', () => {
+    expect(validatePetPhoto).toBe(validatePetPhotoRule);
   });
 });
 
@@ -70,7 +63,8 @@ describe('petPhotoStoragePath', () => {
 describe('listMyPets', () => {
   it('filters pets by the given owner, not just RLS', async () => {
     const order = jest.fn().mockResolvedValue({ data: [], error: null });
-    const eq = jest.fn().mockReturnValue({ order });
+    const is = jest.fn().mockReturnValue({ order });
+    const eq = jest.fn().mockReturnValue({ is });
     const select = jest.fn().mockReturnValue({ eq });
     const from = jest.fn().mockReturnValue({ select });
 
@@ -79,13 +73,14 @@ describe('listMyPets', () => {
     await expect(listMyPets('owner-123')).resolves.toEqual([]);
     expect(from).toHaveBeenCalledWith('pets');
     expect(eq).toHaveBeenCalledWith('owner_id', 'owner-123');
+    expect(is).toHaveBeenCalledWith('deleted_at', null);
     expect(order).toHaveBeenCalledWith('created_at', { ascending: false });
   });
 
   it('surfaces a database error instead of returning an empty list', async () => {
     const dbError = new Error('select failed');
     const order = jest.fn().mockResolvedValue({ data: null, error: dbError });
-    const from = jest.fn().mockReturnValue({ select: () => ({ eq: () => ({ order }) }) });
+    const from = jest.fn().mockReturnValue({ select: () => ({ eq: () => ({ is: () => ({ order }) }) }) });
 
     mockedGetSupabaseClient.mockReturnValue({ from } as never);
 
@@ -94,203 +89,84 @@ describe('listMyPets', () => {
 });
 
 describe('deletePet', () => {
+  // How delete_pet_with_active_booking_check refuses, as supabase-js hands it back: a plain
+  // object, not an Error. The messages are the ones the migration raises.
+  const rpcErrors = {
+    activeBookings: { code: 'P0001', message: 'Pet has active bookings and cannot be deleted.', details: null, hint: null },
+    alreadyDeleted: { code: 'P0001', message: 'Pet is already deleted.', details: null, hint: null },
+    notOwner: { code: '42501', message: 'Only the pet owner can delete this pet.', details: null, hint: null },
+  };
+
   function setupDeletePetMocks(options: {
-    userId?: string | null;
-    userError?: Error | null;
-    petRecord?: { id: string; photo_url: string | null; owner_id: string } | null;
-    fetchError?: Error | null;
-    bookings?: Array<{ id: string }> | null;
-    bookingsError?: Error | null;
-    removeData?: Array<{ name: string }> | null;
-    removeError?: Error | null;
-    deletedRows?: Array<{ id: string }> | null;
-    deleteError?: Error | null;
-  }) {
+    oldPhotoPath?: string | null;
+    rpcError?: object | null;
+    remove?: jest.Mock;
+  } = {}) {
     const {
-      userId = 'owner-123',
-      userError = null,
-      petRecord = { id: 'pet-123', photo_url: null, owner_id: 'owner-123' },
-      fetchError = null,
-      bookings = [],
-      bookingsError = null,
-      removeData = [{ name: 'pet-123/uuid-photo.png' }],
-      removeError = null,
-      deletedRows = [{ id: 'pet-123' }],
-      deleteError = null,
+      oldPhotoPath = null,
+      rpcError = null,
+      remove = jest.fn().mockResolvedValue({ data: [{ name: 'pet-123/uuid-photo.png' }], error: null }),
     } = options;
 
-    const fetchSingle = jest.fn().mockResolvedValue({ data: petRecord, error: fetchError });
-    const fetchEqOwner = jest.fn().mockReturnValue({ maybeSingle: fetchSingle });
-    const fetchEqId = jest.fn().mockReturnValue({ eq: fetchEqOwner, maybeSingle: fetchSingle });
-    const fetchSelect = jest.fn().mockReturnValue({ eq: fetchEqId });
-
-    const deleteSelect = jest.fn().mockResolvedValue({ data: deletedRows, error: deleteError });
-    const deleteEq = jest.fn().mockReturnValue({ select: deleteSelect });
-    const deleteMethod = jest.fn().mockReturnValue({ eq: deleteEq });
-
-    const bookingsLimit = jest.fn().mockResolvedValue({ data: bookings, error: bookingsError });
-    const bookingsEq = jest.fn().mockReturnValue({ limit: bookingsLimit });
-    const bookingsSelect = jest.fn().mockReturnValue({ eq: bookingsEq });
-
-    const from = jest.fn((table: string) => {
-      if (table === 'pets') {
-        return {
-          select: fetchSelect,
-          delete: deleteMethod,
-        };
-      }
-      if (table === 'bookings') {
-        return {
-          select: bookingsSelect,
-        };
-      }
-      throw new Error(`Unexpected table: ${table}`);
-    });
-
-    const remove = jest.fn().mockResolvedValue({ data: removeData, error: removeError });
+    const rpc = jest.fn().mockResolvedValue({ data: rpcError ? null : oldPhotoPath, error: rpcError });
+    const from = jest.fn();
     const storageFrom = jest.fn().mockReturnValue({ remove });
 
-    const getUser = jest.fn().mockResolvedValue({
-      data: { user: userId ? { id: userId } : null },
-      error: userError,
-    });
+    mockedGetSupabaseClient.mockReturnValue({ rpc, from, storage: { from: storageFrom } } as never);
 
-    mockedGetSupabaseClient.mockReturnValue({
-      auth: { getUser },
-      from,
-      storage: { from: storageFrom },
-    } as never);
-
-    return {
-      getUser,
-      from,
-      fetchSelect,
-      fetchEqId,
-      fetchEqOwner,
-      bookingsSelect,
-      bookingsEq,
-      bookingsLimit,
-      storageFrom,
-      remove,
-      deleteMethod,
-      deleteEq,
-      deleteSelect,
-    };
+    return { rpc, from, storageFrom, remove };
   }
 
-  it('throws an error when user is not signed in', async () => {
-    setupDeletePetMocks({ userId: null });
-
-    await expect(deletePet('pet-123')).rejects.toThrow('You must be signed in to delete a pet.');
-  });
-
-  it('surfaces auth error when getUser fails', async () => {
-    const authErr = new Error('Auth failure');
-    setupDeletePetMocks({ userError: authErr });
-
-    await expect(deletePet('pet-123')).rejects.toBe(authErr);
-  });
-
-  it('removes a pet with no photo directly from the database without calling storage', async () => {
-    const { storageFrom, deleteMethod, deleteEq, deleteSelect, fetchSelect, fetchEqId, fetchEqOwner } =
-      setupDeletePetMocks({
-        petRecord: { id: 'pet-123', photo_url: null, owner_id: 'owner-123' },
-      });
+  it('deletes through the active-booking RPC, not a direct table delete', async () => {
+    const { rpc, from, storageFrom } = setupDeletePetMocks();
 
     await expect(deletePet('pet-123')).resolves.toBeUndefined();
-    expect(fetchSelect).toHaveBeenCalledWith('id, photo_url, owner_id');
-    expect(fetchEqId).toHaveBeenCalledWith('id', 'pet-123');
-    expect(fetchEqOwner).toHaveBeenCalledWith('owner_id', 'owner-123');
+    expect(rpc).toHaveBeenCalledWith('delete_pet_with_active_booking_check', { target_pet_id: 'pet-123' });
+    expect(from).not.toHaveBeenCalled();
     expect(storageFrom).not.toHaveBeenCalled();
-    expect(deleteMethod).toHaveBeenCalled();
-    expect(deleteEq).toHaveBeenCalledWith('id', 'pet-123');
-    expect(deleteSelect).toHaveBeenCalledWith('id');
   });
 
-  it('removes pet photo from storage before deleting the database row', async () => {
-    const { storageFrom, remove, deleteMethod, deleteEq } = setupDeletePetMocks({
-      petRecord: { id: 'pet-123', photo_url: 'pet-123/uuid-photo.png', owner_id: 'owner-123' },
-      removeData: [{ name: 'pet-123/uuid-photo.png' }],
-    });
+  it('removes the photo path the RPC returns, after the pet is deleted', async () => {
+    const { rpc, storageFrom, remove } = setupDeletePetMocks({ oldPhotoPath: 'pet-123/uuid-photo.png' });
 
     await expect(deletePet('pet-123')).resolves.toBeUndefined();
     expect(storageFrom).toHaveBeenCalledWith(PET_PHOTO_BUCKET);
     expect(remove).toHaveBeenCalledWith(['pet-123/uuid-photo.png']);
-    expect(deleteMethod).toHaveBeenCalled();
-    expect(deleteEq).toHaveBeenCalledWith('id', 'pet-123');
+    expect(rpc.mock.invocationCallOrder[0]).toBeLessThan(remove.mock.invocationCallOrder[0]);
   });
 
-  it('throws an error if pet is not found or not owned by user during fetch', async () => {
-    setupDeletePetMocks({ petRecord: null });
-
-    await expect(deletePet('pet-123')).rejects.toThrow(
-      'Pet with id pet-123 not found or you do not have permission to delete it.',
-    );
-  });
-
-  it('surfaces fetch error when retrieving pet before deletion', async () => {
-    const fetchError = new Error('network down');
-    setupDeletePetMocks({ fetchError });
-
-    await expect(deletePet('pet-123')).rejects.toBe(fetchError);
-  });
-
-  it('throws an error when pet has existing bookings and does not touch storage or delete row', async () => {
-    const { storageFrom, deleteMethod } = setupDeletePetMocks({
-      petRecord: { id: 'pet-123', photo_url: 'pet-123/uuid-photo.png', owner_id: 'owner-123' },
-      bookings: [{ id: 'booking-1' }],
-    });
+  it('reports an active booking as PetHasBookingsError and leaves the photo alone', async () => {
+    const { storageFrom } = setupDeletePetMocks({ rpcError: rpcErrors.activeBookings });
 
     const result = deletePet('pet-123');
     await expect(result).rejects.toBeInstanceOf(PetHasBookingsError);
-    await expect(result).rejects.toThrow('Cannot delete a pet that has existing bookings.');
+    await expect(result).rejects.toThrow('Cannot delete a pet that has active bookings.');
     expect(storageFrom).not.toHaveBeenCalled();
-    expect(deleteMethod).not.toHaveBeenCalled();
   });
 
-  it('reports a booking created after the check as a has-bookings error', async () => {
-    setupDeletePetMocks({
-      deleteError: Object.assign(new Error('violates foreign key constraint "bookings_pet_id_fkey"'), { code: '23503' }),
-    });
+  it('treats a pet that is already deleted as deleted', async () => {
+    const { storageFrom } = setupDeletePetMocks({ rpcError: rpcErrors.alreadyDeleted });
 
-    await expect(deletePet('pet-123')).rejects.toBeInstanceOf(PetHasBookingsError);
-  });
-
-  it('surfaces bookings check error and does not touch storage or delete row', async () => {
-    const bookingsError = new Error('bookings query failed');
-    const { storageFrom, deleteMethod } = setupDeletePetMocks({ bookingsError });
-
-    await expect(deletePet('pet-123')).rejects.toBe(bookingsError);
+    await expect(deletePet('pet-123')).resolves.toBeUndefined();
     expect(storageFrom).not.toHaveBeenCalled();
-    expect(deleteMethod).not.toHaveBeenCalled();
   });
 
-  it('surfaces storage remove error and does not delete database row', async () => {
-    const storageError = new Error('storage remove failed');
-    const { deleteMethod } = setupDeletePetMocks({
-      petRecord: { id: 'pet-123', photo_url: 'pet-123/uuid-photo.png', owner_id: 'owner-123' },
-      removeError: storageError,
-      removeData: null,
-    });
+  it('surfaces any other RPC error unchanged', async () => {
+    const { storageFrom } = setupDeletePetMocks({ rpcError: rpcErrors.notOwner });
 
-    await expect(deletePet('pet-123')).rejects.toThrow('Failed to delete pet photo: storage remove failed');
-    expect(deleteMethod).not.toHaveBeenCalled();
+    await expect(deletePet('pet-123')).rejects.toBe(rpcErrors.notOwner);
+    expect(storageFrom).not.toHaveBeenCalled();
   });
 
-  it('throws an error when storage remove returns empty array (RLS blocked) and does not delete database row', async () => {
-    const { deleteMethod } = setupDeletePetMocks({
-      petRecord: { id: 'pet-123', photo_url: 'pet-123/uuid-photo.png', owner_id: 'owner-123' },
-      removeData: [],
-    });
+  it.each([
+    ['returns an error', jest.fn().mockResolvedValue({ data: null, error: new Error('storage down') })],
+    ['removes nothing (RLS blocked)', jest.fn().mockResolvedValue({ data: [], error: null })],
+    ['throws', jest.fn().mockRejectedValue(new TypeError('Failed to fetch'))],
+  ])('still resolves when photo removal %s, because the pet is already deleted', async (_case, remove) => {
+    setupDeletePetMocks({ oldPhotoPath: 'pet-123/uuid-photo.png', remove });
 
-    await expect(deletePet('pet-123')).rejects.toThrow('Failed to delete pet photo: permission denied or not found.');
-    expect(deleteMethod).not.toHaveBeenCalled();
-  });
-
-  it('throws an error when database delete affects 0 rows due to RLS filtering', async () => {
-    setupDeletePetMocks({ deletedRows: [] });
-
-    await expect(deletePet('pet-123')).rejects.toThrow('Could not delete pet pet-123: permission denied or pet not found.');
+    await expect(deletePet('pet-123')).resolves.toBeUndefined();
+    expect(remove).toHaveBeenCalledWith(['pet-123/uuid-photo.png']);
   });
 });
 
@@ -813,6 +689,90 @@ describe('createPet', () => {
   });
 });
 
+// A dropped connection rejects the storage promise instead of resolving with `error`,
+// so rollback must handle both shapes.
+describe('createPet rollback when a storage call throws', () => {
+  const values = {
+    name: 'Rocket',
+    species: 'dog' as const,
+    breed: '',
+    ageYear: null,
+    description: 'Loves agility',
+  };
+
+  function setupCreateMocks({
+    upload,
+    updateError = null as Error | null,
+    remove = jest.fn().mockImplementation((paths: string[]) => Promise.resolve({
+      data: paths.map((path) => ({ name: path.split('/').pop() })),
+      error: null,
+    })),
+  }: { upload: jest.Mock; updateError?: Error | null; remove?: jest.Mock }) {
+    const insertSingle = jest.fn().mockResolvedValue({ data: { id: 'pet-1', photo_url: null }, error: null });
+    const insert = jest.fn().mockReturnValue({ select: jest.fn().mockReturnValue({ single: insertSingle }) });
+
+    const updateSingle = jest.fn().mockResolvedValue({ data: null, error: updateError });
+    const update = jest.fn().mockReturnValue({
+      eq: jest.fn().mockReturnValue({ select: jest.fn().mockReturnValue({ single: updateSingle }) }),
+    });
+
+    const deleteSelect = jest.fn().mockResolvedValue({ data: [{ id: 'pet-1' }], error: null });
+    const deleteEq = jest.fn().mockReturnValue({ select: deleteSelect });
+    const deleteMethod = jest.fn().mockReturnValue({ eq: deleteEq });
+
+    mockedGetSupabaseClient.mockReturnValue({
+      auth: { getUser: signedIn('owner-123') },
+      from: jest.fn().mockReturnValue({ insert, update, delete: deleteMethod }),
+      storage: { from: jest.fn().mockReturnValue({ upload, remove }) },
+    } as never);
+
+    return { update, remove, deleteMethod, deleteEq };
+  }
+
+  function photo() {
+    return new File(['image-bytes'], 'rocket.png', { type: 'image/png' });
+  }
+
+  it('deletes the new pet, and removes no file, when the upload throws', async () => {
+    const networkError = new TypeError('Failed to fetch');
+    const { update, remove, deleteEq } = setupCreateMocks({ upload: jest.fn().mockRejectedValue(networkError) });
+
+    await expect(createPet({ ...values, photo: photo() })).rejects.toBe(networkError);
+
+    expect(update).not.toHaveBeenCalled();
+    expect(remove).not.toHaveBeenCalled();
+    expect(deleteEq).toHaveBeenCalledWith('id', 'pet-1');
+  });
+
+  it('removes the upload before deleting the pet when the photo_url update fails', async () => {
+    const updateError = new Error('Update failed');
+    const upload = jest.fn().mockResolvedValue({ data: { path: 'uploaded' }, error: null });
+    const { remove, deleteMethod } = setupCreateMocks({ upload, updateError });
+
+    await expect(createPet({ ...values, photo: photo() })).rejects.toBe(updateError);
+
+    expect(remove).toHaveBeenCalledWith([upload.mock.calls[0][0]]);
+    // Storage RLS checks that the pet row exists, so the file has to go first.
+    expect(remove.mock.invocationCallOrder[0]).toBeLessThan(deleteMethod.mock.invocationCallOrder[0]);
+  });
+
+  it('keeps the pet and reports an incomplete rollback when removing the upload throws', async () => {
+    const updateError = new Error('Update failed');
+    const { deleteMethod } = setupCreateMocks({
+      upload: jest.fn().mockResolvedValue({ data: { path: 'uploaded' }, error: null }),
+      updateError,
+      remove: jest.fn().mockRejectedValue(new Error('socket hang up')),
+    });
+
+    const result = createPet({ ...values, photo: photo() });
+
+    await expect(result).rejects.toThrow('Update failed (rollback incomplete: photo cleanup failed: socket hang up)');
+    await expect(result).rejects.toHaveProperty('cause', updateError);
+    // Deleting the pet would leave a file nobody may remove any more.
+    expect(deleteMethod).not.toHaveBeenCalled();
+  });
+});
+
 describe('getPet', () => {
   it('fetches a single pet by id and returns the row', async () => {
     const mockPet = {
@@ -826,10 +786,12 @@ describe('getPet', () => {
       photo_url: null,
       created_at: '2026-01-01T00:00:00Z',
       updated_at: '2026-01-01T00:00:00Z',
+      deleted_at: null,
     };
 
     const maybeSingle = jest.fn().mockResolvedValue({ data: mockPet, error: null });
-    const eq = jest.fn().mockReturnValue({ maybeSingle });
+    const is = jest.fn().mockReturnValue({ maybeSingle });
+    const eq = jest.fn().mockReturnValue({ is });
     const select = jest.fn().mockReturnValue({ eq });
     const from = jest.fn((table: string) => {
       if (table === 'pets') return { select };
@@ -842,11 +804,13 @@ describe('getPet', () => {
     expect(from).toHaveBeenCalledWith('pets');
     expect(select).toHaveBeenCalledWith('*');
     expect(eq).toHaveBeenCalledWith('id', 'pet-123');
+    expect(is).toHaveBeenCalledWith('deleted_at', null);
   });
 
-  it('returns null when the pet does not exist or is not accessible', async () => {
+  it('returns null when the pet does not exist, is deleted, or is not accessible', async () => {
     const maybeSingle = jest.fn().mockResolvedValue({ data: null, error: null });
-    const eq = jest.fn().mockReturnValue({ maybeSingle });
+    const is = jest.fn().mockReturnValue({ maybeSingle });
+    const eq = jest.fn().mockReturnValue({ is });
     const select = jest.fn().mockReturnValue({ eq });
     const from = jest.fn().mockReturnValue({ select });
 
@@ -858,7 +822,8 @@ describe('getPet', () => {
   it('surfaces database error when fetching pet fails', async () => {
     const dbError = new Error('Database connection failed');
     const maybeSingle = jest.fn().mockResolvedValue({ data: null, error: dbError });
-    const eq = jest.fn().mockReturnValue({ maybeSingle });
+    const is = jest.fn().mockReturnValue({ maybeSingle });
+    const eq = jest.fn().mockReturnValue({ is });
     const select = jest.fn().mockReturnValue({ eq });
     const from = jest.fn().mockReturnValue({ select });
 

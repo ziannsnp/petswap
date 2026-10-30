@@ -1,6 +1,6 @@
 /** @jest-environment jsdom */
 import { render, screen } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import type { Pet } from '../lib/petApi';
 import { PetsScreen } from './PetsScreen';
 
@@ -14,6 +14,7 @@ const mockPetsState: { data: Pet[] | undefined; isPending: boolean; isError: boo
 jest.mock('../hooks/usePets', () => ({
   useMyPets: () => mockPetsState,
   useDeletePet: () => ({ mutateAsync: jest.fn(), isPending: false }),
+  usePetPhotoUrl: () => ({ data: undefined }),
 }));
 
 function pet(overrides: Partial<Pet>): Pet {
@@ -34,6 +35,7 @@ function pet(overrides: Partial<Pet>): Pet {
     special_requirement: null,
     created_at: '2026-10-01T00:00:00.000Z',
     updated_at: '2026-10-01T00:00:00.000Z',
+    deleted_at: null,
     ...overrides,
   };
 }
@@ -104,9 +106,35 @@ describe('PetsScreen', () => {
     expect(screen.queryByText('No pets yet')).not.toBeInTheDocument();
   });
 
+  it('keeps the loaded pets and their actions when a background refresh fails', () => {
+    // A failed delete refreshes the list; if that fails too, the card and its open dialog
+    // must stay so the dialog can explain why the delete failed.
+    mockPetsState.data = [pet({ id: 'pet-1', name: 'Mali' })];
+    mockPetsState.isError = true;
+    renderScreen();
+
+    expect(screen.getByRole('button', { name: 'Delete Mali' })).toBeInTheDocument();
+    expect(screen.queryByText(/could not load your pets/i)).not.toBeInTheDocument();
+  });
+
   it('confirms a newly saved pet', () => {
     renderScreen({ petSaved: true });
 
     expect(screen.getByRole('status')).toHaveTextContent('Pet saved successfully.');
+  });
+
+  it('clears the saved confirmation from history, so a refresh does not show it again', () => {
+    function HistoryState() {
+      return <span data-testid="history-state">{JSON.stringify(useLocation().state)}</span>;
+    }
+    render(
+      <MemoryRouter initialEntries={[{ pathname: '/pets', state: { petSaved: true } }]}>
+        <PetsScreen />
+        <HistoryState />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('status')).toHaveTextContent('Pet saved successfully.');
+    expect(screen.getByTestId('history-state')).toHaveTextContent('null');
   });
 });

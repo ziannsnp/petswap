@@ -1,14 +1,15 @@
 import { ArrowLeft } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useCreatePet } from '../hooks/usePets';
-import type { CreatePetValues } from '../lib/petApi';
+import type { UpdatePetValues } from '../lib/petApi';
 import { PetForm } from './PetForm';
 
 export function CreatePetScreen() {
   const navigate = useNavigate();
   const createPetMutation = useCreatePet();
 
-  const handleSubmit = async (values: CreatePetValues) => {
+  // A new pet has no stored photo, so PetForm never sets removePhoto here.
+  const handleSubmit = async (values: UpdatePetValues) => {
     try {
       await createPetMutation.mutateAsync(values);
       void navigate('/pets', { state: { petSaved: true } });

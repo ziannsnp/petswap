@@ -2,19 +2,14 @@ import { getSupabaseClient } from '@/shared/lib/supabase';
 import type { PetSpecies } from '@/shared/lib/petSpecies';
 import type { Database } from '@/shared/types/database.types';
 import { PetHasBookingsError } from './petErrors';
+import { validatePetPhoto } from './petPhoto';
+
+export { PET_PHOTO_MAX_BYTES, PET_PHOTO_MIME_TYPES, validatePetPhoto } from './petPhoto';
 
 export type Pet = Database['public']['Tables']['pets']['Row'];
 
 export const PET_PHOTO_BUCKET = 'pet-photos';
 export const PET_PHOTO_SIGNED_URL_TTL_SECONDS = 3_600;
-export const PET_PHOTO_MAX_BYTES = 10_485_760;
-
-export const PET_PHOTO_MIME_TYPES = [
-  'image/jpeg',
-  'image/png',
-  'image/webp',
-  'image/gif',
-] as const;
 
 export const MIME_TO_EXTENSION: Record<string, string> = {
   'image/jpeg': '.jpg',
@@ -30,6 +25,12 @@ export interface CreatePetValues {
   ageYear: number | null;
   description: string;
   photo?: File | null;
+  feeding_instruction?: string | null;
+  medical_note?: string | null;
+  behavior_note?: string | null;
+  allergies?: string | null;
+  vaccination_info?: string | null;
+  special_requirement?: string | null;
 }
 
 /**
@@ -58,19 +59,6 @@ function toPetRowAttributes(values: Omit<CreatePetValues, 'photo'>) {
   };
 }
 
-/** Validates photo MIME type and size against the storage bucket limits. */
-export function validatePetPhoto(file: Pick<File, 'type' | 'size'>): string | null {
-  if (!(PET_PHOTO_MIME_TYPES as readonly string[]).includes(file.type)) {
-    return 'Unsupported file type. Choose a JPG, PNG, WebP, or GIF file.';
-  }
-
-  if (file.size > PET_PHOTO_MAX_BYTES) {
-    return `Photo is larger than the ${PET_PHOTO_MAX_BYTES / 1_048_576} MB limit.`;
-  }
-
-  return null;
-}
-
 /** Generates a storage path satisfying the pet-photos bucket RLS contract (<pet_id>/<uuid>.<ext>). */
 export function petPhotoStoragePath(petId: string, file: Pick<File, 'type' | 'name'>): string {
   const extension = MIME_TO_EXTENSION[file.type]
@@ -79,7 +67,7 @@ export function petPhotoStoragePath(petId: string, file: Pick<File, 'type' | 'na
 }
 
 /**
- * Retrieves a single pet by id. Returns null if not found or not visible under RLS.
+ * Retrieves a single pet by id. Returns null if not found, deleted, or not visible under RLS.
  *
  * Note: RLS allows listing owners to read pets booked at their listings, so this
  * function may return a pet owned by another user. Callers that require ownership
@@ -90,6 +78,7 @@ export async function getPet(petId: string): Promise<Pet | null> {
     .from('pets')
     .select('*')
     .eq('id', petId)
+    .is('deleted_at', null)
     .maybeSingle();
 
   if (error) {
@@ -102,12 +91,14 @@ export async function getPet(petId: string): Promise<Pet | null> {
 /** RLS also lets listing owners read pets booked at their listings, so "my pets"
  * must filter by owner explicitly rather than rely on RLS alone. The caller passes
  * the owner id it uses in the query key, so the cache entry and the filter always
- * name the same user. */
+ * name the same user. Deleted pets stay readable for booking history, so they are
+ * filtered out here too. */
 export async function listMyPets(ownerId: string): Promise<Pet[]> {
   const { data, error } = await getSupabaseClient()
     .from('pets')
     .select('*')
     .eq('owner_id', ownerId)
+    .is('deleted_at', null)
     .order('created_at', { ascending: false });
 
   if (error) {
@@ -271,83 +262,37 @@ function isStoragePathRemoved(
   return data.some((item) => item.name === path || item.name === fileName);
 }
 
-/** Removes a pet from public.pets by id, cleaning up any associated photos in storage first. */
+// The messages delete_pet_with_active_booking_check raises (20261019000000_soft_delete_pets.sql).
+const PET_HAS_ACTIVE_BOOKINGS_MESSAGE = 'Pet has active bookings and cannot be deleted.';
+const PET_ALREADY_DELETED_MESSAGE = 'Pet is already deleted.';
+
+/**
+ * Deletes the current user's pet. The RPC refuses a pet with a pending or confirmed booking;
+ * otherwise it soft-deletes the pet, so past bookings keep it, and returns the old photo path.
+ *
+ * The photo file is removed afterwards, while the soft-deleted row still proves ownership to the
+ * storage policy. The pet is already deleted by then, so a failed removal only leaves an unused
+ * file in the private bucket; it must not turn a successful delete into an error.
+ */
 export async function deletePet(petId: string): Promise<void> {
   const supabase = getSupabaseClient();
-  const { data: userData, error: userError } = await supabase.auth.getUser();
+  const { data: oldPhotoPath, error } = await supabase.rpc('delete_pet_with_active_booking_check', {
+    target_pet_id: petId,
+  });
 
-  if (userError) throw userError;
-  if (!userData.user) {
-    throw new Error('You must be signed in to delete a pet.');
-  }
-
-  // 1. Fetch pet to check existence and ownership, and retrieve any attached photo_url.
-  // Explicitly check owner_id since listing owners also have SELECT permission on booked pets.
-  const { data: pet, error: fetchError } = await supabase
-    .from('pets')
-    .select('id, photo_url, owner_id')
-    .eq('id', petId)
-    .eq('owner_id', userData.user.id)
-    .maybeSingle();
-
-  if (fetchError) {
-    throw fetchError;
-  }
-
-  if (!pet) {
-    throw new Error(`Pet with id ${petId} not found or you do not have permission to delete it.`);
-  }
-
-  // 2. Check for any existing bookings referencing this pet before touching storage.
-  // Foreign key bookings.pet_id is ON DELETE RESTRICT, so if any booking exists,
-  // removing the photo first would leave an orphan record with a dangling photo_url.
-  const { data: bookings, error: bookingsError } = await supabase
-    .from('bookings')
-    .select('id')
-    .eq('pet_id', petId)
-    .limit(1);
-
-  if (bookingsError) {
-    throw bookingsError;
-  }
-
-  if (bookings && bookings.length > 0) {
-    throw new PetHasBookingsError();
-  }
-
-  // 3. If photo exists, remove it from storage while the pet record still exists
-  // (storage RLS policy checks current_user_owns_pet in public.pets)
-  if (pet.photo_url) {
-    const { data: storageData, error: storageError } = await supabase.storage
-      .from(PET_PHOTO_BUCKET)
-      .remove([pet.photo_url]);
-
-    if (storageError) {
-      throw new Error(`Failed to delete pet photo: ${storageError.message}`, { cause: storageError });
-    }
-
-    if (!isStoragePathRemoved(storageData, pet.photo_url)) {
-      throw new Error('Failed to delete pet photo: permission denied or not found.');
-    }
-  }
-
-  // 4. Delete the pet record from public.pets and ensure at least 1 row was deleted
-  const { data: deletedRows, error: deleteError } = await supabase
-    .from('pets')
-    .delete()
-    .eq('id', petId)
-    .select('id');
-
-  if (deleteError) {
-    // 23503 (foreign key violation): a booking was created after the check in step 2.
-    if (deleteError.code === '23503') {
+  if (error) {
+    if (error.code === 'P0001' && error.message === PET_HAS_ACTIVE_BOOKINGS_MESSAGE) {
       throw new PetHasBookingsError();
     }
-    throw deleteError;
+    // Another tab, or a retry after a lost response, already deleted it: the user's intent holds.
+    if (error.code === 'P0001' && error.message === PET_ALREADY_DELETED_MESSAGE) {
+      return;
+    }
+    throw error;
   }
 
-  if (!deletedRows || deletedRows.length === 0) {
-    throw new Error(`Could not delete pet ${petId}: permission denied or pet not found.`);
+  if (oldPhotoPath) {
+    await removePetPhotoFile(supabase, oldPhotoPath);
   }
 }
 

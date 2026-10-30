@@ -1,12 +1,16 @@
 /** @jest-environment jsdom */
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import type { Pet } from '../lib/petApi';
 import { PetCard } from './PetCard';
 
+// jest.mock is hoisted above these declarations, so referenced state must be named mock*.
+const mockUsePetPhotoUrl = jest.fn<{ data: string | undefined }, [string | null]>();
+
 jest.mock('../hooks/usePets', () => ({
   useDeletePet: () => ({ mutateAsync: jest.fn(), isPending: false }),
+  usePetPhotoUrl: (photoPath: string | null) => mockUsePetPhotoUrl(photoPath),
 }));
 
 const rocket: Pet = {
@@ -26,15 +30,47 @@ const rocket: Pet = {
   special_requirement: null,
   created_at: '2026-10-01T00:00:00.000Z',
   updated_at: '2026-10-01T00:00:00.000Z',
+  deleted_at: null,
 };
 
-function renderCard() {
+function renderCard(pet: Pet = rocket) {
   return render(
     <MemoryRouter>
-      <PetCard pet={rocket} />
+      <PetCard pet={pet} />
     </MemoryRouter>,
   );
 }
+
+beforeEach(() => {
+  mockUsePetPhotoUrl.mockReset();
+  mockUsePetPhotoUrl.mockReturnValue({ data: undefined });
+});
+
+describe('PetCard photo', () => {
+  it('shows the placeholder when the pet has no photo', () => {
+    const { container } = renderCard();
+
+    expect(mockUsePetPhotoUrl).toHaveBeenCalledWith(null);
+    expect(container.querySelector('img')).toBeNull();
+  });
+
+  it('shows the photo through its signed URL', () => {
+    mockUsePetPhotoUrl.mockReturnValue({ data: 'https://signed.example/rocket.png' });
+    const { container } = renderCard({ ...rocket, photo_url: 'pet-4/photo.png' });
+
+    expect(mockUsePetPhotoUrl).toHaveBeenCalledWith('pet-4/photo.png');
+    expect(container.querySelector('img')).toHaveAttribute('src', 'https://signed.example/rocket.png');
+  });
+
+  it('falls back to the placeholder when the photo fails to load', () => {
+    mockUsePetPhotoUrl.mockReturnValue({ data: 'https://signed.example/expired.png' });
+    const { container } = renderCard({ ...rocket, photo_url: 'pet-4/photo.png' });
+
+    fireEvent.error(container.querySelector('img') as HTMLImageElement);
+
+    expect(container.querySelector('img')).toBeNull();
+  });
+});
 
 describe('PetCard actions', () => {
   it('links Edit to the pet\'s edit screen', () => {

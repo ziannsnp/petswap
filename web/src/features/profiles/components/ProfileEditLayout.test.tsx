@@ -1,9 +1,18 @@
 /** @jest-environment jsdom */
 import '@testing-library/jest-dom';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cropPhoto } from '@/shared/lib/photoCrop';
 import { ProfileEditLayout } from './ProfileEditLayout';
 import { useDeleteAvatar, useUpdateProfile, useUploadAvatar } from '../hooks/useProfile';
 import type { Profile } from '../lib/profileApi';
+
+// Canvas is not implemented in jsdom; photoCrop.test.ts covers the drawing itself.
+jest.mock('@/shared/lib/photoCrop', () => ({
+  ...jest.requireActual('@/shared/lib/photoCrop'),
+  cropPhoto: jest.fn(),
+}));
+
+const mockCropPhoto = jest.mocked(cropPhoto);
 
 jest.mock('../hooks/useProfile', () => ({
   useUpdateProfile: jest.fn(),
@@ -30,6 +39,28 @@ const sampleProfile: Profile = {
 
 function makeFile({ name = 'avatar.jpg', type = 'image/jpeg', sizeBytes = 1024 } = {}) {
   return new File([new Uint8Array(sizeBytes)], name, { type });
+}
+
+function chooseAvatar(file: File) {
+  fireEvent.change(screen.getByLabelText(/upload profile photo/i), { target: { files: [file] } });
+}
+
+/** Loads the photo in the open crop dialog, optionally zooms, and confirms the crop. */
+async function confirmCrop(zoom?: number) {
+  const image = await screen.findByAltText('Photo being cropped');
+  Object.defineProperty(image, 'naturalWidth', { value: 400, configurable: true });
+  Object.defineProperty(image, 'naturalHeight', { value: 300, configurable: true });
+  fireEvent.load(image);
+  if (zoom !== undefined) {
+    fireEvent.change(screen.getByRole('slider', { name: 'Zoom' }), { target: { value: String(zoom) } });
+  }
+  fireEvent.click(screen.getByRole('button', { name: 'Use photo' }));
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+}
+
+async function chooseAndCropAvatar(file = makeFile(), zoom?: number) {
+  chooseAvatar(file);
+  await confirmCrop(zoom);
 }
 
 function renderLayout({
@@ -81,6 +112,8 @@ describe('ProfileEditLayout', () => {
       mutateAsync: uploadMutateAsync,
       isPending: false,
     });
+    mockCropPhoto.mockImplementation(async (_image, _crop, fileName) =>
+      new File(['cropped'], `cropped-${fileName}`, { type: 'image/jpeg' }));
     deleteAvatarMutateAsync = jest.fn().mockResolvedValue(undefined);
     mockUseDeleteAvatar.mockReturnValue({
       mutateAsync: deleteAvatarMutateAsync,
@@ -264,24 +297,64 @@ describe('ProfileEditLayout', () => {
       expect(screen.getByRole('img', { name: 'Somchai Petlover' })).toHaveTextContent('SP');
     });
 
-    it('shows an instant preview after choosing a valid photo, and a Remove photo option', () => {
+    it('opens the crop dialog for a chosen photo, then previews the crop with Remove photo', async () => {
       renderLayout();
 
       expect(screen.queryByRole('button', { name: /remove photo/i })).not.toBeInTheDocument();
 
-      fireEvent.change(screen.getByLabelText(/upload profile photo/i), { target: { files: [makeFile()] } });
+      chooseAvatar(makeFile());
+      expect(screen.getByRole('dialog', { name: 'Crop profile photo' })).toBeInTheDocument();
+      expect(screen.queryByAltText('Somchai Petlover')).not.toBeInTheDocument();
 
+      await confirmCrop();
+
+      expect(mockCropPhoto).toHaveBeenCalledWith(expect.any(HTMLImageElement), expect.objectContaining({ zoom: 1 }), 'avatar.jpg');
       expect(screen.getByAltText('Somchai Petlover')).toHaveAttribute('src', expect.stringMatching(/^blob:/));
       expect(screen.getByRole('button', { name: /remove photo/i })).toBeInTheDocument();
+    });
+
+    it('keeps the current avatar when the crop is cancelled', () => {
+      renderLayout({ profile: { ...sampleProfile, photo_url: 'https://example.com/old.jpg' } });
+
+      chooseAvatar(makeFile());
+      fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }));
+
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(screen.getByAltText('Somchai Petlover')).toHaveAttribute('src', 'https://example.com/old.jpg');
+      expect(screen.queryByRole('button', { name: /adjust crop/i })).not.toBeInTheDocument();
+    });
+
+    it('re-crops the original photo from the last crop with Adjust crop', async () => {
+      renderLayout();
+
+      await chooseAndCropAvatar(makeFile({ name: 'me.png', type: 'image/png' }), 2);
+      fireEvent.click(screen.getByRole('button', { name: /adjust crop/i }));
+
+      expect(screen.getByRole('slider', { name: 'Zoom' })).toHaveValue('2');
+      await confirmCrop();
+
+      // Cropped from the original, not from the already-cropped file.
+      expect(mockCropPhoto).toHaveBeenLastCalledWith(expect.any(HTMLImageElement), expect.objectContaining({ zoom: 2 }), 'me.png');
+    });
+
+    it('forgets the original on Remove photo', async () => {
+      renderLayout();
+
+      await chooseAndCropAvatar();
+      fireEvent.click(screen.getByRole('button', { name: /remove photo/i }));
+
+      expect(screen.queryByRole('button', { name: /adjust crop/i })).not.toBeInTheDocument();
+      expect(screen.getByRole('img', { name: 'Somchai Petlover' })).toHaveTextContent('SP');
     });
 
     it('rejects a photo over 5MB without touching the preview or calling the upload', () => {
       renderLayout();
 
       const oversized = makeFile({ sizeBytes: 6 * 1024 * 1024 });
-      fireEvent.change(screen.getByLabelText(/upload profile photo/i), { target: { files: [oversized] } });
+      chooseAvatar(oversized);
 
       expect(screen.getByText(/must be 5mb or smaller/i)).toBeInTheDocument();
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
       expect(screen.queryByAltText('Somchai Petlover')).not.toBeInTheDocument();
       expect(screen.getByRole('img', { name: 'Somchai Petlover' })).toHaveTextContent('SP');
       expect(uploadMutateAsync).not.toHaveBeenCalled();
@@ -291,9 +364,10 @@ describe('ProfileEditLayout', () => {
       renderLayout();
 
       const gif = makeFile({ name: 'avatar.gif', type: 'image/gif' });
-      fireEvent.change(screen.getByLabelText(/upload profile photo/i), { target: { files: [gif] } });
+      chooseAvatar(gif);
 
       expect(screen.getByText(/choose a jpg, png, or webp image/i)).toBeInTheDocument();
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
       expect(uploadMutateAsync).not.toHaveBeenCalled();
     });
 
@@ -306,15 +380,16 @@ describe('ProfileEditLayout', () => {
       expect(screen.queryByRole('button', { name: /remove photo/i })).not.toBeInTheDocument();
     });
 
-    it('uploads the selected photo and saves the returned URL as part of the same submit', async () => {
+    it('uploads the cropped photo and saves the returned URL as part of the same submit', async () => {
       renderLayout();
-      const file = makeFile();
 
-      fireEvent.change(screen.getByLabelText(/upload profile photo/i), { target: { files: [file] } });
+      await chooseAndCropAvatar();
       fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
 
       await screen.findByRole('button', { name: /save changes/i });
-      expect(uploadMutateAsync).toHaveBeenCalledWith(file);
+      expect(uploadMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'cropped-avatar.jpg', type: 'image/jpeg' }),
+      );
       expect(mutateAsync).toHaveBeenCalledWith(
         expect.objectContaining({ photo_url: 'https://storage.example.com/user-123/avatar' }),
       );
@@ -348,7 +423,7 @@ describe('ProfileEditLayout', () => {
       uploadMutateAsync.mockRejectedValue(new Error('Storage is unreachable.'));
       renderLayout();
 
-      fireEvent.change(screen.getByLabelText(/upload profile photo/i), { target: { files: [makeFile()] } });
+      await chooseAndCropAvatar();
       fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
 
       expect(await screen.findByText('Storage is unreachable.')).toBeInTheDocument();

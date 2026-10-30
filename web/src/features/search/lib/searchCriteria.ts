@@ -19,13 +19,22 @@ export function readSearchCriteria(params: URLSearchParams): SearchCriteria {
   };
 }
 
+export function readSearchPage(params: URLSearchParams): number {
+  const value = params.get('page');
+  if (!value || !/^[1-9]\d*$/.test(value)) return 1;
+
+  const page = Number(value);
+  return Number.isSafeInteger(page) ? Math.min(page, 2_147_483_647) : 1;
+}
+
 /** Blank fields are left out, so an empty search is the plain browse-all URL. */
-export function toSearchParams(criteria: SearchCriteria): URLSearchParams {
+export function toSearchParams(criteria: SearchCriteria, page = 1): URLSearchParams {
   const params = new URLSearchParams();
   const location = criteria.location.trim();
   const keyword = criteria.keyword.trim();
   if (location) params.set('location', location);
   if (keyword) params.set('keyword', keyword);
+  if (Number.isSafeInteger(page) && page > 1) params.set('page', String(page));
   return params;
 }
 

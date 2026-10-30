@@ -1,12 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { QueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/features/auth';
-import { deleteListing, getListing, listMyListings, listPublishedListings, setListingPublicationStatus } from '../lib/listingApi';
-import type { Listing, ListingPublicationMode } from '../lib/listingApi';
+import { deleteListing, getListing, listMyListings, listPublishedListings, searchPublishedListings, setListingPublicationStatus } from '../lib/listingApi';
+import type { Listing, ListingPublicationMode, PublishedListingPage, PublishedListingQuery } from '../lib/listingApi';
 
 export const listingKeys = {
   all: ['listings'] as const,
   published: () => [...listingKeys.all, 'published'] as const,
+  publishedPages: () => [...listingKeys.published(), 'page'] as const,
+  publishedPage: (query: PublishedListingQuery) => [...listingKeys.publishedPages(), query] as const,
   allMine: () => [...listingKeys.all, 'mine'] as const,
   mine: (ownerId: string) => [...listingKeys.allMine(), ownerId] as const,
   allDetails: (listingId: string) => [...listingKeys.all, 'detail', listingId] as const,
@@ -27,6 +29,14 @@ function hideListingFromCaches(
     listingKeys.published(),
     (listings) => listings?.filter((listing) => listing.id !== listingId),
   );
+  queryClient.setQueriesData<PublishedListingPage>(
+    { queryKey: listingKeys.publishedPages() },
+    (page) => page && ({
+      ...page,
+      listings: page.listings.filter((listing) => listing.id !== listingId),
+      totalCount: Math.max(0, page.totalCount - (page.listings.some((listing) => listing.id === listingId) ? 1 : 0)),
+    }),
+  );
   queryClient.setQueriesData<Listing[]>(
     { queryKey: listingKeys.allMine() },
     (listings) => (listings ? updateOwnerCopy(listings) : listings),
@@ -38,6 +48,13 @@ export function usePublishedListings() {
   return useQuery({
     queryKey: listingKeys.published(),
     queryFn: listPublishedListings,
+  });
+}
+
+export function usePublishedListingPage(query: PublishedListingQuery) {
+  return useQuery({
+    queryKey: listingKeys.publishedPage(query),
+    queryFn: () => searchPublishedListings(query),
   });
 }
 

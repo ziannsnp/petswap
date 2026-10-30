@@ -102,3 +102,81 @@ describe('PetCard actions', () => {
     expect(deleteButton).toHaveFocus();
   });
 });
+
+describe('PetCard care information', () => {
+  it('hides the care information section when a pet has no care info', () => {
+    renderCard(rocket);
+
+    expect(screen.queryByRole('region', { name: 'Care information' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Care information')).not.toBeInTheDocument();
+    expect(screen.queryByText('Feeding instructions')).not.toBeInTheDocument();
+  });
+
+  it('hides blank or whitespace-only care fields', () => {
+    renderCard({
+      ...rocket,
+      feeding_instruction: '   ',
+      medical_note: '',
+      behavior_note: '   \n  ',
+      allergies: null,
+      vaccination_info: '',
+      special_requirement: '   ',
+    });
+
+    expect(screen.queryByRole('region', { name: 'Care information' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Care information')).not.toBeInTheDocument();
+  });
+
+  it('renders only the care fields that have a value and hides blank fields', () => {
+    renderCard({
+      ...rocket,
+      feeding_instruction: '2 cups twice daily',
+      medical_note: null,
+      behavior_note: '   ',
+      allergies: 'Allergic to chicken',
+      vaccination_info: '',
+      special_requirement: null,
+    });
+
+    expect(screen.getByRole('region', { name: 'Care information' })).toBeInTheDocument();
+    expect(screen.getByText('Care information')).toBeInTheDocument();
+
+    // Populated fields are shown
+    expect(screen.getByText('Feeding instructions')).toBeInTheDocument();
+    expect(screen.getByText('2 cups twice daily')).toBeInTheDocument();
+    expect(screen.getByText('Allergies')).toBeInTheDocument();
+    expect(screen.getByText('Allergic to chicken')).toBeInTheDocument();
+
+    // Blank / null fields are hidden
+    expect(screen.queryByText('Medical notes')).not.toBeInTheDocument();
+    expect(screen.queryByText('Behavior notes')).not.toBeInTheDocument();
+    expect(screen.queryByText('Vaccination information')).not.toBeInTheDocument();
+    expect(screen.queryByText('Special requirements')).not.toBeInTheDocument();
+  });
+
+  it('renders all 6 care fields when all have values', () => {
+    renderCard({
+      ...rocket,
+      feeding_instruction: '1 can wet food morning and evening',
+      medical_note: 'Daily eye drops at 8am',
+      behavior_note: 'Shy around loud noises',
+      allergies: 'Gluten sensitivity',
+      vaccination_info: 'Rabies and DHPP up to date',
+      special_requirement: 'Needs a soft bed due to hip dysplasia',
+    });
+
+    expect(screen.getByRole('region', { name: 'Care information' })).toBeInTheDocument();
+    expect(screen.getByText('Feeding instructions')).toBeInTheDocument();
+    expect(screen.getByText('1 can wet food morning and evening')).toBeInTheDocument();
+    expect(screen.getByText('Medical notes')).toBeInTheDocument();
+    expect(screen.getByText('Daily eye drops at 8am')).toBeInTheDocument();
+    expect(screen.getByText('Behavior notes')).toBeInTheDocument();
+    expect(screen.getByText('Shy around loud noises')).toBeInTheDocument();
+    expect(screen.getByText('Allergies')).toBeInTheDocument();
+    expect(screen.getByText('Gluten sensitivity')).toBeInTheDocument();
+    expect(screen.getByText('Vaccination information')).toBeInTheDocument();
+    expect(screen.getByText('Rabies and DHPP up to date')).toBeInTheDocument();
+    expect(screen.getByText('Special requirements')).toBeInTheDocument();
+    expect(screen.getByText('Needs a soft bed due to hip dysplasia')).toBeInTheDocument();
+  });
+});

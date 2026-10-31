@@ -49,6 +49,29 @@ function blankToNull(value: string): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
+const PET_CARE_COLUMNS = [
+  'feeding_instruction',
+  'medical_note',
+  'behavior_note',
+  'allergies',
+  'vaccination_info',
+  'special_requirement',
+] as const;
+
+type PetCareColumn = (typeof PET_CARE_COLUMNS)[number];
+
+/** A care field the caller left out stays out of the row, so an update keeps what is stored. */
+function toPetCareAttributes(values: Omit<CreatePetValues, 'photo'>) {
+  const care: Partial<Record<PetCareColumn, string | null>> = {};
+  for (const column of PET_CARE_COLUMNS) {
+    const value = values[column];
+    if (value !== undefined) {
+      care[column] = value === null ? null : blankToNull(value);
+    }
+  }
+  return care;
+}
+
 function toPetRowAttributes(values: Omit<CreatePetValues, 'photo'>) {
   return {
     name: values.name.trim(),
@@ -56,6 +79,7 @@ function toPetRowAttributes(values: Omit<CreatePetValues, 'photo'>) {
     breed: blankToNull(values.breed),
     age_year: values.ageYear,
     description: blankToNull(values.description),
+    ...toPetCareAttributes(values),
   };
 }
 

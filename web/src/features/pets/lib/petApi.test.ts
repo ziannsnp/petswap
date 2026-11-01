@@ -293,6 +293,40 @@ describe('createPet', () => {
     expect(storageFrom).not.toHaveBeenCalled();
   });
 
+  it('saves care information, trimming text and turning blank fields into null', async () => {
+    const single = jest.fn().mockResolvedValue({ data: { id: 'pet-1', photo_url: null }, error: null });
+    const select = jest.fn().mockReturnValue({ single });
+    const insert = jest.fn().mockReturnValue({ select });
+
+    mockedGetSupabaseClient.mockReturnValue({
+      auth: { getUser: signedIn('owner-123') },
+      from: jest.fn().mockReturnValue({ insert }),
+    } as never);
+
+    await createPet({
+      name: 'Rocket',
+      species: 'dog',
+      breed: '',
+      ageYear: null,
+      description: 'Loves walks',
+      feeding_instruction: '  Half a cup twice a day ',
+      medical_note: '   ',
+      behavior_note: '',
+      allergies: null,
+      vaccination_info: ' Rabies 2026 ',
+      special_requirement: 'Needs a ramp',
+    });
+
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({
+      feeding_instruction: 'Half a cup twice a day',
+      medical_note: null,
+      behavior_note: null,
+      allergies: null,
+      vaccination_info: 'Rabies 2026',
+      special_requirement: 'Needs a ramp',
+    }));
+  });
+
   it('refuses to create a pet when signed out', async () => {
     const from = jest.fn();
 
@@ -940,6 +974,56 @@ describe('updatePet', () => {
     });
   });
 
+  function mockPetUpdate() {
+    const maybeSingle = jest.fn().mockResolvedValue({ data: { id: 'pet-123' }, error: null });
+    const select = jest.fn().mockReturnValue({ maybeSingle });
+    const eqOwner = jest.fn().mockReturnValue({ select });
+    const eqId = jest.fn().mockReturnValue({ eq: eqOwner });
+    const update = jest.fn().mockReturnValue({ eq: eqId });
+
+    mockedGetSupabaseClient.mockReturnValue({
+      auth: { getUser: signedIn('owner-456') },
+      from: jest.fn().mockReturnValue({ update }),
+    } as never);
+
+    return update;
+  }
+
+  it('saves care information, trimming text and turning cleared fields into null', async () => {
+    const update = mockPetUpdate();
+
+    await updatePet('pet-123', {
+      ...validValues,
+      feeding_instruction: ' Wet food at 7pm  ',
+      medical_note: '',
+      behavior_note: '  ',
+      allergies: 'Chicken',
+      vaccination_info: null,
+      special_requirement: ' Keep away from stairs ',
+    });
+
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({
+      feeding_instruction: 'Wet food at 7pm',
+      medical_note: null,
+      behavior_note: null,
+      allergies: 'Chicken',
+      vaccination_info: null,
+      special_requirement: 'Keep away from stairs',
+    }));
+  });
+
+  it('leaves out care fields that were not given, so the stored care information is kept', async () => {
+    const update = mockPetUpdate();
+
+    await updatePet('pet-123', { ...validValues, allergies: 'Chicken' });
+
+    const row = update.mock.calls[0][0];
+    expect(row).toHaveProperty('allergies', 'Chicken');
+    for (const column of ['feeding_instruction', 'medical_note', 'behavior_note', 'vaccination_info', 'special_requirement']) {
+      expect(row).not.toHaveProperty(column);
+    }
+  });
+
   it('throws an error when no row matches during update (not found or not owned by user)', async () => {
     const maybeSingle = jest.fn().mockResolvedValue({ data: null, error: null });
     const select = jest.fn().mockReturnValue({ maybeSingle });
@@ -1082,6 +1166,19 @@ describe('updatePet photo changes', () => {
     expect(remove).toHaveBeenCalledWith(['pet-1/old.png']);
     expect(upload.mock.invocationCallOrder[0]).toBeLessThan(update.mock.invocationCallOrder[0]);
     expect(update.mock.invocationCallOrder[0]).toBeLessThan(remove.mock.invocationCallOrder[0]);
+  });
+
+  it('saves care information in the same update that changes the photo', async () => {
+    const { update } = setupPhotoUpdateMocks();
+
+    await updatePet('pet-1', { ...baseValues, photo: newPhoto(), medical_note: ' Takes thyroid pills ', allergies: ' ' });
+
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({
+      medical_note: 'Takes thyroid pills',
+      allergies: null,
+      photo_url: expect.stringMatching(/^pet-1\//),
+    }));
   });
 
   it('replaces the photo when both a new photo and removePhoto are given', async () => {

@@ -50,6 +50,12 @@ jobs:
       - name: Booking rules behavioural checks
         run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/booking_rules.test.sql
 
+      - name: Booking capacity and participant checks
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/booking_capacity.test.sql
+
+      - name: Concurrent confirmations and capacity edits
+        run: python3 supabase/tests/booking_concurrency.test.py --database-url "$DATABASE_URL"
+
       - name: Listing rules behavioural checks
         run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/listing_rules.test.sql
 

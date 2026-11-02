@@ -2,7 +2,7 @@
 --
 -- Each row below is a load-bearing promise the MVP schema makes to the app:
 -- consent is never stored half-written, row-level security is on, booking
--- participants have policies, and confirmed stays cannot overlap. Read the rows
+-- participants have policies, and confirmed pets cannot overlap. Read the rows
 -- as a review checklist for any migration; the final assertion turns the same
 -- list into a pass/fail gate.
 --
@@ -14,8 +14,8 @@
 -- CI runs the same file on every change under supabase/ via
 -- .github/workflows/db-contract.yml. These are catalogue checks only; they read
 -- pg_catalog and information_schema and never write. Behavioural enforcement
--- (the overlap constraint actually rejecting a second confirmed booking) lives
--- in supabase/tests/booking_rules.test.sql.
+-- (capacity, pet exclusion, and actor permissions) lives in the booking SQL
+-- suites and the separate-session concurrency suite.
 
 \set ON_ERROR_STOP on
 \pset format aligned
@@ -30,13 +30,24 @@ create temporary table _contract (
 
 insert into _contract (check_name, passed) values
   (
-    'confirmed bookings use end-exclusive overlap protection',
+    'confirmed pets use end-exclusive overlap protection across listings',
     exists (
       select 1 from pg_constraint
-      where conname = 'bookings_no_confirmed_overlap'
+      where conname = 'bookings_no_confirmed_pet_overlap'
         and conrelid = 'public.bookings'::regclass
         and contype = 'x'
     )
+  ),
+  (
+    'listing-wide exclusion is replaced by capacity and pet guards',
+    not exists (select 1 from pg_constraint where conrelid = 'public.bookings'::regclass and conname = 'bookings_no_confirmed_overlap')
+    and exists (select 1 from pg_trigger where tgrelid = 'public.bookings'::regclass and tgname = 'zz_guard_booking_availability' and not tgisinternal)
+    and exists (select 1 from pg_trigger where tgrelid = 'public.listings'::regclass and tgname = 'guard_listing_capacity' and not tgisinternal)
+    and not has_function_privilege('anon', 'public.confirmed_booking_peak(uuid,date,date,uuid)', 'EXECUTE')
+    and not has_function_privilege('authenticated', 'public.confirmed_booking_peak(uuid,date,date,uuid)', 'EXECUTE')
+    and not has_function_privilege('service_role', 'public.confirmed_booking_peak(uuid,date,date,uuid)', 'EXECUTE')
+    and not has_function_privilege('authenticated', 'public.guard_booking_availability()', 'EXECUTE')
+    and not has_function_privilege('authenticated', 'public.guard_listing_capacity()', 'EXECUTE')
   ),
   (
     'bookings reject a window whose end is not after its start',

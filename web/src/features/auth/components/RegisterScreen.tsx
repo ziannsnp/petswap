@@ -207,7 +207,7 @@ export function RegisterScreen() {
       if (session) {
         void navigate('/', { replace: true });
       } else {
-        setConfirmationSent(true);
+        void navigate('/check-email', { replace: true, state: { email: normalizeEmail(email) } });
       }
     } catch {
       // The mutation exposes its translated error below.

@@ -1,5 +1,6 @@
 export { AuthScreen } from './components/AuthScreen';
 export { RegisterScreen } from './components/RegisterScreen';
+export { CheckEmailScreen, RESEND_COOLDOWN_SECONDS } from './components/CheckEmailScreen';
 export { ProtectedRoute } from './components/ProtectedRoute';
 export { LogoutButton, type LogoutButtonProps } from './components/LogoutButton';
 export { LogoutConfirmDialog, type LogoutConfirmDialogProps } from './components/LogoutConfirmDialog';
@@ -9,12 +10,15 @@ export type { AuthContextValue } from './context/authContext';
 export { useAuth, authKeys } from './hooks/useAuth';
 export { useSignIn } from './hooks/useSignIn';
 export { useSignUp } from './hooks/useSignUp';
+export { useResendConfirmation } from './hooks/useResendConfirmation';
 export {
   getCurrentSession,
   getCurrentUser,
+  resendConfirmationEmail,
   signIn,
   signOut,
   signUp,
+  ResendConfirmationError,
   SignInError,
   SignUpError,
 } from './lib/authApi';
@@ -27,6 +31,7 @@ export {
 export { PASSWORD_REQUIREMENTS_MESSAGE, isValidPassword } from './lib/password';
 export { EMAIL_REQUIREMENTS_MESSAGE, isValidEmail, normalizeEmail } from './lib/email';
 export type {
+  ResendConfirmationErrorCode,
   SignInErrorCode,
   SignInInput,
   SignInResult,

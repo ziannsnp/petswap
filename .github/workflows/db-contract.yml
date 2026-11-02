@@ -73,6 +73,13 @@ jobs:
           done
           exit $failed
 
+      # Separate blocking sessions cannot share one psql transaction, so the race
+      # cases run from Python (stdlib only) after the SQL files. It commits temporary
+      # fixtures and removes them in `finally`; run it only on this disposable stack.
+      - name: Concurrent confirmations and capacity edits
+        if: ${{ !cancelled() }}
+        run: python3 supabase/tests/booking_concurrency.test.py --database-url "$DATABASE_URL"
+
       # Static checks of the database functions. `--level error` keeps this from failing on
       # advisory warnings in existing code; tighten to `warning` once the baseline is clean.
       - name: Lint database functions

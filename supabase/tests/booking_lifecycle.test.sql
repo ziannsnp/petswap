@@ -6,7 +6,7 @@
 -- canCompleteBooking() apply in the browser:
 --
 --   - only the listing owner confirms or declines, and only a pending request
---   - confirming is refused when it would overlap another confirmed booking
+--   - confirming is refused when the listing is full or the pet is already booked
 --   - only the requester cancels, and only a pending or confirmed booking
 --   - only the listing owner completes, only a confirmed booking, and only on or
 --     after its end date (end-exclusive: check-out day counts)
@@ -57,8 +57,10 @@ from (values
   ('40000000-0000-4000-8000-000000000404'::uuid, 'pending'::public.booking_status,   50,  54), -- requester cancels
   ('40000000-0000-4000-8000-000000000405'::uuid, 'confirmed'::public.booking_status, 60,  64), -- requester cancels
   ('40000000-0000-4000-8000-000000000406'::uuid, 'declined'::public.booking_status,  70,  74), -- terminal
-  ('40000000-0000-4000-8000-000000000407'::uuid, 'confirmed'::public.booking_status, -10, -6), -- finished: owner completes
-  ('40000000-0000-4000-8000-000000000408'::uuid, 'confirmed'::public.booking_status, -3,   0), -- ends today: owner completes
+  -- Seeded Rocket already has confirmed stays over days -10..-6 and -5..-1, and a pet
+  -- cannot have two overlapping confirmed stays, so the past cases avoid those days.
+  ('40000000-0000-4000-8000-000000000407'::uuid, 'confirmed'::public.booking_status, -30, -26), -- finished: owner completes
+  ('40000000-0000-4000-8000-000000000408'::uuid, 'confirmed'::public.booking_status, -1,   0), -- ends today: owner completes
   ('40000000-0000-4000-8000-000000000409'::uuid, 'confirmed'::public.booking_status, 80,  84), -- not finished yet
   ('40000000-0000-4000-8000-000000000410'::uuid, 'pending'::public.booking_status,   -10, -6), -- past but never confirmed
   ('40000000-0000-4000-8000-000000000411'::uuid, 'cancelled'::public.booking_status, -20, -16) -- terminal
@@ -161,7 +163,10 @@ begin
   where id = '40000000-0000-4000-8000-000000000403';
   raise exception 'booking lifecycle: the owner confirmed a request overlapping a confirmed booking';
 exception
-  when exclusion_violation then null;
+  -- The listing holds one pet and both requests are Rocket's, so the availability
+  -- guard refuses it as either a full listing (PBC01) or a booked pet (PBP01).
+  -- booking_capacity.test.sql separates the two rules.
+  when sqlstate 'PBC01' or sqlstate 'PBP01' then null;
 end;
 $$;
 \echo 'ok: confirming an overlapping request is refused'

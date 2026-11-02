@@ -305,8 +305,11 @@ it('shows an error on the affected card when a status update fails', async () =>
   expect(await screen.findByRole('alert')).toHaveTextContent(/could not update this booking/i);
 });
 
-it('shows an overlap conflict on the booking card when its owner cannot confirm', async () => {
-  const mutateAsync = jest.fn().mockRejectedValue(new BookingConflictError());
+it.each([
+  ['capacity', 'This listing has no remaining capacity for these dates. Choose different dates before confirming.'],
+  ['pet', 'This pet already has a confirmed booking for these dates. Choose different dates before confirming.'],
+] as const)('shows a safe %s conflict when its owner cannot confirm', async (reason, message) => {
+  const mutateAsync = jest.fn().mockRejectedValue(new BookingConflictError(reason));
   mockUseUpdateBookingStatus.mockReturnValue({ mutateAsync });
   mockUseOutgoingBookings.mockReturnValue(successResult([]));
   mockUseIncomingBookings.mockReturnValue(successResult([makeBooking({ id: 'in-1', status: 'pending' })]));
@@ -314,9 +317,7 @@ it('shows an overlap conflict on the booking card when its owner cannot confirm'
   render(<BookingsScreen />);
   fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
 
-  expect(await screen.findByRole('alert')).toHaveTextContent(
-    'This request overlaps another confirmed booking on this listing. Choose different dates before confirming.',
-  );
+  expect(await screen.findByRole('alert')).toHaveTextContent(message);
 });
 
 // --- Confirm / decline (listing owner) ---

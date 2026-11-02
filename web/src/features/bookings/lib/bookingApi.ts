@@ -135,9 +135,12 @@ export async function updateBookingStatus(
     .single();
 
   if (error) {
-    // The database exclusion constraint is the authoritative, concurrency-safe overlap check.
-    if (status === 'confirmed' && error.code === '23P01') {
-      throw new BookingConflictError();
+    // Translate stable server codes without exposing other participants' data.
+    if (status === 'confirmed' && error.code === 'PBC01') {
+      throw new BookingConflictError('capacity');
+    }
+    if (status === 'confirmed' && (error.code === 'PBP01' || error.code === '23P01')) {
+      throw new BookingConflictError('pet');
     }
 
     // guard_booking_change() raises P0001 when the stay has not ended or the booking is not confirmed.

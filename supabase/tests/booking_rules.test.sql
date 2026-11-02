@@ -1,10 +1,9 @@
--- Behavioural test for the confirmed-booking overlap rule.
+-- Pet exclusion backstop under privileged bulk loading. Capacity and normal
+-- actor/trigger behaviour are exercised in booking_capacity.test.sql.
 --
--- database_contract.sql checks that the constraint *exists*; this file checks
--- that it *behaves*. The Postgres exclusion constraint is the server-side half of
--- the rule that hasBookingConflict() enforces in the browser (see docs/testing.md
--- "Booking minimum coverage"), so it is covered the same way: overlap, back-to-
--- back, a different listing, and a non-confirmed existing booking.
+-- database_contract.sql checks that the pet exclusion constraint exists; this
+-- file checks it even when a privileged load disables application triggers.
+-- Normal API actions and listing capacity are covered by booking_capacity.test.sql.
 --
 -- Run locally after rebuilding the database:
 --   npx supabase db reset
@@ -38,7 +37,9 @@ values
 
 insert into public.pets (id, owner_id, name, species)
 values ('b0000000-0000-4000-8000-000000000001',
-        'a0000000-0000-4000-8000-000000000002', 'Contract Pet', 'dog');
+        'a0000000-0000-4000-8000-000000000002', 'Contract Pet', 'dog'),
+       ('b0000000-0000-4000-8000-000000000002',
+        'a0000000-0000-4000-8000-000000000002', 'Other Contract Pet', 'dog');
 
 insert into public.listings (id, owner_id, title, location, description, capacity, accepted_pet_types, status, published_at)
 values
@@ -77,9 +78,9 @@ values ('c0000000-0000-4000-8000-000000000001', 'b0000000-0000-4000-8000-0000000
         'a0000000-0000-4000-8000-000000000002', 'pending', date '2026-10-02', date '2026-10-06');
 \echo 'ok: pending booking overlapping a confirmed stay allowed'
 
--- A confirmed booking on a different listing for the same dates must be allowed.
+-- A different pet on a different listing for the same dates is allowed.
 insert into public.bookings (listing_id, pet_id, requester_id, status, start_date, end_date)
-values ('c0000000-0000-4000-8000-000000000002', 'b0000000-0000-4000-8000-000000000001',
+values ('c0000000-0000-4000-8000-000000000002', 'b0000000-0000-4000-8000-000000000002',
         'a0000000-0000-4000-8000-000000000002', 'confirmed', date '2026-10-01', date '2026-10-05');
 \echo 'ok: confirmed booking on a different listing allowed'
 

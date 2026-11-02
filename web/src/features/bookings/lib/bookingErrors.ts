@@ -1,6 +1,8 @@
 export class BookingConflictError extends Error {
-  constructor() {
-    super('This request overlaps another confirmed booking on this listing. Choose different dates before confirming.');
+  constructor(readonly reason: 'capacity' | 'pet' = 'capacity') {
+    super(reason === 'pet'
+      ? 'This pet already has a confirmed booking for these dates. Choose different dates before confirming.'
+      : 'This listing has no remaining capacity for these dates. Choose different dates before confirming.');
     this.name = 'BookingConflictError';
   }
 }

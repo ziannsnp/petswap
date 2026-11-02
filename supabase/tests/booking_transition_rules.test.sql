@@ -36,10 +36,11 @@ values
   ('40000000-0000-4000-8000-000000000502', '30000000-0000-4000-8000-000000000502',
    '20000000-0000-4000-8000-000000000004', '10000000-0000-4000-8000-000000000003',
    'pending', current_date, current_date + 1, null),
-  -- confirmed, checks out today: may not be cancelled
+  -- confirmed, checks out today: may not be cancelled. It starts yesterday because
+  -- seeded Rocket is already confirmed elsewhere over days -5..-1 (end-exclusive).
   ('40000000-0000-4000-8000-000000000503', '30000000-0000-4000-8000-000000000502',
    '20000000-0000-4000-8000-000000000004', '10000000-0000-4000-8000-000000000003',
-   'confirmed', current_date - 4, current_date, now()),
+   'confirmed', current_date - 1, current_date, now()),
   -- confirmed, checks out tomorrow: may still be cancelled
   ('40000000-0000-4000-8000-000000000504', '30000000-0000-4000-8000-000000000502',
    '20000000-0000-4000-8000-000000000004', '10000000-0000-4000-8000-000000000003',

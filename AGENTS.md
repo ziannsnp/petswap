@@ -44,10 +44,13 @@ Before changing code, identify the relevant requirement and read only the docume
 
 ## Booking rules
 
-- Only confirmed bookings on the same listing block overlapping dates.
+- Each booking contains one pet. Confirmed stays may overlap up to listing capacity; the same pet cannot have overlapping confirmed stays across listings.
+- Pending and terminal bookings reserve neither capacity nor a pet. Capacity reductions must accommodate confirmed stays that have not ended.
 - Date ranges are end-exclusive: back-to-back bookings are valid.
+- A booking's pet must be a species the listing accepts; an identical pending request cannot be sent twice; a request whose start date has passed can be declined but not confirmed; a confirmed stay cannot be cancelled from its check-out day on. `guard_booking_change()` enforces all four.
 - Keep `hasBookingConflict()` and `isValidBookingTransition()` pure and Jest-tested.
 - Browser validation is not authorization. When Supabase is added, enforce ownership and conflict rules through RLS/database constraints as well.
+- Confirmations and capacity reductions require Read Committed transactions; see `docs/decisions/0011-booking-capacity-and-pet-exclusion.md`.
 
 ## Workflow
 

@@ -6,9 +6,11 @@ automated form of the database review points in
 
 | File | What it checks | Writes data? |
 | --- | --- | --- |
-| `database_contract.sql` | Catalogue checks: RLS is on, booking policies exist, the confirmed-overlap and consent-pair constraints exist, the listing accepted-pet contract and storage policies exist, the booking status enum and guard triggers are present, owner-only listing RPCs and the pet-deletion RPC are not executable by `anon`, direct pet updates cannot soft-delete or restore a pet, booking inserts lock the pet against deletion, the listing-photo and pet-photos buckets are private, and the avatar bucket is public. | No |
-| `booking_rules.test.sql` | Behaviour of the confirmed-overlap rule: overlap rejected, back-to-back allowed, non-confirmed and different-listing bookings allowed, zero-length window rejected. Runs in one transaction that is rolled back. | No (rolled back) |
-| `booking_lifecycle.test.sql` | Behaviour of the booking status guard and RLS, signed in as each actor: only the listing owner confirms or declines a pending request (and an overlapping confirmation is refused), only the requester cancels a pending or confirmed booking, only the owner completes a confirmed booking on or after its end date, terminal statuses stay terminal, and strangers or anonymous callers change nothing. | No (rolled back) |
+| `database_contract.sql` | Catalogue checks: RLS is on, booking policies exist, the pet-exclusion and consent-pair constraints and capacity guards exist, the listing accepted-pet contract and storage policies exist, the booking status enum and guard triggers are present, owner-only listing RPCs and the pet-deletion RPC are not executable by `anon`, direct pet updates cannot soft-delete or restore a pet, booking inserts lock the pet against deletion, the listing-photo and pet-photos buckets are private, and the avatar bucket is public. | No |
+| `booking_rules.test.sql` | Pet exclusion backstop with application triggers disabled: overlapping confirmed pet stays rejected, back-to-back and non-confirmed stays allowed, different pets on different listings allowed, zero-length window rejected. | No (rolled back) |
+| `booking_capacity.test.sql` | JWT/RLS-backed confirmations: peak capacity, disjoint portions, overflow, cross-listing pet conflicts, cancellation release, non-confirmed states, multi-row atomicity, capacity edits, safe errors, and private-helper denial. | No (rolled back) |
+| `booking_concurrency.test.py` | Real blocking sessions: final place, two places, same pet across hosts, and capacity reduction racing confirmation in both orders; stale-snapshot isolation fails closed. Uses Python stdlib and `psql`. | Temporary fixtures, removed in `finally` |
+| `booking_lifecycle.test.sql` | Behaviour of the booking status guard and RLS, signed in as each actor: only the listing owner confirms or declines a pending request (and a confirmation into a full listing or for an already-booked pet is refused), only the requester cancels a pending or confirmed booking, only the owner completes a confirmed booking on or after its end date, terminal statuses stay terminal, and strangers or anonymous callers change nothing. | No (rolled back) |
 | `listing_rules.test.sql` | Behaviour of the listing column rules: an empty accepted-pet array and a capacity above 50 are each rejected by their named constraint. Runs in one transaction that is rolled back. | No (rolled back) |
 | `listing_facility_migration.test.sql` | Behaviour of the legacy facility-label backfill: old labels map to the prototype vocabulary, unknown values survive, and replacement duplicates are removed. | No (rolled back) |
 | `listing_photo_access.test.sql` | Storage RLS behaviour: an owner can select draft photos for signing, other authenticated and anonymous users cannot read drafts, and anonymous users can select published photos for signing. | No (rolled back) |
@@ -23,6 +25,18 @@ automated form of the database review points in
 | `pet_rules.test.sql` | Behaviour of pet management and integrity rules: the owner can update and delete a pet; a non-owner, including a listing host who can read a booked pet, cannot; a pet with any booking cannot be hard-deleted; through the deletion RPC a pending or confirmed booking blocks deletion while a declined, cancelled, or completed one does not (one fixture pet per status); a soft-deleted pet stays readable to its owner and past hosts but cannot be edited, restored, or booked, its owner can still read and remove a leftover photo file, but cannot upload or replace one, and its past hosts can no longer read it; booking another user's deleted pet does not reveal that it was deleted. Runs in one transaction that is rolled back. | No (rolled back) |
 
 ## Run locally
+
+Use a disposable database built from the committed migrations and seed. The
+concurrency suite commits temporary fixtures to make them visible to both
+sessions, so do not run it against the shared hosted project.
+
+```bash
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/booking_capacity.test.sql
+python3 supabase/tests/booking_concurrency.test.py --database-url "$DATABASE_URL"
+```
+
+Without host `psql`, the Python suite also accepts
+`--container supabase_db_petswap --database <disposable_database>`.
 
 After rebuilding the database, the host projection contract can also be run with:
 

@@ -380,7 +380,10 @@ describe('resendConfirmationEmail', () => {
   });
 
   it('resends confirmation email with normalized email address', async () => {
-    const resendMock = jest.fn(async (_options: { type: 'signup'; email: string }) => ({
+    type ResendRequest = Parameters<AppSupabaseClient['auth']['resend']>[0];
+    const resendMock = jest.fn<
+      (credentials: ResendRequest) => Promise<{ data: { user: null; session: null }; error: null }>
+    >(async () => ({
       data: { user: null, session: null },
       error: null,
     }));

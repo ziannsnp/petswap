@@ -52,7 +52,7 @@ UI components must not call `getSupabaseClient()` directly. Add feature-specific
 
 - One account can own pets, host listings, and request bookings.
 - There are no fixed user roles, payments, messaging, identity verification, availability toggles, or ratings.
-- A confirmed booking blocks only overlapping confirmed bookings for the same listing. Back-to-back bookings are valid.
+- Confirmed stays may overlap up to listing capacity; the same pet cannot overlap across listings. Back-to-back stays are valid. See [ADR 0010](decisions/0010-booking-capacity-and-pet-exclusion.md) for locking, isolation, and migration behaviour.
 
 See [ADR 0001](decisions/0001-web-spa-feature-architecture.md), [ADR 0003](decisions/0003-booking-rules-and-scope.md), [ADR 0004](decisions/0004-supabase-mvp-foundation.md).
 

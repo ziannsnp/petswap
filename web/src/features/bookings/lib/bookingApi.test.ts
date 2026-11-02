@@ -115,20 +115,33 @@ describe('listIncomingBookings', () => {
 });
 
 describe('updateBookingStatus', () => {
-  it('explains that confirmation failed because another confirmed booking overlaps', async () => {
-    const databaseError = { code: '23P01', message: 'conflicting key violates exclusion constraint' };
+  it('explains that confirmation failed because the listing is full', async () => {
+    const databaseError = { code: 'PBC01', message: 'database capacity conflict' };
     const { builder, from } = mockAuthenticatedClient('owner-1', { data: null, error: databaseError });
 
     const update = updateBookingStatus('booking-1', 'confirmed');
 
     await expect(update).rejects.toBeInstanceOf(BookingConflictError);
     await expect(update).rejects.toThrow(
-      'This request overlaps another confirmed booking on this listing. Choose different dates before confirming.',
+      'This listing has no remaining capacity for these dates. Choose different dates before confirming.',
     );
 
     expect(from).toHaveBeenCalledWith('bookings');
     expect(builder.update).toHaveBeenCalledWith({ status: 'confirmed' });
     expect(builder.eq).toHaveBeenCalledWith('id', 'booking-1');
+  });
+
+  it.each(['PBP01', '23P01'])('safely explains pet overlap for server code %s', async (code) => {
+    mockAuthenticatedClient('owner-1', {
+      data: null,
+      error: { code, message: 'private database detail', details: 'another host and dates' },
+    });
+
+    const update = updateBookingStatus('booking-1', 'confirmed');
+    await expect(update).rejects.toMatchObject({ name: 'BookingConflictError', reason: 'pet' });
+    await expect(update).rejects.toThrow(
+      'This pet already has a confirmed booking for these dates. Choose different dates before confirming.',
+    );
   });
 
   it('keeps overlap constraint errors unchanged when declining', async () => {

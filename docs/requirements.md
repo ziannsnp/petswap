@@ -42,7 +42,7 @@ Users can search published listings by location or keyword. An empty search disp
 
 ### FR-4.2 Filter listings
 
-Users can combine accepted pet type, capacity, and requested-date filters. Results exclude listings with insufficient capacity or a confirmed booking overlapping the requested dates.
+Users can combine accepted pet type, capacity, and requested-date filters. Results must have sufficient remaining capacity throughout the requested dates, using peak simultaneous confirmed occupancy. Without dates, capacity means total listing capacity. Search integration remains separate from database confirmation enforcement.
 
 ## Booking management
 
@@ -52,7 +52,9 @@ Users can request a booking for one of their pets at another user's listing with
 
 ### FR-5.2 Prevent double bookings
 
-Confirmed bookings for the same listing cannot overlap. Pending, declined, and cancelled requests do not block dates; back-to-back bookings are allowed.
+Each booking contains one pet. Confirmed stays may overlap when simultaneous pet count never exceeds listing capacity. A pet cannot have overlapping confirmed stays across any listings. Pending, declined, cancelled, and completed bookings reserve neither capacity nor a pet. Back-to-back bookings are allowed with end-exclusive date ranges.
+
+Confirmations enforce both rules atomically in the database; rejected requests remain Pending. Capacity cannot be reduced below peak occupancy of confirmed stays that have not ended. See [ADR 0010](decisions/0010-booking-capacity-and-pet-exclusion.md).
 
 ### FR-5.3 View booking requests
 

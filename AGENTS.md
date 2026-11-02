@@ -40,10 +40,12 @@ Before changing code, identify the relevant requirement and read only the docume
 
 ## Booking rules
 
-- Only confirmed bookings on the same listing block overlapping dates.
+- Each booking contains one pet. Confirmed stays may overlap up to listing capacity; the same pet cannot have overlapping confirmed stays across listings.
+- Pending and terminal bookings reserve neither capacity nor a pet. Capacity reductions must accommodate confirmed stays that have not ended.
 - Date ranges are end-exclusive: back-to-back bookings are valid.
 - Keep `hasBookingConflict()` and `isValidBookingTransition()` pure and Jest-tested.
 - Browser validation is not authorization. When Supabase is added, enforce ownership and conflict rules through RLS/database constraints as well.
+- Confirmations and capacity reductions require Read Committed transactions; see `docs/decisions/0010-booking-capacity-and-pet-exclusion.md`.
 
 ## Workflow
 

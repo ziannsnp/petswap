@@ -118,10 +118,12 @@ The SQL contract checks in `supabase/tests/` now run automatically: `database_co
 
 The `avatars` bucket is public-read for profile photos; its Storage policies still limit uploads, replacements, and deletes to the authenticated user's own folder. The `pet-photos` bucket is private; its Storage policies grant full CRUD to the pet owner and read access to listing hosts who have a booking for that pet.
 
-The booking overlap rule is verified at both levels:
+Booking enforcement is verified at these boundaries:
 
-- Jest covers the TypeScript end-exclusive conflict helper.
-- Postgres enforces `bookings_no_confirmed_overlap` for confirmed bookings on the same listing, and `booking_rules.test.sql` exercises it (overlap, back-to-back, non-confirmed, different listing).
+- Jest covers the existing capacity-one TypeScript helper and safe adapter conflict messages. The helper has no production mutation caller; do not use it to authorize capacity or pet availability (see [ADR 0010](decisions/0010-booking-capacity-and-pet-exclusion.md)).
+- `booking_rules.test.sql` verifies the end-exclusive `bookings_no_confirmed_pet_overlap` exclusion backstop.
+- `booking_capacity.test.sql` runs actual JWT/RLS-backed confirmations, checking peak occupancy, safe pet conflicts, capacity edits, cancellation release, and multi-row atomicity.
+- `booking_concurrency.test.py` uses separate blocking sessions for one/two remaining places, the same pet at different hosts, and capacity reductions racing confirmations. It also verifies stale-snapshot transactions fail closed. Run it only against a disposable seeded database, using the commands in [`supabase/tests/README.md`](../supabase/tests/README.md).
 
 Playwright is wired up: [`web/playwright.config.ts`](../web/playwright.config.ts) starts `npm run dev` and runs `web/e2e/` on desktop and mobile Chromium, and desktop Firefox. `e2e/smoke.spec.ts` covers the public shell (no auth or Supabase needed) and runs on every `web/**` change via the non-required [`e2e-smoke.yml`](ci-cd.md#e2e-smoke-workflow) workflow.
 

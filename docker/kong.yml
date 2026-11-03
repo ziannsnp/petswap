@@ -1,0 +1,88 @@
+# Declarative Kong config for the compose stack: maps the public API paths the
+# Supabase client uses onto the internal services.
+#
+# The kong entrypoint in docker-compose.yml passes this whole file, comments
+# included, through a shell echo to expand the two key variables below. Keep it
+# free of double quotes, backticks, backslashes, and any other dollar sign.
+_format_version: '2.1'
+_transform: true
+
+consumers:
+  - username: anon
+    keyauth_credentials:
+      - key: $SUPABASE_ANON_KEY
+  - username: service_role
+    keyauth_credentials:
+      - key: $SUPABASE_SERVICE_KEY
+
+acls:
+  - consumer: anon
+    group: anon
+  - consumer: service_role
+    group: admin
+
+services:
+  # Auth: /auth/v1/* -> http://auth:9999/*
+  - name: auth-v1
+    url: http://auth:9999/
+    routes:
+      - name: auth-v1-all
+        strip_path: true
+        paths:
+          - /auth/v1/
+    plugins:
+      - name: cors
+      - name: key-auth
+        config:
+          hide_credentials: false
+      - name: acl
+        config:
+          hide_groups_header: true
+          allow:
+            - admin
+            - anon
+
+  # PostgREST: /rest/v1/* -> http://rest:3000/*
+  - name: rest-v1
+    url: http://rest:3000/
+    routes:
+      - name: rest-v1-all
+        strip_path: true
+        paths:
+          - /rest/v1/
+    plugins:
+      - name: cors
+      - name: key-auth
+        config:
+          hide_credentials: true
+      - name: acl
+        config:
+          hide_groups_header: true
+          allow:
+            - admin
+            - anon
+
+  # Storage: /storage/v1/* -> http://storage:5000/*
+  # No key-auth: storage authorises each request itself, and public and signed
+  # object URLs carry no apikey.
+  - name: storage-v1
+    url: http://storage:5000/
+    routes:
+      - name: storage-v1-all
+        strip_path: true
+        paths:
+          - /storage/v1/
+    plugins:
+      - name: cors
+
+  # Edge Functions: /functions/v1/* -> http://functions:9000/*
+  # No cors plugin: each function owns its CORS policy (sign-in enforces an
+  # origin allowlist) and Kong must not override it with a wildcard.
+  - name: functions-v1
+    url: http://functions:9000/
+    read_timeout: 150000
+    routes:
+      - name: functions-v1-all
+        strip_path: true
+        paths:
+          - /functions/v1/

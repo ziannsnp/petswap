@@ -41,3 +41,8 @@ Usually does not deserve an ADR:
 | [0002](0002-supabase-placeholder-first.md) | Document Supabase before committing schema | Accepted |
 | [0003](0003-booking-rules-and-scope.md) | Booking rules and ratings-free scope | Accepted |
 | [0004](0004-supabase-mvp-foundation.md) | Commit the Supabase MVP foundation | Accepted |
+| [0005](0005-cloudflare-workers-hosting.md) | Cloudflare Workers static assets for web hosting | Accepted |
+| [0006](0006-listing-pet-type-vocabulary.md) | Listings reuse the pet_species vocabulary for accepted pet types | Accepted, amended by 0007 |
+| [0007](0007-listing-facility-vocabulary.md) | Listing facilities use the approved prototype vocabulary | Accepted |
+| [0008](0008-docker-compose-stack.md) | Self-contained Docker Compose stack alongside the Supabase CLI | Accepted |
+| [0009](0009-public-availability-via-cloudflare.md) | Public availability through the existing Cloudflare Workers deployment | Accepted |

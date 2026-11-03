@@ -7,29 +7,38 @@ export type Database = {
         Row: {
           id: string;
           display_name: string;
+          username: string;
           photo_url: string | null;
           phone_number: string | null;
           location: string | null;
           created_at: string;
           updated_at: string;
+          consent_version: string | null;
+          consent_given_at: string | null;
         };
         Insert: {
           id: string;
           display_name: string;
+          username: string;
           photo_url?: string | null;
           phone_number?: string | null;
           location?: string | null;
           created_at?: string;
           updated_at?: string;
+          consent_version?: string | null;
+          consent_given_at?: string | null;
         };
         Update: {
           id?: string;
           display_name?: string;
+          username?: string;
           photo_url?: string | null;
           phone_number?: string | null;
           location?: string | null;
           created_at?: string;
           updated_at?: string;
+          consent_version?: string | null;
+          consent_given_at?: string | null;
         };
         Relationships: [];
       };
@@ -38,37 +47,39 @@ export type Database = {
           id: string;
           owner_id: string;
           name: string;
-          species: string;
+          species: Database['public']['Enums']['pet_species'];
           breed: string | null;
-          age_years: number | null;
+          age_year: number | null;
           photo_url: string | null;
           description: string | null;
-          feeding_instructions: string | null;
-          medical_notes: string | null;
-          behavior_notes: string | null;
+          feeding_instruction: string | null;
+          medical_note: string | null;
+          behavior_note: string | null;
           allergies: string | null;
           vaccination_info: string | null;
-          special_requirements: string | null;
+          special_requirement: string | null;
           created_at: string;
           updated_at: string;
+          deleted_at: string | null;
         };
         Insert: {
           id?: string;
           owner_id: string;
           name: string;
-          species: string;
+          species: Database['public']['Enums']['pet_species'];
           breed?: string | null;
-          age_years?: number | null;
+          age_year?: number | null;
           photo_url?: string | null;
           description?: string | null;
-          feeding_instructions?: string | null;
-          medical_notes?: string | null;
-          behavior_notes?: string | null;
+          feeding_instruction?: string | null;
+          medical_note?: string | null;
+          behavior_note?: string | null;
           allergies?: string | null;
           vaccination_info?: string | null;
-          special_requirements?: string | null;
+          special_requirement?: string | null;
           created_at?: string;
           updated_at?: string;
+          deleted_at?: string | null;
         };
         Update: Partial<Database['public']['Tables']['pets']['Insert']>;
         Relationships: [
@@ -89,7 +100,7 @@ export type Database = {
           location: string;
           description: string;
           capacity: number;
-          accepted_pet_types: string[];
+          accepted_pet_types: Database['public']['Enums']['pet_species'][];
           facilities: string | null;
           status: Database['public']['Enums']['listing_status'];
           deleted_at: string | null;
@@ -104,7 +115,7 @@ export type Database = {
           location: string;
           description: string;
           capacity: number;
-          accepted_pet_types?: string[];
+          accepted_pet_types: Database['public']['Enums']['pet_species'][];
           facilities?: string | null;
           status?: Database['public']['Enums']['listing_status'];
           deleted_at?: string | null;
@@ -214,6 +225,48 @@ export type Database = {
     };
     Views: Record<string, never>;
     Functions: {
+      search_published_listings: {
+        Args: {
+          p_location: string;
+          p_keyword: string;
+          p_page: number;
+          p_page_size: number;
+        };
+        Returns: {
+          id: string;
+          owner_id: string;
+          title: string;
+          location: string;
+          description: string;
+          capacity: number;
+          accepted_pet_types: Database['public']['Enums']['pet_species'][];
+          facilities: string | null;
+          status: Database['public']['Enums']['listing_status'];
+          deleted_at: string | null;
+          published_at: string | null;
+          created_at: string;
+          updated_at: string;
+          page_number: number;
+          total_count: number;
+        }[];
+      };
+      is_username_available: {
+        Args: { candidate_username: string };
+        Returns: boolean;
+      };
+      get_listing_host: {
+        Args: { target_listing_id: string };
+        Returns: {
+          id: string;
+          display_name: string;
+          photo_url: string | null;
+          location: string | null;
+        }[];
+      };
+      delete_pet_with_active_booking_check: {
+        Args: { target_pet_id: string };
+        Returns: string | null;
+      };
       current_user_owns_listing: {
         Args: { target_listing_id: string };
         Returns: boolean;
@@ -226,10 +279,36 @@ export type Database = {
         Args: { object_name: string };
         Returns: string | null;
       };
+      reorder_listing_images: {
+        Args: { target_listing_id: string; ordered_image_ids: string[] };
+        Returns: undefined;
+      };
+      update_listing_with_images: {
+        Args: {
+          target_listing_id: string;
+          new_title: string;
+          new_location: string;
+          new_description: string;
+          new_capacity: number;
+          new_accepted_pet_types: Database['public']['Enums']['pet_species'][];
+          new_facilities: string | null;
+          new_status: Database['public']['Enums']['listing_status'];
+          new_published_at: string | null;
+          retained_image_ids: string[];
+          new_images: Json;
+          ordered_image_ids: string[];
+        };
+        Returns: undefined;
+      };
+      delete_listing_with_active_booking_check: {
+        Args: { target_listing_id: string };
+        Returns: undefined;
+      };
     };
     Enums: {
       booking_status: 'pending' | 'confirmed' | 'declined' | 'cancelled' | 'completed';
       listing_status: 'draft' | 'published' | 'deleted';
+      pet_species: 'dog' | 'cat' | 'rabbit' | 'hamster' | 'guinea_pig' | 'fish' | 'reptile' | 'exotic_mammal' | 'bird' | 'other';
     };
     CompositeTypes: Record<string, never>;
   };

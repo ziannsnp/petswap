@@ -1,0 +1,343 @@
+/** @jest-environment jsdom */
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
+import { LISTING_PHOTO_MAX_BYTES, LISTING_PHOTO_MAX_COUNT } from '../lib/listingPhotos';
+import { FACILITY_OPTIONS } from '../lib/listingOptions';
+import { PET_SPECIES_OPTIONS } from '@/shared/lib/petSpecies';
+import { validListingFormValues } from '../testing/listingFixtures';
+import { CreateListingScreen } from './CreateListingScreen';
+
+const mockMutateAsync = jest.fn();
+const mockReset = jest.fn();
+let mockMutationIsError = false;
+
+jest.mock('../hooks/useCreateListing', () => ({
+  useCreateListing: () => ({
+    mutateAsync: mockMutateAsync,
+    reset: mockReset,
+    isPending: false,
+    isError: mockMutationIsError,
+  }),
+}));
+
+function fileOfSize(name: string, type: string, size: number): File {
+  const file = new File(['photo'], name, { type });
+  Object.defineProperty(file, 'size', { value: size });
+  return file;
+}
+
+function renderScreen() {
+  return render(
+    <MemoryRouter>
+      <CreateListingScreen />
+    </MemoryRouter>,
+  );
+}
+
+let objectUrlCount = 0;
+
+beforeAll(() => {
+  // jsdom has no object URLs. Handing out a distinct one per call keeps the preview keys
+  // unique and lets the removal test assert which URL was released.
+  URL.createObjectURL = jest.fn(() => `blob:listing-photo-${(objectUrlCount += 1)}`);
+  URL.revokeObjectURL = jest.fn();
+});
+
+beforeEach(() => {
+  jest.clearAllMocks();
+  jest.useRealTimers();
+  mockMutationIsError = false;
+  mockMutateAsync.mockResolvedValue(undefined);
+});
+
+async function completeRequiredFields(user: ReturnType<typeof userEvent.setup>) {
+  await user.type(screen.getByLabelText(/listing title/i), validListingFormValues.title);
+  await user.type(screen.getByLabelText(/location/i), validListingFormValues.location);
+  await user.type(screen.getByLabelText(/description/i), validListingFormValues.description);
+  await user.clear(screen.getByLabelText(/capacity/i));
+  await user.type(screen.getByLabelText(/capacity/i), String(validListingFormValues.capacity));
+}
+
+describe('CreateListingScreen', () => {
+  it('accepts a supported photo and shows its preview', async () => {
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.upload(
+      screen.getByLabelText(/add listing photos/i),
+      fileOfSize('yard.jpg', 'image/jpeg', 2048),
+    );
+
+    expect(screen.getByRole('img', { name: 'yard.jpg' })).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('rejects an oversized photo with a reason and keeps the rest of the form', async () => {
+    const user = userEvent.setup();
+    renderScreen();
+
+    const title = screen.getByLabelText(/listing title/i);
+    await user.type(title, 'Quiet home near the park');
+
+    await user.upload(
+      screen.getByLabelText(/add listing photos/i),
+      fileOfSize('huge.png', 'image/png', LISTING_PHOTO_MAX_BYTES + 1),
+    );
+
+    expect(screen.getByRole('alert')).toHaveTextContent('huge.png: Larger than the 10 MB limit.');
+    expect(title).toHaveValue('Quiet home near the park');
+    expect(screen.queryByRole('img')).not.toBeInTheDocument();
+  });
+
+  it('rejects an unsupported file while keeping the supported one from the same selection', () => {
+    renderScreen();
+
+    // userEvent.upload applies the input's `accept` filter. That filter is exactly what
+    // a person bypasses by picking "All files" in the OS dialog, so the selection is
+    // dispatched directly here to exercise the guard that actually has to hold.
+    fireEvent.change(screen.getByLabelText(/add listing photos/i), {
+      target: {
+        files: [
+          fileOfSize('yard.jpg', 'image/jpeg', 2048),
+          fileOfSize('notes.pdf', 'application/pdf', 512),
+        ],
+      },
+    });
+
+    expect(screen.getByRole('img', { name: 'yard.jpg' })).toBeInTheDocument();
+    const rejectionAlert = screen.getByRole('alert');
+    expect(rejectionAlert).toHaveTextContent(
+      'notes.pdf: Unsupported file type. Choose a JPG, PNG, WebP, or GIF file.',
+    );
+    expect(screen.getByText('Photos').parentElement).toContainElement(rejectionAlert);
+    expect(screen.getByLabelText(/listing title/i).parentElement).not.toContainElement(rejectionAlert);
+  });
+
+  it('reports required fields only after a save attempt, then clears each as it is corrected', async () => {
+    const user = userEvent.setup();
+    renderScreen();
+
+    expect(screen.queryByText('Listing title is required.')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /publish listing/i }));
+    expect(screen.getByText('Listing title is required.')).toBeInTheDocument();
+    expect(screen.getByText('Location is required.')).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText(/listing title/i), 'Quiet home near the park');
+
+    expect(screen.queryByText('Listing title is required.')).not.toBeInTheDocument();
+    expect(screen.getByText('Location is required.')).toBeInTheDocument();
+  });
+
+  it('offers six optional facility checkboxes that can be selected independently', async () => {
+    const user = userEvent.setup();
+    renderScreen();
+
+    for (const facility of FACILITY_OPTIONS) {
+      expect(screen.getByRole('checkbox', { name: facility })).not.toBeChecked();
+    }
+
+    const lawn = screen.getByRole('checkbox', { name: 'Lawn' });
+    const dailyUpdates = screen.getByRole('checkbox', { name: 'Daily photo updates' });
+    await user.click(lawn);
+    await user.click(dailyUpdates);
+
+    expect(lawn).toBeChecked();
+    expect(dailyUpdates).toBeChecked();
+
+    await user.click(lawn);
+
+    expect(lawn).not.toBeChecked();
+    expect(dailyUpdates).toBeChecked();
+  });
+
+  it('releases the object URL of a removed photo and leaves the others alone', async () => {
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.upload(screen.getByLabelText(/add listing photos/i), [
+      fileOfSize('yard.jpg', 'image/jpeg', 2048),
+      fileOfSize('room.png', 'image/png', 2048),
+    ]);
+
+    const removedUrl = screen.getByRole('img', { name: 'yard.jpg' }).getAttribute('src');
+    const keptUrl = screen.getByRole('img', { name: 'room.png' }).getAttribute('src');
+
+    await user.click(screen.getByRole('button', { name: 'Remove yard.jpg' }));
+
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith(removedUrl);
+    expect(URL.revokeObjectURL).not.toHaveBeenCalledWith(keptUrl);
+    expect(screen.queryByRole('img', { name: 'yard.jpg' })).not.toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'room.png' })).toBeInTheDocument();
+  });
+
+  it('applies the photo cap across selections, not just within one', async () => {
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.upload(
+      screen.getByLabelText(/add listing photos/i),
+      Array.from({ length: LISTING_PHOTO_MAX_COUNT }, (_, index) =>
+        fileOfSize(`photo-${index}.jpg`, 'image/jpeg', 1024)),
+    );
+    expect(screen.getAllByRole('img')).toHaveLength(LISTING_PHOTO_MAX_COUNT);
+
+    await user.upload(
+      screen.getByLabelText(/add more/i),
+      fileOfSize('one-too-many.jpg', 'image/jpeg', 1024),
+    );
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'one-too-many.jpg: A listing can have at most 10 photos.',
+    );
+    expect(screen.getAllByRole('img')).toHaveLength(LISTING_PHOTO_MAX_COUNT);
+  });
+
+  it('clears the cap message once a photo is removed', async () => {
+    const user = userEvent.setup();
+    renderScreen();
+
+    // 1. select ten photos
+    await user.upload(
+      screen.getByLabelText(/add listing photos/i),
+      Array.from({ length: LISTING_PHOTO_MAX_COUNT }, (_, index) =>
+        fileOfSize(`photo-${index}.jpg`, 'image/jpeg', 1024)),
+    );
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+
+    // 2. select an eleventh
+    await user.upload(
+      screen.getByLabelText(/add more/i),
+      fileOfSize('eleventh.jpg', 'image/jpeg', 1024),
+    );
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'eleventh.jpg: A listing can have at most 10 photos.',
+    );
+
+    // 3. remove one of the photos the form already holds
+    await user.click(screen.getByRole('button', { name: 'Remove photo-0.jpg' }));
+
+    // 4. the cap message is gone now that there is room again
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getAllByRole('img')).toHaveLength(LISTING_PHOTO_MAX_COUNT - 1);
+  });
+
+  it('keeps a reason about the file after a removal but drops the capacity one', async () => {
+    const user = userEvent.setup();
+    renderScreen();
+
+    // One selection that produces both kinds: the PDF is rejected on its own merits, and
+    // extra.jpg only because ten photos were already accepted ahead of it.
+    fireEvent.change(screen.getByLabelText(/add listing photos/i), {
+      target: {
+        files: [
+          ...Array.from({ length: LISTING_PHOTO_MAX_COUNT }, (_, index) =>
+            fileOfSize(`photo-${index}.jpg`, 'image/jpeg', 1024)),
+          fileOfSize('notes.pdf', 'application/pdf', 512),
+          fileOfSize('extra.jpg', 'image/jpeg', 1024),
+        ],
+      },
+    });
+
+    expect(screen.getByRole('alert')).toHaveTextContent('notes.pdf: Unsupported file type.');
+    expect(screen.getByRole('alert')).toHaveTextContent('extra.jpg: A listing can have at most 10 photos.');
+
+    await user.click(screen.getByRole('button', { name: 'Remove photo-0.jpg' }));
+
+    // notes.pdf is still a PDF, so that reason stays; the listing is no longer full.
+    expect(screen.getByRole('alert')).toHaveTextContent('notes.pdf: Unsupported file type.');
+    expect(screen.queryByText(/at most 10 photos/)).not.toBeInTheDocument();
+  });
+
+  it('offers every supported pet species in a dropdown and starts with Dog selected', () => {
+    renderScreen();
+
+    const petTypeSelect = screen.getByRole('combobox', { name: 'Accepted pet type' });
+    expect(petTypeSelect).toHaveDisplayValue('Cat');
+
+    for (const { label } of PET_SPECIES_OPTIONS) {
+      expect(screen.getByRole('option', { name: label })).toBeInTheDocument();
+    }
+    expect(screen.getByRole('button', { name: 'Remove Dog' })).toBeInTheDocument();
+  });
+
+  it('adds accepted pet types from the supported dropdown choices', async () => {
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Accepted pet type' }), 'guinea_pig');
+    await user.click(screen.getByRole('button', { name: /add type/i }));
+
+    expect(screen.getByRole('button', { name: 'Remove Guinea pig' })).toBeInTheDocument();
+  });
+
+  it('requires at least one accepted pet type before saving', async () => {
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.click(screen.getByRole('button', { name: 'Remove Dog' }));
+    await user.click(screen.getByRole('button', { name: /publish listing/i }));
+
+    expect(screen.getByText('Choose at least one accepted pet type.')).toBeInTheDocument();
+    expect(mockMutateAsync).not.toHaveBeenCalled();
+  });
+
+  it('submits valid listing details to the create-listing mutation', async () => {
+    const user = userEvent.setup();
+    renderScreen();
+    await completeRequiredFields(user);
+    await user.click(screen.getByRole('checkbox', { name: 'Lawn' }));
+    await user.click(screen.getByRole('checkbox', { name: 'Daily photo updates' }));
+
+    await user.click(screen.getByRole('button', { name: /publish listing/i }));
+
+    await waitFor(() => {
+      expect(mockMutateAsync).toHaveBeenCalledWith(expect.objectContaining({
+        title: validListingFormValues.title,
+        location: validListingFormValues.location,
+        description: validListingFormValues.description,
+        capacity: validListingFormValues.capacity,
+        acceptedPetTypes: ['dog'],
+        facilities: ['Lawn', 'Daily photo updates'],
+        photos: [],
+        publicationMode: 'published',
+      }));
+    });
+  });
+
+  it('saves the same valid form as a private draft when requested', async () => {
+    const user = userEvent.setup();
+    renderScreen();
+    await completeRequiredFields(user);
+
+    await user.click(screen.getByRole('button', { name: /save draft/i }));
+
+    await waitFor(() => {
+      expect(mockMutateAsync).toHaveBeenCalledWith(expect.objectContaining({
+        title: validListingFormValues.title,
+        publicationMode: 'draft',
+      }));
+    });
+  });
+
+  it('keeps the completed form and reports an upload failure', async () => {
+    mockMutateAsync.mockImplementationOnce(async () => {
+      mockMutationIsError = true;
+      throw new Error('upload failed');
+    });
+    const user = userEvent.setup();
+    renderScreen();
+    await completeRequiredFields(user);
+    const photo = fileOfSize('yard.jpg', 'image/jpeg', 2048);
+    await user.upload(screen.getByLabelText(/add listing photos/i), photo);
+
+    await user.click(screen.getByRole('button', { name: /publish listing/i }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'We could not save your listing. Check your connection and try again.',
+    );
+    expect(screen.getByLabelText(/listing title/i)).toHaveValue(validListingFormValues.title);
+    expect(screen.getByRole('img', { name: 'yard.jpg' })).toBeInTheDocument();
+  });
+});

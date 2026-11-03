@@ -1,11 +1,26 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { createBookingRequest, listMyBookings, updateBookingStatus, type BookingInsert } from '../lib/bookingApi';
+import {
+  createBookingRequest,
+  listIncomingBookings,
+  listOutgoingBookings,
+  updateBookingStatus,
+  type BookingInsert,
+} from '../lib/bookingApi';
 import type { Database } from '@/shared/types/database.types';
 
-export function useMyBookings() {
+/** Bookings the current user requested. */
+export function useOutgoingBookings() {
   return useQuery({
-    queryKey: ['bookings', 'mine'],
-    queryFn: listMyBookings,
+    queryKey: ['bookings', 'outgoing'],
+    queryFn: listOutgoingBookings,
+  });
+}
+
+/** Bookings made against listings the current user owns. */
+export function useIncomingBookings() {
+  return useQuery({
+    queryKey: ['bookings', 'incoming'],
+    queryFn: listIncomingBookings,
   });
 }
 

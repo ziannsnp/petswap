@@ -1,0 +1,70 @@
+name: Compose health
+
+# Boots the self-contained docker-compose.yml stack from a fresh .env and runs
+# scripts/stack-health.sh against it, the same three commands documented in
+# docs/environments.md#docker-compose-stack. Separate from the required
+# Quality gate: it builds images and starts containers, so it is informational
+# like db-contract and e2e-smoke. It exists so the documented setup path
+# cannot silently rot: a red run means a new service, env var, or image change
+# broke the stack a contributor would otherwise only discover by hand.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'docker-compose.yml'
+      - 'docker/**'
+      - '.env.example'
+      - 'scripts/stack-env.sh'
+      - 'scripts/stack-health.sh'
+      - '.github/workflows/compose-health.yml'
+  workflow_dispatch:
+  schedule:
+    - cron: '32 6 * * 2' # Tuesdays 06:32 UTC, offset from db-contract's Monday run
+
+concurrency:
+  group: compose-health-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  health:
+    name: Build the Compose stack and check it
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Write .env with generated secrets
+        run: sh scripts/stack-env.sh
+
+      - name: Build and start the stack, retrying on registry throttling
+        # The Supabase images come from public.ecr.aws, which throttles
+        # anonymous pulls per source IP ("toomanyrequests: Data limit
+        # exceeded"). GitHub-hosted runners share a pool of IPs, so this can
+        # trip even on a first attempt with no prior pulls from this job.
+        # Retry with backoff; a failure after all attempts is a real problem.
+        run: |
+          attempt=1
+          max_attempts=5
+          delay=20
+          until docker compose up -d --build; do
+            if [ "$attempt" -ge "$max_attempts" ]; then
+              echo "Giving up after $attempt attempts." >&2
+              exit 1
+            fi
+            echo "Attempt $attempt failed, waiting ${delay}s before retry..."
+            docker compose down -v
+            sleep "$delay"
+            attempt=$((attempt + 1))
+            delay=$((delay * 2))
+          done
+
+      - name: Health and smoke check
+        run: sh scripts/stack-health.sh --wait 180
+
+      - name: Show service logs on failure
+        if: failure()
+        run: docker compose logs
+
+      - name: Stop the stack
+        if: always()
+        run: docker compose down -v

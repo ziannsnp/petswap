@@ -1,16 +1,13 @@
 name: Quality
 
 on:
+  # No `paths` filter on pull requests: `web-quality` and `docs-links` are meant
+  # to be required status checks, and GitHub leaves a required check stuck on
+  # "Expected" forever when its workflow never starts. Every PR to main must
+  # therefore get both jobs, even one that only touches docker/** or another
+  # workflow. See docs/ci-cd.md#proposed-required-checks.
   pull_request:
     branches: [main]
-    paths:
-      - 'web/**'
-      - 'supabase/**'
-      - 'docs/**'
-      - 'README.md'
-      - 'AGENTS.md'
-      - '.github/pull_request_template.md'
-      - '.github/workflows/quality.yml'
   push:
     branches: [main]
     paths:
@@ -79,13 +76,33 @@ jobs:
               print('Broken documentation links:')
               print('\n'.join(failures))
               sys.exit(1)
-  
+
 # CD Pipeline for Supabase DB Push
+  changes:
+    name: Detect changed paths
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    outputs:
+      supabase: ${{ steps.filter.outputs.supabase }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            supabase:
+              - 'supabase/**'
+
   supabase-migration:
     name: Supabase DB Push
     runs-on: ubuntu-latest
-    if: github.event_name == 'push'
-    
+    needs: changes
+    # The workflow-level `push.paths` filter above also matches docs/**, README.md,
+    # and AGENTS.md, so a documentation-only push to main still triggers this job
+    # unless it re-checks that supabase/** actually changed. Without this guard,
+    # a docs PR silently runs `supabase db push` against the real database.
+    if: github.event_name == 'push' && needs.changes.outputs.supabase == 'true'
+
     steps:
       - uses: actions/checkout@v4
 
@@ -100,4 +117,16 @@ jobs:
           SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
         run: |
           supabase link --project-ref $SUPABASE_PROJECT_ID
-          supabase db push
+          supabase db push --include-all
+
+      # No function name given: the CLI deploys every function under
+      # supabase/functions/, so a new function only needs its folder -- no
+      # second place to remember to wire it into CI, which is exactly the gap
+      # that left `sign-in` undeployed since it was written.
+      - name: Deploy Edge Functions
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+        run: |
+          supabase link --project-ref $SUPABASE_PROJECT_ID
+          supabase functions deploy

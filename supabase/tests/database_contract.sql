@@ -1,30 +1,521 @@
--- Run after `npx supabase db reset`, then create/sign in local users through
--- Studio or app flows before testing RLS with authenticated JWTs.
+-- PetSwap database contract checks.
+--
+-- Each row below is a load-bearing promise the MVP schema makes to the app:
+-- consent is never stored half-written, row-level security is on, booking
+-- participants have policies, and confirmed stays cannot overlap. Read the rows
+-- as a review checklist for any migration; the final assertion turns the same
+-- list into a pass/fail gate.
+--
+-- Run locally after rebuilding the database:
+--   npx supabase db reset
+--   psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" \
+--     -v ON_ERROR_STOP=1 -f supabase/tests/database_contract.sql
+--
+-- CI runs the same file on every change under supabase/ via
+-- .github/workflows/db-contract.yml. These are catalogue checks only; they read
+-- pg_catalog and information_schema and never write. Behavioural enforcement
+-- (the overlap constraint actually rejecting a second confirmed booking) lives
+-- in supabase/tests/booking_rules.test.sql.
 
+\set ON_ERROR_STOP on
+\pset format aligned
+\echo '== PetSwap database contract =='
+
+begin;
+
+create temporary table _contract (
+  check_name text primary key,
+  passed boolean
+) on commit drop;
+
+insert into _contract (check_name, passed) values
+  (
+    'confirmed bookings use end-exclusive overlap protection',
+    exists (
+      select 1 from pg_constraint
+      where conname = 'bookings_no_confirmed_overlap'
+        and conrelid = 'public.bookings'::regclass
+        and contype = 'x'
+    )
+  ),
+  (
+    'bookings reject a window whose end is not after its start',
+    exists (
+      select 1 from pg_constraint
+      where conname = 'bookings_valid_window_check'
+        and conrelid = 'public.bookings'::regclass
+        and contype = 'c'
+    )
+  ),
+  (
+    'booking status enum carries the full lifecycle',
+    (
+      select array_agg(enumlabel::text order by enumlabel::text)
+      from pg_enum
+      where enumtypid = 'public.booking_status'::regtype
+    ) = array['cancelled', 'completed', 'confirmed', 'declined', 'pending']
+  ),
+  (
+    'the app-level booking guard is installed on insert and update',
+    (
+      select count(*) = 2
+      from pg_trigger
+      where tgrelid = 'public.bookings'::regclass
+        and tgname in ('guard_booking_insert', 'guard_booking_update')
+        and not tgisinternal
+    )
+  ),
+  (
+    'listing publication timestamps are database-controlled',
+    exists (
+      select 1 from pg_trigger
+      where tgrelid = 'public.listings'::regclass
+        and tgname = 'set_listing_publication_timestamp'
+        and not tgisinternal
+    )
+  ),
+  (
+    'all MVP tables have row-level security enabled',
+    (
+      select bool_and(relrowsecurity)
+      from pg_class
+      where oid in (
+        'public.profiles'::regclass,
+        'public.pets'::regclass,
+        'public.listings'::regclass,
+        'public.listing_images'::regclass,
+        'public.bookings'::regclass
+      )
+    )
+  ),
+  (
+    'booking participant policies are installed',
+    (
+      select count(*) >= 4
+      from pg_policies
+      where schemaname = 'public' and tablename = 'bookings'
+    )
+  ),
+  (
+    'a requester-insert policy scopes new bookings to the current user',
+    exists (
+      select 1 from pg_policies
+      where schemaname = 'public' and tablename = 'bookings'
+        and cmd = 'INSERT'
+        and with_check like '%auth.uid()%'
+    )
+  ),
+  (
+    'profiles record the consent version and timestamp',
+    (
+      select bool_and(c.column_name is not null)
+      from (values ('consent_version'), ('consent_given_at')) as expected(column_name)
+      left join information_schema.columns c
+        on c.table_schema = 'public'
+        and c.table_name = 'profiles'
+        and c.column_name = expected.column_name
+    )
+  ),
+  (
+    'personal data is never stored with a half-written consent record',
+    exists (
+      select 1 from pg_constraint
+      where conname = 'profiles_consent_pair_check'
+        and conrelid = 'public.profiles'::regclass
+        and contype = 'c'
+    )
+  ),
+  (
+    'deleted listings must carry a deletion timestamp',
+    exists (
+      select 1 from pg_constraint
+      where conname = 'listings_deleted_state_check'
+        and conrelid = 'public.listings'::regclass
+        and contype = 'c'
+    )
+  ),
+  (
+    'listing deletion is exposed through an owner-checked security definer RPC',
+    exists (
+      select 1 from pg_proc
+      where oid = 'public.delete_listing_with_active_booking_check(uuid)'::regprocedure
+        and prosecdef
+    )
+  ),
+  (
+    'listing host retrieval is a restricted security definer projection',
+    exists (
+      select 1 from pg_proc
+      where oid = 'public.get_listing_host(uuid)'::regprocedure
+        and prosecdef
+        and proargnames = array['target_listing_id', 'id', 'display_name', 'photo_url', 'location']
+    )
+    and has_function_privilege('anon', 'public.get_listing_host(uuid)', 'EXECUTE')
+    and has_function_privilege('authenticated', 'public.get_listing_host(uuid)', 'EXECUTE')
+    and not exists (
+      select 1
+      from pg_proc as p
+      cross join lateral aclexplode(
+        coalesce(p.proacl, acldefault('f', p.proowner))
+      ) as acl
+      where p.oid = 'public.get_listing_host(uuid)'::regprocedure
+        and acl.grantee = 0
+        and acl.privilege_type = 'EXECUTE'
+    )
+  ),
+  (
+    'direct listing updates cannot bypass the soft-delete booking check',
+    exists (
+      select 1 from pg_policies
+      where schemaname = 'public'
+        and tablename = 'listings'
+        and policyname = 'Owners update own listings'
+        and cmd = 'UPDATE'
+        and with_check like '%status <>%deleted%'
+    )
+  ),
+  (
+    'listings cannot be hard-deleted through the authenticated API',
+    not exists (
+      select 1 from pg_policies
+      where schemaname = 'public'
+        and tablename = 'listings'
+        and cmd = 'DELETE'
+    )
+  ),
+  (
+    'booking inserts serialize against listing deletion',
+    exists (
+      select 1 from pg_trigger
+      where tgrelid = 'public.bookings'::regclass
+        and tgname = 'bookings_lock_listing_before_guard'
+        and not tgisinternal
+    )
+  ),
+  (
+    'booking listing-lock helper cannot be called directly by API roles',
+    not has_function_privilege('anon', 'public.lock_listing_for_booking_insert()', 'EXECUTE')
+      and not has_function_privilege('authenticated', 'public.lock_listing_for_booking_insert()', 'EXECUTE')
+      and not has_function_privilege('service_role', 'public.lock_listing_for_booking_insert()', 'EXECUTE')
+  ),
+  (
+    'pet deletion is an owner-checked security definer RPC for signed-in users only',
+    exists (
+      select 1 from pg_proc
+      where oid = 'public.delete_pet_with_active_booking_check(uuid)'::regprocedure
+        and prosecdef
+    )
+    and not has_function_privilege('anon', 'public.delete_pet_with_active_booking_check(uuid)', 'EXECUTE')
+    and has_function_privilege('authenticated', 'public.delete_pet_with_active_booking_check(uuid)', 'EXECUTE')
+  ),
+  (
+    'direct pet updates cannot change, restore, or soft-delete a pet',
+    exists (
+      select 1 from pg_policies
+      where schemaname = 'public'
+        and tablename = 'pets'
+        and policyname = 'Owners update own pets'
+        and cmd = 'UPDATE'
+        and qual like '%deleted_at IS NULL%'
+        and with_check like '%deleted_at IS NULL%'
+    )
+  ),
+  (
+    'a deleted pet photo cannot be read by past hosts or uploaded or replaced by its owner',
+    exists (
+      select 1 from pg_policies
+      where schemaname = 'storage' and tablename = 'objects'
+        and policyname = 'Listing owners can read booked pet photos'
+        and qual like '%active_pet_is_booked_at_own_listing%'
+    )
+    and exists (
+      select 1 from pg_policies
+      where schemaname = 'storage' and tablename = 'objects'
+        and policyname = 'Pet owners can upload pet photos'
+        and with_check like '%current_user_owns_active_pet%'
+    )
+    and exists (
+      select 1 from pg_policies
+      where schemaname = 'storage' and tablename = 'objects'
+        and policyname = 'Pet owners can update pet photos'
+        and qual like '%current_user_owns_active_pet%'
+        and with_check like '%current_user_owns_active_pet%'
+    )
+  ),
+  (
+    'booking inserts serialize against pet deletion',
+    exists (
+      select 1 from pg_trigger
+      where tgrelid = 'public.bookings'::regclass
+        and tgname = 'bookings_lock_pet_before_guard'
+        and not tgisinternal
+    )
+    and not has_function_privilege('anon', 'public.lock_pet_for_booking_insert()', 'EXECUTE')
+    and not has_function_privilege('authenticated', 'public.lock_pet_for_booking_insert()', 'EXECUTE')
+    and not has_function_privilege('service_role', 'public.lock_pet_for_booking_insert()', 'EXECUTE')
+  ),
+  (
+    'owner-only listing operations are callable by signed-in users only',
+    not has_function_privilege('anon', 'public.delete_listing_with_active_booking_check(uuid)', 'EXECUTE')
+      and not has_function_privilege('anon', 'public.reorder_listing_images(uuid, uuid[])', 'EXECUTE')
+      and not has_function_privilege(
+        'anon',
+        'public.update_listing_with_images(uuid, text, text, text, integer, public.pet_species[], text, public.listing_status, timestamptz, uuid[], jsonb, uuid[])',
+        'EXECUTE'
+      )
+      and has_function_privilege('authenticated', 'public.delete_listing_with_active_booking_check(uuid)', 'EXECUTE')
+      and has_function_privilege('authenticated', 'public.reorder_listing_images(uuid, uuid[])', 'EXECUTE')
+      and has_function_privilege(
+        'authenticated',
+        'public.update_listing_with_images(uuid, text, text, text, integer, public.pet_species[], text, public.listing_status, timestamptz, uuid[], jsonb, uuid[])',
+        'EXECUTE'
+      )
+  ),
+  (
+    'the listing-photos storage bucket exists and is private',
+    exists (
+      select 1 from storage.buckets
+      where id = 'listing-photos' and not public
+    )
+  ),
+  (
+    'the avatars storage bucket exists and is public',
+    exists (
+      select 1 from storage.buckets
+      where id = 'avatars' and public
+    )
+  ),
+  (
+    'the pet-photos storage bucket exists and is private',
+    exists (
+      select 1 from storage.buckets
+      where id = 'pet-photos' and not public
+    )
+  ),
+  (
+    'pet-photos storage policies are installed',
+    (
+      select count(*) = 5
+      from pg_policies
+      where schemaname = 'storage'
+        and tablename = 'objects'
+        and policyname in (
+          'Pet owners can read pet photos',
+          'Listing owners can read booked pet photos',
+          'Pet owners can upload pet photos',
+          'Pet owners can update pet photos',
+          'Pet owners can delete pet photos'
+        )
+    )
+  ),
+  (
+    'avatars have public reads and owner-scoped writes',
+    (
+      select count(*) = 4
+      from pg_policies
+      where schemaname = 'storage'
+        and tablename = 'objects'
+        and policyname in (
+          'Public can read avatars',
+          'Users upload own avatars',
+          'Users update own avatars',
+          'Users delete own avatars'
+        )
+    )
+  ),
+  (
+    'listings accept only pet_species values as accepted pet types',
+    exists (
+      select 1 from information_schema.columns
+      where table_schema = 'public'
+        and table_name = 'listings'
+        and column_name = 'accepted_pet_types'
+        and udt_name = '_pet_species'
+    )
+  ),
+  (
+    'listings require at least one accepted pet type',
+    exists (
+      select 1
+      from information_schema.columns
+      where table_schema = 'public'
+        and table_name = 'listings'
+        and column_name = 'accepted_pet_types'
+        and is_nullable = 'NO'
+        and column_default is null
+    ) and exists (
+      select 1 from pg_constraint
+      where conname = 'listings_accepted_pet_types_not_empty_check'
+        and conrelid = 'public.listings'::regclass
+        and contype = 'c'
+    )
+  ),
+  (
+    'published listing photos remain readable from the private bucket',
+    exists (
+      select 1 from pg_policies
+      where schemaname = 'storage'
+        and tablename = 'objects'
+        and policyname = 'Public can read listing photos'
+        and cmd = 'SELECT'
+    )
+  ),
+  (
+    'listing owners may read photos from their own private drafts',
+    exists (
+      select 1 from pg_policies
+      where schemaname = 'storage'
+        and tablename = 'objects'
+        and policyname = 'Listing owners read private listing photos'
+        and cmd = 'SELECT'
+    )
+  ),
+  (
+    'listing image metadata has safe edit constraints',
+    (
+      select count(*) = 3
+      from pg_constraint
+      where conrelid = 'public.listing_images'::regclass
+        and conname in (
+          'listing_images_sort_order_nonnegative_check',
+          'listing_images_storage_path_matches_listing_check',
+          'listing_images_listing_sort_order_key'
+        )
+    )
+  ),
+  (
+    'listing image changes enforce the ten-photo and immutable-identity rules',
+    exists (
+      select 1
+      from pg_trigger
+      where tgrelid = 'public.listing_images'::regclass
+        and tgname = 'guard_listing_image_change'
+        and not tgisinternal
+    )
+  ),
+  (
+    'listing owners have an atomic photo reorder operation',
+    exists (
+      select 1
+      from pg_proc as procedure
+      join pg_namespace as namespace on namespace.oid = procedure.pronamespace
+      where namespace.nspname = 'public'
+        and procedure.proname = 'reorder_listing_images'
+        and pg_get_function_identity_arguments(procedure.oid) = 'target_listing_id uuid, ordered_image_ids uuid[]'
+    )
+  );
+
+insert into _contract (check_name, passed)
 select
-  'confirmed bookings use end-exclusive overlap protection' as check_name,
+  'usernames are lowercase and format constrained' as check_name,
   exists (
     select 1
     from pg_constraint
-    where conname = 'bookings_no_confirmed_overlap'
-      and conrelid = 'public.bookings'::regclass
+    where conname = 'profiles_username_format_check'
+      and conrelid = 'public.profiles'::regclass
   ) as passed;
 
+insert into _contract (check_name, passed)
 select
-  'all MVP tables have RLS enabled' as check_name,
-  bool_and(relrowsecurity) as passed
-from pg_class
-where oid in (
-  'public.profiles'::regclass,
-  'public.pets'::regclass,
-  'public.listings'::regclass,
-  'public.listing_images'::regclass,
-  'public.bookings'::regclass
-);
+  'username availability does not expose email addresses' as check_name,
+  count(*) > 0 and bool_and(
+    p.prorettype = 'boolean'::regtype
+    and pg_get_function_result(p.oid) = 'boolean'
+  ) as passed
+from pg_proc p
+join pg_namespace n on n.oid = p.pronamespace
+where n.nspname = 'public'
+  and p.proname = 'is_username_available';
 
+insert into _contract (check_name, passed)
 select
-  'booking participant policies are installed' as check_name,
-  count(*) >= 4 as passed
-from pg_policies
-where schemaname = 'public'
-  and tablename = 'bookings';
+  'profiles have owner-scoped update policy' as check_name,
+  exists (
+    select 1
+    from pg_policies
+    where schemaname = 'public'
+      and tablename = 'profiles'
+      and cmd = 'UPDATE'
+      and qual like '%auth.uid()%'
+      and with_check like '%auth.uid()%'
+  ) as passed;
+
+insert into _contract (check_name, passed)
+select
+  'profiles have owner-scoped delete policy' as check_name,
+  exists (
+    select 1
+    from pg_policies
+    where schemaname = 'public'
+      and tablename = 'profiles'
+      and cmd = 'DELETE'
+      and qual like '%auth.uid()%'
+  ) as passed;
+
+insert into _contract (check_name, passed) values
+  (
+    'published listing search has a stable ordering index',
+    exists (
+      select 1 from pg_indexes
+      where schemaname = 'public'
+        and tablename = 'listings'
+        and indexname = 'listings_published_order_idx'
+        and indexdef like '%published_at DESC NULLS LAST, id DESC%'
+        and indexdef like '%status = ''published''%'
+        and indexdef like '%deleted_at IS NULL%'
+    )
+  ),
+  (
+    'published listing location, title, and description have trigram indexes',
+    (
+      select count(*) = 3
+      from pg_indexes
+      where schemaname = 'public'
+        and tablename = 'listings'
+        and indexname in (
+          'listings_published_location_trgm_idx',
+          'listings_published_title_trgm_idx',
+          'listings_published_description_trgm_idx'
+        )
+        and indexdef like '%USING gin%'
+        and indexdef like '%gin_trgm_ops%'
+    )
+  ),
+  (
+    'published listing search RPC has explicit app-role grants and no PUBLIC grant',
+    to_regprocedure('public.search_published_listings(text,text,integer,integer)') is not null
+      and has_function_privilege('anon', 'public.search_published_listings(text,text,integer,integer)', 'EXECUTE')
+      and has_function_privilege('authenticated', 'public.search_published_listings(text,text,integer,integer)', 'EXECUTE')
+      and has_function_privilege('service_role', 'public.search_published_listings(text,text,integer,integer)', 'EXECUTE')
+      and not exists (
+        select 1
+        from pg_proc as procedure,
+        lateral aclexplode(coalesce(procedure.proacl, acldefault('f', procedure.proowner))) as privilege
+        where procedure.oid = 'public.search_published_listings(text,text,integer,integer)'::regprocedure
+          and privilege.grantee = 0
+          and privilege.privilege_type = 'EXECUTE'
+      )
+  );
+
+select check_name, passed
+from _contract
+order by passed nulls first, check_name;
+
+do $$
+declare
+  failures text;
+begin
+  select string_agg(check_name, E'\n  - ' order by check_name)
+    into failures
+  from _contract
+  where passed is distinct from true;
+
+  if failures is not null then
+    raise exception E'database contract failed:\n  - %', failures;
+  end if;
+
+  raise notice 'database contract: all % checks passed', (select count(*) from _contract);
+end;
+$$;
+
+commit;

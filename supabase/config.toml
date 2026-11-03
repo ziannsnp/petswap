@@ -45,3 +45,6 @@ enable_confirmations = false
 [edge_runtime]
 enabled = true
 policy = "oneshot"
+
+[functions.sign-in]
+verify_jwt = false

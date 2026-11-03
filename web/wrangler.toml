@@ -1,0 +1,9 @@
+name = "petswap-web"
+compatibility_date = "2026-08-22"
+workers_dev = true
+preview_urls = true
+
+[assets]
+directory = "./dist"
+not_found_handling = "single-page-application"
+

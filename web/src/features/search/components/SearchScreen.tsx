@@ -1,111 +1,9 @@
-<<<<<<< HEAD
-import { useSearchParams } from 'react-router-dom';
-import { usePublishedListings } from '@/features/listings';
-import {
-  changeQuery, changeSort, DEFAULT_CRITERIA, getResultsPage, parsePage, parseSort, resetCriteria,
-  type SearchCriteria, type SortOption,
-} from '../lib/searchResults';
-
-const SORT_LABELS: Record<SortOption, string> = {
-  newest: 'Newest',
-  oldest: 'Oldest',
-  title: 'Title (A–Z)',
-  capacity: 'Capacity (high to low)',
-};
-
-function toParams(criteria: SearchCriteria): Record<string, string> {
-  const params: Record<string, string> = {};
-  if (criteria.query) params.q = criteria.query;
-  if (criteria.sort !== DEFAULT_CRITERIA.sort) params.sort = criteria.sort;
-  if (criteria.page > 1) params.page = String(criteria.page);
-  return params;
-}
-
-export function SearchScreen() {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const { data, isLoading, error } = usePublishedListings();
-
-  const criteria: SearchCriteria = {
-    query: searchParams.get('q') ?? '',
-    sort: parseSort(searchParams.get('sort')),
-    page: parsePage(searchParams.get('page')),
-  };
-  const update = (next: SearchCriteria) => setSearchParams(toParams(next));
-
-  const results = getResultsPage(data ?? [], criteria);
-  const isDefault = !criteria.query && criteria.sort === DEFAULT_CRITERIA.sort && criteria.page === 1;
-
-  return (
-    <main className="placeholder-screen">
-      <p className="eyebrow">Don't Like My Pets</p>
-      <h1>Find pet care</h1>
-
-      <form role="search" onSubmit={(event) => event.preventDefault()}>
-        <label>
-          Location or keyword
-          <input
-            type="search"
-            value={criteria.query}
-            onChange={(event) => update(changeQuery(criteria, event.target.value))}
-          />
-        </label>
-        <label>
-          Sort by
-          <select
-            value={criteria.sort}
-            onChange={(event) => update(changeSort(criteria, parseSort(event.target.value)))}
-          >
-            {Object.entries(SORT_LABELS).map(([value, label]) => (
-              <option key={value} value={value}>{label}</option>
-            ))}
-          </select>
-        </label>
-        <button type="button" disabled={isDefault} onClick={() => update(resetCriteria())}>
-          Reset
-        </button>
-      </form>
-
-      {isLoading && <p>Loading listings…</p>}
-      {error && <p role="alert">Could not load listings. Please try again.</p>}
-      {!isLoading && !error && results.totalItems === 0 && (
-        <p>No listings match your search. Reset to see all published listings.</p>
-      )}
-
-      <ul>
-        {results.items.map((listing) => (
-          <li key={listing.id}>
-            <h2>{listing.title}</h2>
-            <p>{listing.location} · up to {listing.capacity} pets</p>
-          </li>
-        ))}
-      </ul>
-
-      {results.totalItems > 0 && (
-        <nav aria-label="Pagination">
-          <button
-            type="button"
-            disabled={results.page <= 1}
-            onClick={() => update({ ...criteria, page: results.page - 1 })}
-          >
-            Previous
-          </button>
-          <span> Page {results.page} of {results.totalPages} </span>
-          <button
-            type="button"
-            disabled={results.page >= results.totalPages}
-            onClick={() => update({ ...criteria, page: results.page + 1 })}
-          >
-            Next
-          </button>
-        </nav>
-      )}
-=======
 import { useEffect, useTransition } from 'react';
 import { Home, RefreshCw } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { usePublishedListingPage } from '@/features/listings';
-import { EMPTY_SEARCH_CRITERIA, filterPublishedListings, isSameSearch, readSearchCriteria, readSearchPage, toSearchParams } from '../lib/searchCriteria';
-import type { SearchCriteria } from '../lib/searchCriteria';
+import { DEFAULT_SEARCH_SORT, EMPTY_SEARCH_CRITERIA, SEARCH_SORT_OPTIONS, filterPublishedListings, isSameSearch, readSearchCriteria, readSearchPage, readSearchSort, toSearchParams } from '../lib/searchCriteria';
+import type { SearchCriteria, SearchSort } from '../lib/searchCriteria';
 import { SearchForm } from './SearchForm';
 import { SearchResultCard } from './SearchResultCard';
 
@@ -114,6 +12,7 @@ export function SearchScreen() {
   const criteria = readSearchCriteria(searchParams);
   const page = readSearchPage(searchParams);
   const pageParam = searchParams.get('page');
+  const sortParam = searchParams.get('sort');
   const [isSearchPending, startSearchTransition] = useTransition();
   const {
     data: listingPage,
@@ -140,17 +39,30 @@ export function SearchScreen() {
   useEffect(() => {
     if (!listingPage) return;
     const resolvedPage = listingPage.page;
+    // An unknown or default `sort` value is dropped so the address matches what is shown.
+    const hasUnusedSortParam = sortParam !== null
+      && (sortParam !== criteria.sort || criteria.sort === DEFAULT_SEARCH_SORT);
     const shouldNormalizeUrl = resolvedPage !== page
-      || (pageParam !== null && (page === 1 || pageParam !== String(page)));
+      || (pageParam !== null && (page === 1 || pageParam !== String(page)))
+      || hasUnusedSortParam;
     if (!shouldNormalizeUrl) return;
     setSearchParams(toSearchParams({
       location: criteria.location,
       keyword: criteria.keyword,
+      sort: criteria.sort,
     }, resolvedPage), { replace: true });
-  }, [criteria.keyword, criteria.location, listingPage, page, pageParam, setSearchParams]);
+  }, [criteria.keyword, criteria.location, criteria.sort, listingPage, page, pageParam, setSearchParams, sortParam]);
 
   const goToPage = (nextPage: number) => {
     setSearchParams(toSearchParams(criteria, nextPage));
+  };
+
+  const changeSort = (sort: SearchSort) => {
+    if (sort === criteria.sort) return;
+    // A new order starts again from page 1; the location and keyword stay applied.
+    startSearchTransition(() => {
+      setSearchParams(toSearchParams({ ...criteria, sort }));
+    });
   };
 
   return (
@@ -196,7 +108,20 @@ export function SearchScreen() {
               )}
               {listings.length > 0 ? (
                 <>
-                  <ul className="mt-8 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+                  <div className="mt-8 flex items-center justify-end gap-2">
+                    <label className="text-sm text-gray-700" htmlFor="search-sort">Sort by</label>
+                    <select
+                      id="search-sort"
+                      className="input-field w-auto min-h-11"
+                      value={criteria.sort}
+                      onChange={(event) => changeSort(readSearchSort(new URLSearchParams({ sort: event.target.value })))}
+                    >
+                      {SEARCH_SORT_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <ul className="mt-4 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
                     {listings.map((listing) => (
                       <li key={listing.id}>
                         <SearchResultCard listing={listing} />
@@ -249,7 +174,6 @@ export function SearchScreen() {
           )}
         </section>
       </div>
->>>>>>> origin/main
     </main>
   );
 }

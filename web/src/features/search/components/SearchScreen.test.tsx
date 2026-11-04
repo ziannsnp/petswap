@@ -443,3 +443,140 @@ describe('SearchScreen pagination fixtures', () => {
     expect(shownIds()).toHaveLength(SEARCH_RESULTS_PAGE_SIZE);
   });
 });
+
+describe('SearchScreen sort and reset', () => {
+  function servePages(totalCount = 20) {
+    mockedUsePublishedListingPage.mockImplementation(({ page }) => ({
+      data: makePage([makeSearchResult({ id: `result-${page}`, title: 'Garden home', location: 'Bangkok' })], totalCount, page),
+      isPending: false,
+      isError: false,
+      isFetching: false,
+      refetch: mockRefetch,
+    } as unknown as ReturnType<typeof usePublishedListingPage>));
+  }
+
+  const lastQuery = () => mockedUsePublishedListingPage.mock.calls.at(-1)?.[0];
+
+  it('requests newest first by default and lists every sort option', () => {
+    servePages();
+
+    renderSearchAt('/');
+
+    expect(lastQuery()).toMatchObject({ sort: 'newest', page: 1 });
+    expect(screen.getByLabelText('Sort by')).toHaveValue('newest');
+    expect(within(screen.getByLabelText('Sort by')).getAllByRole('option').map((option) => option.textContent))
+      .toEqual(['Newest', 'Oldest', 'Title (A–Z)', 'Capacity (high to low)']);
+  });
+
+  it('applies the chosen sort to the search and returns to the first page', async () => {
+    const user = userEvent.setup();
+    servePages();
+
+    renderSearchAt('/?location=Bangkok&keyword=garden&page=2');
+    await user.selectOptions(screen.getByLabelText('Sort by'), 'title');
+
+    expect(urlSearch()).toBe('?location=Bangkok&keyword=garden&sort=title');
+    expect(lastQuery()).toEqual({ location: 'Bangkok', keyword: 'garden', sort: 'title', page: 1 });
+    expect(screen.getByLabelText('Sort by')).toHaveValue('title');
+  });
+
+  it('keeps the sort and the search while moving between pages', async () => {
+    const user = userEvent.setup();
+    servePages();
+
+    renderSearchAt('/?keyword=garden&sort=capacity');
+    await user.click(screen.getByRole('button', { name: 'Next' }));
+
+    expect(urlSearch()).toBe('?keyword=garden&sort=capacity&page=2');
+    expect(lastQuery()).toEqual({ location: '', keyword: 'garden', sort: 'capacity', page: 2 });
+  });
+
+  it('keeps the sort when a new search is submitted from a later page', async () => {
+    const user = userEvent.setup();
+    servePages();
+
+    renderSearchAt('/?sort=oldest&page=2');
+    await user.type(screen.getByLabelText('Keyword'), 'garden{Enter}');
+
+    expect(urlSearch()).toBe('?keyword=garden&sort=oldest');
+  });
+
+  it('keeps the sort when the last page replaces a page beyond the range', async () => {
+    mockedUsePublishedListingPage.mockImplementation(({ page }) => ({
+      data: makePage([makeSearchResult({ id: 'last-page' })], 10, page > 2 ? 2 : page),
+      isPending: false,
+      isError: false,
+      isFetching: false,
+      refetch: mockRefetch,
+    } as unknown as ReturnType<typeof usePublishedListingPage>));
+
+    renderSearchAt('/?keyword=garden&sort=title&page=99');
+
+    await waitFor(() => expect(urlSearch()).toBe('?keyword=garden&sort=title&page=2'));
+  });
+
+  it('falls back to newest and tidies the URL for an unknown or default sort', async () => {
+    servePages(5);
+
+    renderSearchAt('/?sort=price');
+    await waitFor(() => expect(urlSearch()).toBe(''));
+    expect(screen.getByLabelText('Sort by')).toHaveValue('newest');
+  });
+
+  it('resets the sort, the search, and the page together with Clear', async () => {
+    const user = userEvent.setup();
+    servePages();
+
+    renderSearchAt('/?location=Bangkok&keyword=garden&sort=title&page=2');
+    await user.click(screen.getByRole('button', { name: 'Clear' }));
+
+    expect(urlSearch()).toBe('');
+    expect(lastQuery()).toEqual({ location: '', keyword: '', sort: 'newest', page: 1 });
+    expect(screen.getByLabelText('Sort by')).toHaveValue('newest');
+    expect(screen.queryByRole('button', { name: 'Clear' })).not.toBeInTheDocument();
+  });
+
+  it('offers Clear when only the sort differs from the default', async () => {
+    const user = userEvent.setup();
+    servePages();
+
+    renderSearchAt('/');
+    expect(screen.queryByRole('button', { name: 'Clear' })).not.toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText('Sort by'), 'oldest');
+    await user.click(screen.getByRole('button', { name: 'Clear' }));
+
+    expect(urlSearch()).toBe('');
+    expect(screen.getByLabelText('Sort by')).toHaveValue('newest');
+  });
+
+  it('resets the sort from the no-results state and shows the default listings again', async () => {
+    const user = userEvent.setup();
+    mockedUsePublishedListingPage.mockImplementation(({ keyword }) => ({
+      data: keyword ? makePage([], 0) : makePage([makeSearchResult({ id: 'default-listing', title: 'Default listing' })]),
+      isPending: false,
+      isError: false,
+      isFetching: false,
+      refetch: mockRefetch,
+    } as unknown as ReturnType<typeof usePublishedListingPage>));
+
+    renderSearchAt('/?keyword=nothing&sort=title');
+    await user.click(screen.getByRole('button', { name: 'Clear search' }));
+
+    expect(urlSearch()).toBe('');
+    expect(screen.getByRole('link', { name: 'Default listing' })).toBeInTheDocument();
+    expect(lastQuery()).toMatchObject({ sort: 'newest' });
+  });
+
+  it('steps back to the previous order with the browser back button', async () => {
+    const user = userEvent.setup();
+    servePages();
+
+    renderSearchAt('/?keyword=garden');
+    await user.selectOptions(screen.getByLabelText('Sort by'), 'title');
+    await user.click(screen.getByRole('button', { name: 'Browser back' }));
+
+    expect(urlSearch()).toBe('?keyword=garden');
+    expect(screen.getByLabelText('Sort by')).toHaveValue('newest');
+  });
+});

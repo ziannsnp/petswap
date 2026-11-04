@@ -14,6 +14,7 @@ export type {
   ListingPhotoInput,
   PublishedListingPage,
   PublishedListingQuery,
+  PublishedListingSort,
   UpdateListingValues,
 } from './lib/listingApi';
 export { PUBLISHED_LISTINGS_PAGE_SIZE } from './lib/listingApi';

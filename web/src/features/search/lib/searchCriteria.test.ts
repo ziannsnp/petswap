@@ -1,5 +1,5 @@
 import { PUBLISHED_LISTINGS_PAGE_SIZE } from '@/features/listings';
-import { EMPTY_SEARCH_CRITERIA, filterPublishedListings, isSameSearch, readSearchCriteria, readSearchPage, toSearchParams } from './searchCriteria';
+import { DEFAULT_SEARCH_SORT, EMPTY_SEARCH_CRITERIA, filterPublishedListings, isSameSearch, readSearchCriteria, readSearchPage, readSearchSort, toSearchParams } from './searchCriteria';
 import {
   SEARCH_RESULTS_PAGE_SIZE,
   hiddenSearchListings,
@@ -18,13 +18,13 @@ jest.mock('@/shared/lib/supabase', () => ({ getSupabaseClient: jest.fn() }));
 describe('search criteria in the URL', () => {
   it('reads a trimmed location and keyword, treating a missing one as empty', () => {
     expect(readSearchCriteria(new URLSearchParams('location=%20Chiang%20Mai%20&keyword=garden')))
-      .toEqual({ location: 'Chiang Mai', keyword: 'garden' });
-    expect(readSearchCriteria(new URLSearchParams(''))).toEqual({ location: '', keyword: '' });
+      .toEqual({ location: 'Chiang Mai', keyword: 'garden', sort: 'newest' });
+    expect(readSearchCriteria(new URLSearchParams(''))).toEqual({ location: '', keyword: '', sort: 'newest' });
   });
 
   it('leaves blank fields out, so an empty search is the plain browse-all URL', () => {
-    expect(toSearchParams({ location: '   ', keyword: '' }).toString()).toBe('');
-    expect(toSearchParams({ location: ' Bangkok ', keyword: '' }).toString()).toBe('location=Bangkok');
+    expect(toSearchParams({ location: '   ', keyword: '', sort: 'newest' }).toString()).toBe('');
+    expect(toSearchParams({ location: ' Bangkok ', keyword: '', sort: 'newest' }).toString()).toBe('location=Bangkok');
   });
 
   it('reads only positive safe-integer page values and defaults invalid values to the first page', () => {
@@ -38,14 +38,15 @@ describe('search criteria in the URL', () => {
   });
 
   it('stores later pages beside the applied search while omitting the first page', () => {
-    const criteria = { location: 'Bangkok', keyword: 'garden' };
-    expect(toSearchParams(criteria).toString()).toBe('location=Bangkok&keyword=garden');
-    expect(toSearchParams(criteria, 2).toString()).toBe('location=Bangkok&keyword=garden&page=2');
+    const criteria = { location: 'Bangkok', keyword: 'garden', sort: 'newest' as const };
+    expect(toSearchParams(criteria).toString()).    toBe('location=Bangkok&keyword=garden');    expect(toSearchParams(criteria, 2).toString()).toBe('location=Bangkok&keyword=garden&page=2');
   });
 
   it('treats searches that differ only in surrounding spaces as the same search', () => {
-    expect(isSameSearch({ location: 'Bangkok ', keyword: '' }, { location: 'Bangkok', keyword: '' })).toBe(true);
-    expect(isSameSearch({ location: 'Bangkok', keyword: 'cat' }, { location: 'Bangkok', keyword: '' })).toBe(false);
+    const spaced = { ...EMPTY_SEARCH_CRITERIA, location: 'Bangkok ' };
+    const trimmed = { ...EMPTY_SEARCH_CRITERIA, location: 'Bangkok' };
+    expect(isSameSearch(spaced, trimmed)).toBe(true);
+    expect(isSameSearch({ ...trimmed, keyword: 'cat' }, trimmed)).toBe(false);
   });
 
   it('matches trimmed location and keyword text without case sensitivity', () => {
@@ -107,6 +108,26 @@ describe('search fixtures', () => {
 
   it('browses every published listing and none of the hidden ones', () => {
     expect(ids(filterPublishedListings(listings, EMPTY_SEARCH_CRITERIA))).toEqual(ids(searchMatchListings));
+  });
+});
+
+describe('sort in the URL', () => {
+  it.each(['oldest', 'title', 'capacity'] as const)('reads and writes the %s sort beside the search and page', (sort) => {
+    const criteria = { location: 'Bangkok', keyword: 'garden', sort };
+
+    expect(readSearchCriteria(new URLSearchParams(`location=Bangkok&keyword=garden&sort=${sort}`))).toEqual(criteria);
+    expect(toSearchParams(criteria, 2).toString()).toBe(`location=Bangkok&keyword=garden&sort=${sort}&page=2`);
+  });
+
+  it('defaults a missing or unknown sort to newest and leaves it out of the URL', () => {
+    expect(readSearchSort(new URLSearchParams())).toBe(DEFAULT_SEARCH_SORT);
+    expect(readSearchSort(new URLSearchParams('sort=price'))).toBe(DEFAULT_SEARCH_SORT);
+    expect(toSearchParams({ ...EMPTY_SEARCH_CRITERIA, sort: 'newest' }).toString()).toBe('');
+  });
+
+  it('treats a different sort as a different search, and the empty search as the default sort', () => {
+    expect(isSameSearch(EMPTY_SEARCH_CRITERIA, { ...EMPTY_SEARCH_CRITERIA, sort: 'title' })).toBe(false);
+    expect(EMPTY_SEARCH_CRITERIA.sort).toBe(DEFAULT_SEARCH_SORT);
   });
 });
 

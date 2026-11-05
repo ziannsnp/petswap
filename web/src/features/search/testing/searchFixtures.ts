@@ -1,5 +1,5 @@
 import type { Listing, PublishedListingPage } from '@/features/listings';
-import type { SearchCriteria } from '../lib/searchCriteria';
+import type { SearchTerms } from '../lib/searchCriteria';
 
 /**
  * The page size the app requests (`PUBLISHED_LISTINGS_PAGE_SIZE`). It is copied rather than
@@ -58,7 +58,7 @@ export const searchMatchListings = [
 
 export interface SearchMatchCase {
   name: string;
-  criteria: SearchCriteria;
+  criteria: SearchTerms;
   expectedIds: string[];
 }
 
@@ -124,7 +124,7 @@ export const noPhotoSearchResult = makeSearchResult({
  * Searches that `searchMatchListings` cannot satisfy. The last two match only a hidden
  * listing, or each field on a different listing, so they must still come back empty.
  */
-export const noResultSearches: readonly { name: string; criteria: SearchCriteria }[] = [
+export const noResultSearches: readonly { name: string; criteria: SearchTerms }[] = [
   { name: 'a location with no listings', criteria: { location: 'Krabi', keyword: '' } },
   { name: 'a keyword no listing uses', criteria: { location: '', keyword: 'hamster' } },
   { name: 'text only a hidden listing has', criteria: { location: '', keyword: 'suite' } },

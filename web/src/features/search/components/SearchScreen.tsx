@@ -2,8 +2,8 @@ import { useEffect, useTransition } from 'react';
 import { Home, RefreshCw } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { usePublishedListingPage } from '@/features/listings';
-import { EMPTY_SEARCH_CRITERIA, filterPublishedListings, isSameSearch, readSearchCriteria, readSearchPage, toSearchParams } from '../lib/searchCriteria';
-import type { SearchCriteria } from '../lib/searchCriteria';
+import { DEFAULT_SEARCH_SORT, EMPTY_SEARCH_CRITERIA, SEARCH_SORT_OPTIONS, filterPublishedListings, isSameSearch, readSearchCriteria, readSearchPage, readSearchSort, toSearchParams } from '../lib/searchCriteria';
+import type { SearchCriteria, SearchSort } from '../lib/searchCriteria';
 import { SearchForm } from './SearchForm';
 import { SearchResultCard } from './SearchResultCard';
 
@@ -12,6 +12,7 @@ export function SearchScreen() {
   const criteria = readSearchCriteria(searchParams);
   const page = readSearchPage(searchParams);
   const pageParam = searchParams.get('page');
+  const sortParam = searchParams.get('sort');
   const [isSearchPending, startSearchTransition] = useTransition();
   const {
     data: listingPage,
@@ -38,17 +39,30 @@ export function SearchScreen() {
   useEffect(() => {
     if (!listingPage) return;
     const resolvedPage = listingPage.page;
+    // An unknown or default `sort` value is dropped so the address matches what is shown.
+    const hasUnusedSortParam = sortParam !== null
+      && (sortParam !== criteria.sort || criteria.sort === DEFAULT_SEARCH_SORT);
     const shouldNormalizeUrl = resolvedPage !== page
-      || (pageParam !== null && (page === 1 || pageParam !== String(page)));
+      || (pageParam !== null && (page === 1 || pageParam !== String(page)))
+      || hasUnusedSortParam;
     if (!shouldNormalizeUrl) return;
     setSearchParams(toSearchParams({
       location: criteria.location,
       keyword: criteria.keyword,
+      sort: criteria.sort,
     }, resolvedPage), { replace: true });
-  }, [criteria.keyword, criteria.location, listingPage, page, pageParam, setSearchParams]);
+  }, [criteria.keyword, criteria.location, criteria.sort, listingPage, page, pageParam, setSearchParams, sortParam]);
 
   const goToPage = (nextPage: number) => {
     setSearchParams(toSearchParams(criteria, nextPage));
+  };
+
+  const changeSort = (sort: SearchSort) => {
+    if (sort === criteria.sort) return;
+    // A new order starts again from page 1; the location and keyword stay applied.
+    startSearchTransition(() => {
+      setSearchParams(toSearchParams({ ...criteria, sort }));
+    });
   };
 
   return (
@@ -64,6 +78,23 @@ export function SearchScreen() {
       <div className="page-container">
         <section aria-labelledby="search-results-heading" aria-busy={isPending || isActiveSearchLoading}>
           <h2 className="sr-only" id="search-results-heading">Listings</h2>
+          {/* Same position in every state so the select stays mounted (and focused) while a sort loads. */}
+          {!isError && (isPending || listings.length > 0) && (
+            <div className="mt-8 flex items-center justify-end gap-2">
+              <label className="text-sm text-gray-700" htmlFor="search-sort">Sort by</label>
+              <select
+                id="search-sort"
+                className="input-field w-auto min-h-11"
+                value={criteria.sort}
+                onChange={(event) => changeSort(readSearchSort(new URLSearchParams({ sort: event.target.value })))}
+              >
+                {SEARCH_SORT_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
           {isPending && (
             <div className="mt-8" role="status" aria-label="Loading listings">
               <span className="sr-only">Loading listings</span>
@@ -94,7 +125,7 @@ export function SearchScreen() {
               )}
               {listings.length > 0 ? (
                 <>
-                  <ul className="mt-8 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+                  <ul className="mt-4 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
                     {listings.map((listing) => (
                       <li key={listing.id}>
                         <SearchResultCard listing={listing} />

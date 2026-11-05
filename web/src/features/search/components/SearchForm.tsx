@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import type { FormEvent, KeyboardEvent } from 'react';
 import { MapPin, Search, X } from 'lucide-react';
-import { EMPTY_SEARCH_CRITERIA } from '../lib/searchCriteria';
+import { DEFAULT_SEARCH_SORT, EMPTY_SEARCH_CRITERIA } from '../lib/searchCriteria';
 import type { SearchCriteria } from '../lib/searchCriteria';
 
 interface SearchFormProps {
@@ -25,11 +25,14 @@ export function SearchForm({ criteria, onSearch }: SearchFormProps) {
     setKeyword(criteria.keyword);
   }
 
-  const canClear = Boolean(location || keyword || criteria.location || criteria.keyword);
+  // The sort is applied from the results toolbar, so a clear must reset it too.
+  const canClear = Boolean(
+    location || keyword || criteria.location || criteria.keyword || criteria.sort !== DEFAULT_SEARCH_SORT,
+  );
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const next = { location: location.trim(), keyword: keyword.trim() };
+    const next = { location: location.trim(), keyword: keyword.trim(), sort: criteria.sort };
     setLocation(next.location);
     setKeyword(next.keyword);
     onSearch(next);

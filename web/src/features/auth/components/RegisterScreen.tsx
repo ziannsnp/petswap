@@ -127,7 +127,6 @@ export function RegisterScreen() {
   const [confirmationVisible, setConfirmationVisible] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [validationSummary, setValidationSummary] = useState<string | null>(null);
-  const [confirmationSent, setConfirmationSent] = useState(false);
 
   // Editing a field retracts the complaint about it; leaving it visible while the
   // user is fixing it reads as though the fix did not register. The mutation has to
@@ -466,26 +465,13 @@ export function RegisterScreen() {
             </p>
           )}
 
-          {confirmationSent ? (
-            <>
-              <p role="status" className="form-status">
-                Account created. Check your email to confirm your account before signing in.
-              </p>
-              {/* Submitting again would only fail, so the finished form offers the next step
-                  instead of a disabled button and no way forward. */}
-              <Link to="/login" className="btn-primary block w-full text-center">
-                Go to sign in
-              </Link>
-            </>
-          ) : (
-            <button
-              type="submit"
-              className="w-full btn-primary disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={signUpMutation.isPending}
-            >
-              {signUpMutation.isPending ? 'Creating account...' : 'Create account'}
-            </button>
-          )}
+          <button
+            type="submit"
+            className="w-full btn-primary disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={signUpMutation.isPending}
+          >
+            {signUpMutation.isPending ? 'Creating account...' : 'Create account'}
+          </button>
         </form>
 
         <p className="mt-6 text-center text-sm text-gray-600">

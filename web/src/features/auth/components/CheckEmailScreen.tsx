@@ -18,7 +18,6 @@ export function CheckEmailScreen() {
   const initialEmail = state?.email ? normalizeEmail(state.email) : '';
 
   const [email, setEmail] = useState(initialEmail);
-  const [isEditingEmail, setIsEditingEmail] = useState(!initialEmail);
   const [cooldown, setCooldown] = useState(0);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
@@ -51,8 +50,13 @@ export function CheckEmailScreen() {
       await resendMutation.mutateAsync(normalizedEmail);
       setSuccessMessage('Confirmation email resent! Please check your inbox or spam folder.');
       setCooldown(RESEND_COOLDOWN_SECONDS);
-      setIsEditingEmail(false);
-    } catch {
+    } catch (error) {
+      if (
+        (error instanceof ResendConfirmationError && error.code === 'RATE_LIMITED') ||
+        (error as { code?: string })?.code === 'RATE_LIMITED'
+      ) {
+        setCooldown(RESEND_COOLDOWN_SECONDS);
+      }
       // resendMutation.error surfaces below
     }
   }
@@ -78,7 +82,7 @@ export function CheckEmailScreen() {
 
         <h2 className="text-xl font-bold text-gray-900">Check your email</h2>
 
-        {initialEmail && !isEditingEmail ? (
+        {initialEmail ? (
           <div className="mt-3 text-sm text-gray-600">
             <p>
               We sent a confirmation link to{' '}
@@ -87,17 +91,12 @@ export function CheckEmailScreen() {
             <p className="mt-1">
               Click the link in the email to activate your account before signing in.
             </p>
-            <button
-              type="button"
-              onClick={() => {
-                setIsEditingEmail(true);
-                setSuccessMessage(null);
-                if (resendMutation.isError) resendMutation.reset();
-              }}
-              className="mt-2 text-xs font-medium text-brand-600 hover:underline"
-            >
-              Wrong email address?
-            </button>
+            <p className="mt-3 text-xs text-gray-500">
+              Typed the wrong email?{' '}
+              <Link to="/register" className="font-medium text-brand-600 hover:underline">
+                Register again
+              </Link>
+            </p>
           </div>
         ) : (
           <div className="mt-3 text-sm text-gray-600">

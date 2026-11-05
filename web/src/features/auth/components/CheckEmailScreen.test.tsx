@@ -127,16 +127,15 @@ describe('CheckEmailScreen', () => {
     expect(button).toHaveTextContent('Resend confirmation email');
   });
 
-  it('renders an error alert when resend fails', async () => {
+  it('renders an error alert and starts cooldown timer when rate limited', async () => {
     const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
-    const mutateAsync = jest
-      .fn()
-      .mockRejectedValue(new ResendConfirmationError('RATE_LIMITED'));
+    const error = new ResendConfirmationError('RATE_LIMITED');
+    const mutateAsync = jest.fn().mockRejectedValue(error);
     mockedUseResendConfirmation.mockReturnValue(
       mutationResult({
         mutateAsync,
         isError: true,
-        error: new ResendConfirmationError('RATE_LIMITED'),
+        error,
       }),
     );
     renderScreen('/check-email', { email: 'pet@example.com' });
@@ -147,24 +146,41 @@ describe('CheckEmailScreen', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Too many attempts. Please try again later.',
     );
+    expect(button).toBeDisabled();
+    expect(button).toHaveTextContent(`Resend email in ${RESEND_COOLDOWN_SECONDS}s`);
   });
 
-  it('allows switching to edit email mode when "Wrong email address?" is clicked', async () => {
+  it('renders an error alert and does not start cooldown when a non-rate-limit error occurs', async () => {
     const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
-    mockedUseResendConfirmation.mockReturnValue(mutationResult());
-    renderScreen('/check-email', { email: 'initial@example.com' });
-
-    await user.click(screen.getByRole('button', { name: /wrong email address\?/i }));
-
-    const input = screen.getByLabelText(/email address/i);
-    expect(input).toBeInTheDocument();
-    expect(input).toHaveValue('initial@example.com');
-
-    await user.clear(input);
-    await user.type(input, 'updated@example.com');
+    const error = new ResendConfirmationError('NETWORK');
+    const mutateAsync = jest.fn().mockRejectedValue(error);
+    mockedUseResendConfirmation.mockReturnValue(
+      mutationResult({
+        mutateAsync,
+        isError: true,
+        error,
+      }),
+    );
+    renderScreen('/check-email', { email: 'pet@example.com' });
 
     const button = screen.getByRole('button', { name: /resend confirmation email/i });
+    await user.click(button);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'We could not resend the confirmation email. Please try again.',
+    );
     expect(button).toBeEnabled();
+    expect(button).toHaveTextContent('Resend confirmation email');
+  });
+
+  it('renders a register link when email is provided in route state', () => {
+    mockedUseResendConfirmation.mockReturnValue(mutationResult());
+    renderScreen('/check-email', { email: 'pet@example.com' });
+
+    const registerLink = screen.getByRole('link', { name: /register again/i });
+    expect(registerLink).toBeInTheDocument();
+    expect(registerLink).toHaveAttribute('href', '/register');
+    expect(screen.getByText(/typed the wrong email\?/i)).toBeInTheDocument();
   });
 
   it('disables the button while resend request is pending', () => {
@@ -175,4 +191,3 @@ describe('CheckEmailScreen', () => {
     expect(button).toBeDisabled();
   });
 });
-

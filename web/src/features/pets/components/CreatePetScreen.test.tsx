@@ -127,6 +127,42 @@ describe('CreatePetScreen', () => {
     expect(await screen.findByText('Pets page after save')).toBeInTheDocument();
   });
 
+  it('saves care information with the new pet, and a cleared note as null (FR-2.2)', async () => {
+    const user = userEvent.setup();
+    renderScreen();
+
+    await fillRequiredFields(user);
+    await user.click(screen.getByRole('button', { name: /care information/i }));
+    await user.type(screen.getByLabelText(/feeding instructions/i), '  1 cup twice a day  ');
+    await user.type(screen.getByLabelText(/allergies/i), 'x');
+    await user.clear(screen.getByLabelText(/allergies/i));
+    await user.click(screen.getByRole('button', { name: /save pet/i }));
+
+    expect(mockMutateAsync).toHaveBeenCalledWith(expect.objectContaining({
+      name: 'Mali',
+      feeding_instruction: '1 cup twice a day',
+      allergies: null,
+    }));
+    expect(await screen.findByText('Pets page after save')).toBeInTheDocument();
+  });
+
+  it('blocks a care note over the length limit and keeps what the owner typed', async () => {
+    const user = userEvent.setup();
+    renderScreen();
+
+    await fillRequiredFields(user);
+    await user.click(screen.getByRole('button', { name: /care information/i }));
+    const medical = screen.getByLabelText(/medical notes/i);
+    // paste, not type: typing 1,001 characters one by one is slow.
+    await user.click(medical);
+    await user.paste('a'.repeat(1_001));
+    await user.click(screen.getByRole('button', { name: /save pet/i }));
+
+    expect(mockMutateAsync).not.toHaveBeenCalled();
+    expect(medical).toHaveAccessibleDescription('Medical notes must be 1000 characters or fewer.');
+    expect(screen.getByLabelText(/name/i)).toHaveValue('Mali');
+  });
+
   it('previews a cropped photo and saves the crop with the pet', async () => {
     const user = userEvent.setup();
     renderScreen();

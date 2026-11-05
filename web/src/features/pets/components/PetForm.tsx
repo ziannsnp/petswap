@@ -2,7 +2,14 @@ import { useEffect, useRef, useState } from 'react';
 import type { ChangeEvent, FormEvent } from 'react';
 import { ChevronDown, LoaderCircle } from 'lucide-react';
 import { PET_SPECIES_OPTIONS, type PetSpecies } from '@/shared/lib/petSpecies';
-import { EMPTY_PET_FORM_VALUES, parsePetForm, type PetFormErrors, type PetFormValues } from '../lib/petForm';
+import {
+  EMPTY_PET_FORM_VALUES,
+  hasPetCareInfo,
+  parsePetForm,
+  PET_CARE_FIELDS,
+  type PetFormErrors,
+  type PetFormValues,
+} from '../lib/petForm';
 import type { UpdatePetValues } from '../lib/petApi';
 import { PET_PHOTO_MAX_BYTES, PET_PHOTO_MIME_TYPES, validatePetPhoto } from '../lib/petPhoto';
 import type { PhotoCrop } from '@/shared/lib/photoCrop';
@@ -42,15 +49,6 @@ function RequiredMark() {
 const PHOTO_ACCEPT = PET_PHOTO_MIME_TYPES.join(',');
 const PHOTO_MAX_MB = PET_PHOTO_MAX_BYTES / 1_048_576;
 
-export const CARE_FIELDS = [
-  'feeding_instruction',
-  'medical_note',
-  'behavior_note',
-  'allergies',
-  'vaccination_info',
-  'special_requirement',
-] as const;
-
 /** An original photo and the crop last applied to it, kept so the owner can adjust the crop. */
 interface PhotoSource {
   file: File;
@@ -84,7 +82,7 @@ export function PetForm({
   // Errors stay hidden until the first submit so an untouched form is not all red.
   const errors: PetFormErrors = hasSubmitted && !parsed.ok ? parsed.errors : {};
 
-  const hasInitialCareInfo = CARE_FIELDS.some((field) => Boolean(initialValues[field]));
+  const hasInitialCareInfo = hasPetCareInfo(initialValues);
   const [isCareOpen, setIsCareOpen] = useState(hasInitialCareInfo);
 
   // Revokes the previous blob URL whenever it is replaced, and on unmount.
@@ -141,7 +139,7 @@ export function PetForm({
     event.preventDefault();
     setHasSubmitted(true);
     if (!parsed.ok) {
-      if (CARE_FIELDS.some((field) => parsed.errors[field])) {
+      if (PET_CARE_FIELDS.some(({ field }) => parsed.errors[field])) {
         setIsCareOpen(true);
       }
       return;

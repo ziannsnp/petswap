@@ -1,4 +1,4 @@
-import { PET_MAX_AGE_YEARS, parsePetForm, petToFormValues, type PetFormValues } from './petForm';
+import { hasPetCareInfo, PET_CARE_FIELDS, PET_CARE_MAX_LENGTH, PET_MAX_AGE_YEARS, parsePetForm, petToFormValues, type PetFormValues } from './petForm';
 
 const validValues: PetFormValues = {
   name: 'Mali',
@@ -125,5 +125,85 @@ describe('petToFormValues', () => {
       ok: true,
       values: { name: 'Rocket', species: 'dog', breed: 'Beagle mix', ageYear: 4, description: 'Friendly with other dogs.' },
     });
+  });
+});
+
+describe('parsePetForm care information (FR-2.2)', () => {
+  it('leaves care fields out when the form never held them, so an update keeps stored values', () => {
+    const result = parsePetForm(validValues);
+    for (const { field } of PET_CARE_FIELDS) {
+      expect(result.ok && result.values).not.toHaveProperty(field);
+    }
+  });
+
+  it.each(PET_CARE_FIELDS.map(({ field }) => field))('turns a blank %s into null', (field) => {
+    expect(parsePetForm({ ...validValues, [field]: '   ' })).toEqual({
+      ok: true,
+      values: expect.objectContaining({ [field]: null }),
+    });
+  });
+
+  it('trims care notes and keeps their line breaks', () => {
+    expect(parsePetForm({ ...validValues, feeding_instruction: '  1 cup at 8am\n1 cup at 6pm  ' })).toEqual({
+      ok: true,
+      values: expect.objectContaining({ feeding_instruction: '1 cup at 8am\n1 cup at 6pm' }),
+    });
+  });
+
+  it.each(PET_CARE_FIELDS)('accepts $field at the length limit and rejects it above', ({ field, label }) => {
+    // Surrounding spaces do not count toward the limit.
+    const atLimit = ` ${'a'.repeat(PET_CARE_MAX_LENGTH)} `;
+    expect(parsePetForm({ ...validValues, [field]: atLimit })).toEqual({
+      ok: true,
+      values: expect.objectContaining({ [field]: 'a'.repeat(PET_CARE_MAX_LENGTH) }),
+    });
+    expect(parsePetForm({ ...validValues, [field]: 'a'.repeat(PET_CARE_MAX_LENGTH + 1) })).toEqual({
+      ok: false,
+      errors: { [field]: `${label} must be ${PET_CARE_MAX_LENGTH} characters or fewer.` },
+    });
+  });
+
+  it('reports a too-long care note together with a missing required field', () => {
+    const result = parsePetForm({ ...validValues, name: '', allergies: 'a'.repeat(PET_CARE_MAX_LENGTH + 1) });
+    expect(!result.ok && Object.keys(result.errors).sort()).toEqual(['allergies', 'name']);
+  });
+});
+
+describe('petToFormValues care information', () => {
+  const savedPet = {
+    name: 'Rocket',
+    species: 'dog' as const,
+    breed: null,
+    age_year: null,
+    description: 'Friendly.',
+    feeding_instruction: 'Twice a day',
+    medical_note: null,
+    behavior_note: null,
+    allergies: 'Chicken',
+    vaccination_info: null,
+    special_requirement: null,
+  };
+
+  it('round-trips stored care notes through parsePetForm', () => {
+    expect(parsePetForm(petToFormValues(savedPet))).toEqual({
+      ok: true,
+      values: expect.objectContaining({ feeding_instruction: 'Twice a day', allergies: 'Chicken' }),
+    });
+  });
+
+  it('saves a cleared care note as null', () => {
+    const values = { ...petToFormValues(savedPet), allergies: '' };
+    expect(parsePetForm(values)).toEqual({ ok: true, values: expect.objectContaining({ allergies: null }) });
+  });
+});
+
+describe('hasPetCareInfo', () => {
+  it('is false when every care field is missing, null, or blank', () => {
+    expect(hasPetCareInfo({})).toBe(false);
+    expect(hasPetCareInfo({ feeding_instruction: null, allergies: '  \n ' })).toBe(false);
+  });
+
+  it('is true when any care field has text', () => {
+    expect(hasPetCareInfo({ special_requirement: 'Needs a ramp' })).toBe(true);
   });
 });

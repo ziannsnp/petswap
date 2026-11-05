@@ -8,7 +8,7 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc -b --noEmit",
     "supabase:types": "supabase gen types typescript --local --schema public > src/shared/types/database.types.ts",
     "test": "jest",
     "test:e2e": "playwright test"

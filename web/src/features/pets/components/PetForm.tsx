@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ChangeEvent, FormEvent } from 'react';
-import { LoaderCircle } from 'lucide-react';
+import { ChevronDown, LoaderCircle } from 'lucide-react';
 import { PET_SPECIES_OPTIONS, type PetSpecies } from '@/shared/lib/petSpecies';
 import { EMPTY_PET_FORM_VALUES, parsePetForm, type PetFormErrors, type PetFormValues } from '../lib/petForm';
 import type { UpdatePetValues } from '../lib/petApi';
@@ -42,6 +42,15 @@ function RequiredMark() {
 const PHOTO_ACCEPT = PET_PHOTO_MIME_TYPES.join(',');
 const PHOTO_MAX_MB = PET_PHOTO_MAX_BYTES / 1_048_576;
 
+export const CARE_FIELDS = [
+  'feeding_instruction',
+  'medical_note',
+  'behavior_note',
+  'allergies',
+  'vaccination_info',
+  'special_requirement',
+] as const;
+
 /** An original photo and the crop last applied to it, kept so the owner can adjust the crop. */
 interface PhotoSource {
   file: File;
@@ -74,6 +83,9 @@ export function PetForm({
   const parsed = parsePetForm(values);
   // Errors stay hidden until the first submit so an untouched form is not all red.
   const errors: PetFormErrors = hasSubmitted && !parsed.ok ? parsed.errors : {};
+
+  const hasInitialCareInfo = CARE_FIELDS.some((field) => Boolean(initialValues[field]));
+  const [isCareOpen, setIsCareOpen] = useState(hasInitialCareInfo);
 
   // Revokes the previous blob URL whenever it is replaced, and on unmount.
   useEffect(() => {
@@ -128,7 +140,12 @@ export function PetForm({
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setHasSubmitted(true);
-    if (!parsed.ok) return;
+    if (!parsed.ok) {
+      if (CARE_FIELDS.some((field) => parsed.errors[field])) {
+        setIsCareOpen(true);
+      }
+      return;
+    }
 
     if (photoFile) {
       onSubmit({ ...parsed.values, photo: photoFile });
@@ -305,6 +322,146 @@ export function PetForm({
           aria-describedby={describedBy('description')}
         />
         {fieldError('description')}
+      </div>
+
+      <div className="rounded-lg border border-gray-200 bg-white">
+        <button
+          type="button"
+          className="flex w-full items-center justify-between px-4 py-3 text-left font-medium text-gray-900 hover:bg-gray-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 sm:px-6"
+          onClick={() => setIsCareOpen((open) => !open)}
+          aria-expanded={isCareOpen}
+          aria-controls={isCareOpen ? 'pet-care-section' : undefined}
+        >
+          <div className="flex flex-col">
+            <span className="text-sm font-semibold text-gray-900">
+              Care information <span className="font-normal text-gray-500">(optional)</span>
+            </span>
+            <span className="text-xs text-gray-500">
+              Feeding routines, medical notes, allergies, and special requirements
+            </span>
+          </div>
+          <ChevronDown
+            className={`h-5 w-5 text-gray-400 transition-transform duration-200 ${isCareOpen ? 'rotate-180' : ''}`}
+            aria-hidden="true"
+          />
+        </button>
+
+        {isCareOpen && (
+          <div
+            id="pet-care-section"
+            className="space-y-4 border-t border-gray-200 px-4 py-4 sm:px-6"
+          >
+            <div>
+              <label className={labelClassName} htmlFor="pet-feeding-instruction">
+                Feeding instructions <span className="font-normal text-gray-500">(optional)</span>
+              </label>
+              <textarea
+                className={inputClassName(Boolean(errors.feeding_instruction))}
+                id="pet-feeding-instruction"
+                rows={3}
+                value={values.feeding_instruction ?? ''}
+                onChange={(event) => update('feeding_instruction', event.target.value)}
+                disabled={isSubmitting}
+                placeholder="Portion sizes, schedule, and dietary restrictions"
+                aria-invalid={Boolean(errors.feeding_instruction)}
+                aria-describedby={describedBy('feeding_instruction')}
+              />
+              {fieldError('feeding_instruction')}
+            </div>
+
+            <div>
+              <label className={labelClassName} htmlFor="pet-medical-note">
+                Medical notes <span className="font-normal text-gray-500">(optional)</span>
+              </label>
+              <textarea
+                className={inputClassName(Boolean(errors.medical_note))}
+                id="pet-medical-note"
+                rows={3}
+                value={values.medical_note ?? ''}
+                onChange={(event) => update('medical_note', event.target.value)}
+                disabled={isSubmitting}
+                placeholder="Medications, chronic conditions, and vet instructions"
+                aria-invalid={Boolean(errors.medical_note)}
+                aria-describedby={describedBy('medical_note')}
+              />
+              {fieldError('medical_note')}
+            </div>
+
+            <div>
+              <label className={labelClassName} htmlFor="pet-behavior-note">
+                Behavior notes <span className="font-normal text-gray-500">(optional)</span>
+              </label>
+              <textarea
+                className={inputClassName(Boolean(errors.behavior_note))}
+                id="pet-behavior-note"
+                rows={3}
+                value={values.behavior_note ?? ''}
+                onChange={(event) => update('behavior_note', event.target.value)}
+                disabled={isSubmitting}
+                placeholder="Temperament, fears, habits, or interaction with other pets"
+                aria-invalid={Boolean(errors.behavior_note)}
+                aria-describedby={describedBy('behavior_note')}
+              />
+              {fieldError('behavior_note')}
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <label className={labelClassName} htmlFor="pet-allergies">
+                  Allergies <span className="font-normal text-gray-500">(optional)</span>
+                </label>
+                <textarea
+                  className={inputClassName(Boolean(errors.allergies))}
+                  id="pet-allergies"
+                  rows={3}
+                  value={values.allergies ?? ''}
+                  onChange={(event) => update('allergies', event.target.value)}
+                  disabled={isSubmitting}
+                  placeholder="Known food or environmental allergies"
+                  aria-invalid={Boolean(errors.allergies)}
+                  aria-describedby={describedBy('allergies')}
+                />
+                {fieldError('allergies')}
+              </div>
+
+              <div>
+                <label className={labelClassName} htmlFor="pet-vaccination-info">
+                  Vaccination information <span className="font-normal text-gray-500">(optional)</span>
+                </label>
+                <textarea
+                  className={inputClassName(Boolean(errors.vaccination_info))}
+                  id="pet-vaccination-info"
+                  rows={3}
+                  value={values.vaccination_info ?? ''}
+                  onChange={(event) => update('vaccination_info', event.target.value)}
+                  disabled={isSubmitting}
+                  placeholder="Vaccination status and history"
+                  aria-invalid={Boolean(errors.vaccination_info)}
+                  aria-describedby={describedBy('vaccination_info')}
+                />
+                {fieldError('vaccination_info')}
+              </div>
+            </div>
+
+            <div>
+              <label className={labelClassName} htmlFor="pet-special-requirement">
+                Special requirements <span className="font-normal text-gray-500">(optional)</span>
+              </label>
+              <textarea
+                className={inputClassName(Boolean(errors.special_requirement))}
+                id="pet-special-requirement"
+                rows={3}
+                value={values.special_requirement ?? ''}
+                onChange={(event) => update('special_requirement', event.target.value)}
+                disabled={isSubmitting}
+                placeholder="Any other specific care needs or accommodations"
+                aria-invalid={Boolean(errors.special_requirement)}
+                aria-describedby={describedBy('special_requirement')}
+              />
+              {fieldError('special_requirement')}
+            </div>
+          </div>
+        )}
       </div>
 
       {submitError && <p className="form-alert" role="alert">{submitError}</p>}

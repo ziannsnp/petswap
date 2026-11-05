@@ -14,7 +14,7 @@ interface DeletePetDialogProps {
 
 function deleteErrorMessage(error: unknown, petName: string): string {
   if (error instanceof PetHasBookingsError) {
-    return `${petName} has bookings, so it can't be deleted.`;
+    return `${petName} has active bookings, so it can't be deleted.`;
   }
 
   return `We couldn't delete ${petName}. Please try again.`;
@@ -144,7 +144,7 @@ export function DeletePetDialog({ pet, isOpen, onClose }: DeletePetDialogProps) 
         </div>
 
         <p id="delete-pet-dialog-description" className="mt-3 text-sm text-gray-600">
-          This permanently removes {pet.name}'s profile and photo. You can't undo this.
+          This removes {pet.name} from your pets and deletes its photo. Past bookings still show its name. You can't undo this.
         </p>
 
         {errorMessage && (

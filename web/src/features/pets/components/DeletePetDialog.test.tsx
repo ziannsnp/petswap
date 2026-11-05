@@ -93,7 +93,7 @@ describe('DeletePetDialog', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent("Rocket has bookings, so it can't be deleted.");
+    expect(await screen.findByRole('alert')).toHaveTextContent("Rocket has active bookings, so it can't be deleted.");
     expect(onClose).not.toHaveBeenCalled();
     expect(mockNavigate).not.toHaveBeenCalled();
   });

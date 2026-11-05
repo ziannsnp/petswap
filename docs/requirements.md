@@ -20,7 +20,7 @@ Logged-in users can view and edit their own display name, profile photo, phone n
 
 ### FR-2.1 Pet management
 
-Users can create, view, edit, and delete only their own pet profiles. A pet includes name, species, breed, age, photo, and description; missing required fields block submission.
+Users can create, view, edit, and delete only their own pet profiles. A pet includes name, species, breed, age, photo, and description; missing required fields block submission. A pet with a pending or confirmed booking cannot be deleted; a deleted pet still appears on its past bookings.
 
 ### FR-2.2 Pet care information
 

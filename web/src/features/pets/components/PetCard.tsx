@@ -1,5 +1,14 @@
 import { useState } from 'react';
-import { SquarePen, Trash2 } from 'lucide-react';
+import {
+  Activity,
+  AlertCircle,
+  ClipboardList,
+  Pill,
+  SquarePen,
+  Syringe,
+  Trash2,
+  Utensils,
+} from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { petSpeciesLabel } from '@/shared/lib/petSpecies';
 import { usePetPhotoUrl } from '../hooks/usePets';
@@ -10,6 +19,64 @@ import { PetAvatar } from './PetAvatar';
 interface PetCardProps {
   pet: Pet;
 }
+
+interface CareFieldConfig {
+  key: keyof Pick<
+    Pet,
+    | 'feeding_instruction'
+    | 'medical_note'
+    | 'behavior_note'
+    | 'allergies'
+    | 'vaccination_info'
+    | 'special_requirement'
+  >;
+  label: string;
+  icon: typeof Utensils;
+  colors: {
+    bg: string;
+    text: string;
+    title: string;
+  };
+}
+
+const CARE_FIELD_CONFIGS: readonly CareFieldConfig[] = [
+  {
+    key: 'feeding_instruction',
+    label: 'Feeding instructions',
+    icon: Utensils,
+    colors: { bg: 'bg-amber-50', text: 'text-amber-700', title: 'text-amber-800' },
+  },
+  {
+    key: 'medical_note',
+    label: 'Medical notes',
+    icon: Pill,
+    colors: { bg: 'bg-emerald-50', text: 'text-emerald-700', title: 'text-emerald-800' },
+  },
+  {
+    key: 'behavior_note',
+    label: 'Behavior notes',
+    icon: Activity,
+    colors: { bg: 'bg-purple-50', text: 'text-purple-700', title: 'text-purple-800' },
+  },
+  {
+    key: 'allergies',
+    label: 'Allergies',
+    icon: AlertCircle,
+    colors: { bg: 'bg-red-50', text: 'text-red-700', title: 'text-red-800' },
+  },
+  {
+    key: 'vaccination_info',
+    label: 'Vaccination information',
+    icon: Syringe,
+    colors: { bg: 'bg-blue-50', text: 'text-blue-700', title: 'text-blue-800' },
+  },
+  {
+    key: 'special_requirement',
+    label: 'Special requirements',
+    icon: ClipboardList,
+    colors: { bg: 'bg-teal-50', text: 'text-teal-700', title: 'text-teal-800' },
+  },
+];
 
 function formatAge(ageYear: number | null): string | null {
   if (ageYear === null) return null;
@@ -27,6 +94,12 @@ export function PetCard({ pet }: PetCardProps) {
   const { data: photoUrl } = usePetPhotoUrl(pet.photo_url);
   const age = formatAge(pet.age_year);
   const details = [petSpeciesLabel(pet.species), pet.breed, age].filter(Boolean).join(' · ');
+
+  const careItems = CARE_FIELD_CONFIGS.map((config) => {
+    const raw = pet[config.key];
+    const value = raw?.trim();
+    return value ? { ...config, value } : null;
+  }).filter((item): item is (CareFieldConfig & { value: string }) => item !== null);
 
   return (
     <article className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
@@ -58,6 +131,26 @@ export function PetCard({ pet }: PetCardProps) {
       </div>
       {pet.description && (
         <p className="mt-4 line-clamp-3 text-sm text-gray-600 break-words">{pet.description}</p>
+      )}
+      {careItems.length > 0 && (
+        <section className="mt-4 border-t border-gray-100 pt-3" aria-label="Care information">
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
+            Care information
+          </h3>
+          <div className="space-y-2">
+            {careItems.map(({ key, label, icon: Icon, colors, value }) => (
+              <div key={key} className={`rounded-lg p-3 ${colors.bg}`}>
+                <div className={`flex items-center gap-2 text-sm font-medium ${colors.title}`}>
+                  <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+                  <span>{label}</span>
+                </div>
+                <p className={`mt-1 text-sm whitespace-pre-line break-words ${colors.text}`}>
+                  {value}
+                </p>
+              </div>
+            ))}
+          </div>
+        </section>
       )}
       {/* Mounted only while open, so each card does not hold an idle delete mutation. */}
       {isDeleteDialogOpen && (

@@ -9,6 +9,12 @@ export interface PetFormValues {
   breed: string;
   age: string;
   description: string;
+  feeding_instruction?: string;
+  medical_note?: string;
+  behavior_note?: string;
+  allergies?: string;
+  vaccination_info?: string;
+  special_requirement?: string;
 }
 
 export type PetFormErrors = Partial<Record<keyof PetFormValues, string>>;
@@ -27,7 +33,8 @@ export const EMPTY_PET_FORM_VALUES: PetFormValues = {
 
 /** Turns a saved pet into form input, so the edit form starts from what is stored. */
 export function petToFormValues(
-  pet: Pick<Pet, 'name' | 'species' | 'breed' | 'age_year' | 'description'>,
+  pet: Pick<Pet, 'name' | 'species' | 'breed' | 'age_year' | 'description'> &
+    Partial<Pick<Pet, 'feeding_instruction' | 'medical_note' | 'behavior_note' | 'allergies' | 'vaccination_info' | 'special_requirement'>>,
 ): PetFormValues {
   return {
     name: pet.name,
@@ -35,6 +42,12 @@ export function petToFormValues(
     breed: pet.breed ?? '',
     age: pet.age_year === null ? '' : String(pet.age_year),
     description: pet.description ?? '',
+    ...(pet.feeding_instruction ? { feeding_instruction: pet.feeding_instruction } : {}),
+    ...(pet.medical_note ? { medical_note: pet.medical_note } : {}),
+    ...(pet.behavior_note ? { behavior_note: pet.behavior_note } : {}),
+    ...(pet.allergies ? { allergies: pet.allergies } : {}),
+    ...(pet.vaccination_info ? { vaccination_info: pet.vaccination_info } : {}),
+    ...(pet.special_requirement ? { special_requirement: pet.special_requirement } : {}),
   };
 }
 
@@ -76,6 +89,24 @@ export function parsePetForm(values: PetFormValues): ParsedPetForm {
       breed: values.breed,
       ageYear: age ? Number(age) : null,
       description: values.description,
+      ...(values.feeding_instruction !== undefined && {
+        feeding_instruction: values.feeding_instruction.trim() || null,
+      }),
+      ...(values.medical_note !== undefined && {
+        medical_note: values.medical_note.trim() || null,
+      }),
+      ...(values.behavior_note !== undefined && {
+        behavior_note: values.behavior_note.trim() || null,
+      }),
+      ...(values.allergies !== undefined && {
+        allergies: values.allergies.trim() || null,
+      }),
+      ...(values.vaccination_info !== undefined && {
+        vaccination_info: values.vaccination_info.trim() || null,
+      }),
+      ...(values.special_requirement !== undefined && {
+        special_requirement: values.special_requirement.trim() || null,
+      }),
     },
   };
 }

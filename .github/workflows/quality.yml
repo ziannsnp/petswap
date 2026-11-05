@@ -1,16 +1,13 @@
 name: Quality
 
 on:
+  # No `paths` filter on pull requests: `web-quality` and `docs-links` are meant
+  # to be required status checks, and GitHub leaves a required check stuck on
+  # "Expected" forever when its workflow never starts. Every PR to main must
+  # therefore get both jobs, even one that only touches docker/** or another
+  # workflow. See docs/ci-cd.md#proposed-required-checks.
   pull_request:
     branches: [main]
-    paths:
-      - 'web/**'
-      - 'supabase/**'
-      - 'docs/**'
-      - 'README.md'
-      - 'AGENTS.md'
-      - '.github/pull_request_template.md'
-      - '.github/workflows/quality.yml'
   push:
     branches: [main]
     paths:

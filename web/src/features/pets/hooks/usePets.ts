@@ -118,8 +118,8 @@ export function useDeletePet() {
     onSuccess: (_data, petId) => {
       queryClient.removeQueries({ queryKey: petKeys.allDetails(petId) });
     },
-    // deletePet removes the photo before the row, so a failed delete can still change the pet.
-    // Bookings are not refreshed: deletePet refuses to delete a pet that has bookings.
+    // A delete that fails after the RPC (a lost response) may still have deleted the pet.
+    // Bookings are not refreshed: they keep showing a deleted pet's name and species, which do not change.
     // After a success, waiting keeps the dialog open until My Pets has dropped the card.
     onSettled: (_data, error) => waitOnlyAfterSuccess(
       error,

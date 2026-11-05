@@ -199,6 +199,62 @@ insert into _contract (check_name, passed) values
       and not has_function_privilege('service_role', 'public.lock_listing_for_booking_insert()', 'EXECUTE')
   ),
   (
+    'pet deletion is an owner-checked security definer RPC for signed-in users only',
+    exists (
+      select 1 from pg_proc
+      where oid = 'public.delete_pet_with_active_booking_check(uuid)'::regprocedure
+        and prosecdef
+    )
+    and not has_function_privilege('anon', 'public.delete_pet_with_active_booking_check(uuid)', 'EXECUTE')
+    and has_function_privilege('authenticated', 'public.delete_pet_with_active_booking_check(uuid)', 'EXECUTE')
+  ),
+  (
+    'direct pet updates cannot change, restore, or soft-delete a pet',
+    exists (
+      select 1 from pg_policies
+      where schemaname = 'public'
+        and tablename = 'pets'
+        and policyname = 'Owners update own pets'
+        and cmd = 'UPDATE'
+        and qual like '%deleted_at IS NULL%'
+        and with_check like '%deleted_at IS NULL%'
+    )
+  ),
+  (
+    'a deleted pet photo cannot be read by past hosts or uploaded or replaced by its owner',
+    exists (
+      select 1 from pg_policies
+      where schemaname = 'storage' and tablename = 'objects'
+        and policyname = 'Listing owners can read booked pet photos'
+        and qual like '%active_pet_is_booked_at_own_listing%'
+    )
+    and exists (
+      select 1 from pg_policies
+      where schemaname = 'storage' and tablename = 'objects'
+        and policyname = 'Pet owners can upload pet photos'
+        and with_check like '%current_user_owns_active_pet%'
+    )
+    and exists (
+      select 1 from pg_policies
+      where schemaname = 'storage' and tablename = 'objects'
+        and policyname = 'Pet owners can update pet photos'
+        and qual like '%current_user_owns_active_pet%'
+        and with_check like '%current_user_owns_active_pet%'
+    )
+  ),
+  (
+    'booking inserts serialize against pet deletion',
+    exists (
+      select 1 from pg_trigger
+      where tgrelid = 'public.bookings'::regclass
+        and tgname = 'bookings_lock_pet_before_guard'
+        and not tgisinternal
+    )
+    and not has_function_privilege('anon', 'public.lock_pet_for_booking_insert()', 'EXECUTE')
+    and not has_function_privilege('authenticated', 'public.lock_pet_for_booking_insert()', 'EXECUTE')
+    and not has_function_privilege('service_role', 'public.lock_pet_for_booking_insert()', 'EXECUTE')
+  ),
+  (
     'owner-only listing operations are callable by signed-in users only',
     not has_function_privilege('anon', 'public.delete_listing_with_active_booking_check(uuid)', 'EXECUTE')
       and not has_function_privilege('anon', 'public.reorder_listing_images(uuid, uuid[])', 'EXECUTE')

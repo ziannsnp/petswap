@@ -1,5 +1,5 @@
 /** @jest-environment jsdom */
-import { act, render, screen } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { CheckEmailScreen, RESEND_COOLDOWN_SECONDS } from './CheckEmailScreen';
@@ -130,12 +130,22 @@ describe('CheckEmailScreen', () => {
   it('renders an error alert and starts cooldown timer when rate limited', async () => {
     const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
     const error = new ResendConfirmationError('RATE_LIMITED');
-    const mutateAsync = jest.fn().mockRejectedValue(error);
-    mockedUseResendConfirmation.mockReturnValue(
+    let isError = false;
+    let currentError: ResendConfirmationError | null = null;
+    const mutateAsync = jest.fn().mockImplementation(() => {
+      isError = true;
+      currentError = error;
+      return Promise.reject(error);
+    });
+    mockedUseResendConfirmation.mockImplementation(() =>
       mutationResult({
         mutateAsync,
-        isError: true,
-        error,
+        get isError() {
+          return isError;
+        },
+        get error() {
+          return currentError;
+        },
       }),
     );
     renderScreen('/check-email', { email: 'pet@example.com' });
@@ -146,19 +156,29 @@ describe('CheckEmailScreen', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Too many attempts. Please try again later.',
     );
-    expect(button).toBeDisabled();
+    await waitFor(() => expect(button).toBeDisabled());
     expect(button).toHaveTextContent(`Resend email in ${RESEND_COOLDOWN_SECONDS}s`);
   });
 
   it('renders an error alert and does not start cooldown when a non-rate-limit error occurs', async () => {
     const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
     const error = new ResendConfirmationError('NETWORK');
-    const mutateAsync = jest.fn().mockRejectedValue(error);
-    mockedUseResendConfirmation.mockReturnValue(
+    let isError = false;
+    let currentError: ResendConfirmationError | null = null;
+    const mutateAsync = jest.fn().mockImplementation(() => {
+      isError = true;
+      currentError = error;
+      return Promise.reject(error);
+    });
+    mockedUseResendConfirmation.mockImplementation(() =>
       mutationResult({
         mutateAsync,
-        isError: true,
-        error,
+        get isError() {
+          return isError;
+        },
+        get error() {
+          return currentError;
+        },
       }),
     );
     renderScreen('/check-email', { email: 'pet@example.com' });

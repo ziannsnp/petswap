@@ -173,7 +173,6 @@ export function RegisterScreen() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setConfirmationSent(false);
 
     const values: RegistrationValues = {
       email,

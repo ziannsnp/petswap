@@ -468,6 +468,22 @@ describe('SearchScreen sort and reset', () => {
       .toEqual(['Newest', 'Oldest', 'Title (A–Z)', 'Capacity (high to low)']);
   });
 
+  it('keeps the sort control mounted and focused while an uncached sort loads', async () => {
+    const user = userEvent.setup();
+    mockedUsePublishedListingPage.mockImplementation(({ sort }) => (sort === 'title'
+      ? { data: undefined, isPending: true, isError: false, isFetching: true, refetch: mockRefetch }
+      : { data: makePage([makeSearchResult({ id: 'result-1' })]), isPending: false, isError: false, isFetching: false, refetch: mockRefetch }
+    ) as unknown as ReturnType<typeof usePublishedListingPage>);
+
+    renderSearchAt('/');
+    const select = screen.getByLabelText('Sort by');
+    await user.selectOptions(select, 'title');
+
+    expect(screen.getByRole('status', { name: 'Loading listings' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Sort by')).toBe(select);
+    expect(select).toHaveFocus();
+  });
+
   it('applies the chosen sort to the search and returns to the first page', async () => {
     const user = userEvent.setup();
     servePages();

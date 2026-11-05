@@ -163,22 +163,12 @@ describe('CheckEmailScreen', () => {
   it('renders an error alert and does not start cooldown when a non-rate-limit error occurs', async () => {
     const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
     const error = new ResendConfirmationError('NETWORK');
-    let isError = false;
-    let currentError: ResendConfirmationError | null = null;
-    const mutateAsync = jest.fn().mockImplementation(() => {
-      isError = true;
-      currentError = error;
-      return Promise.reject(error);
-    });
-    mockedUseResendConfirmation.mockImplementation(() =>
+    const mutateAsync = jest.fn().mockRejectedValue(error);
+    mockedUseResendConfirmation.mockReturnValue(
       mutationResult({
         mutateAsync,
-        get isError() {
-          return isError;
-        },
-        get error() {
-          return currentError;
-        },
+        isError: true,
+        error,
       }),
     );
     renderScreen('/check-email', { email: 'pet@example.com' });

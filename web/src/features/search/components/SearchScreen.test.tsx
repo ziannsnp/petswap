@@ -5,6 +5,8 @@ import { MemoryRouter, useLocation, useNavigate, useNavigationType } from 'react
 import { usePublishedListingPage } from '@/features/listings';
 import {
   SEARCH_RESULTS_PAGE_SIZE,
+  SEARCH_TODAY,
+  fixSearchToday,
   hiddenSearchListings,
   makeSearchPage,
   makeSearchResult,
@@ -53,6 +55,8 @@ function renderSearchAt(url: string) {
 }
 
 const urlSearch = () => screen.getByTestId('url-search').textContent;
+
+fixSearchToday();
 
 beforeEach(() => {
   mockedUsePublishedListingPage.mockReturnValue({
@@ -645,7 +649,28 @@ describe('SearchScreen filters', () => {
     expect(minCapacity()).toHaveValue('3');
     expect(startDate()).toHaveValue('2026-12-01');
     expect(endDate()).toHaveValue('2026-12-05');
-    expect(endDate()).toHaveAttribute('min', '2026-12-01');
+    expect(endDate()).toHaveAttribute('min', '2026-12-02');
+  });
+
+  it('offers start dates from today, and end dates from the day after the start', () => {
+    renderSearchAt('/');
+
+    expect(startDate()).toHaveAttribute('min', SEARCH_TODAY);
+    expect(endDate()).toHaveAttribute('min', '2026-11-08');
+
+    fireEvent.change(startDate(), { target: { value: '2026-12-31' } });
+    expect(endDate()).toHaveAttribute('min', '2027-01-01');
+  });
+
+  it('applies a range that starts today', async () => {
+    const user = userEvent.setup();
+    renderSearchAt('/');
+
+    setDates(SEARCH_TODAY, '2026-11-08');
+    await submit(user);
+
+    expect(urlSearch()).toBe(`?startDate=${SEARCH_TODAY}&endDate=2026-11-08`);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
   it('applies nothing until the search is submitted', async () => {
@@ -708,6 +733,7 @@ describe('SearchScreen filters', () => {
     ['ends on the day it starts', '2026-12-05', '2026-12-05', 'End date', 'End date must be later than the start date.'],
     ['has only a start date', '2026-12-05', '', 'End date', 'Choose both a start date and an end date.'],
     ['has only an end date', '', '2026-12-05', 'Start date', 'Choose both a start date and an end date.'],
+    ['starts before today', '2026-11-06', '2026-11-09', 'Start date', 'Start date cannot be in the past.'],
   ])('shows an error and applies nothing when the range %s', async (_name, start, end, field, message) => {
     const user = userEvent.setup();
     renderSearchAt('/?keyword=garden');
@@ -781,6 +807,15 @@ describe('SearchScreen filters', () => {
     expect(screen.getByTestId('navigation-type')).toHaveTextContent('REPLACE');
     expect(petType()).toHaveValue('');
     expect(minCapacity()).toHaveValue('3');
+    expect(startDate()).toHaveValue('');
+    expect(endDate()).toHaveValue('');
+  });
+
+  it('drops a range that has already started, such as one from an old link', async () => {
+    renderSearchAt('/?petType=cat&startDate=2026-11-01&endDate=2026-11-10');
+
+    await waitFor(() => expect(urlSearch()).toBe('?petType=cat'));
+    expect(screen.getByTestId('navigation-type')).toHaveTextContent('REPLACE');
     expect(startDate()).toHaveValue('');
     expect(endDate()).toHaveValue('');
   });

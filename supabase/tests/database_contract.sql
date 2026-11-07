@@ -483,18 +483,29 @@ insert into _contract (check_name, passed) values
   ),
   (
     'published listing search RPC has explicit app-role grants and no PUBLIC grant',
-    to_regprocedure('public.search_published_listings(text,text,integer,integer,text)') is not null
-      and has_function_privilege('anon', 'public.search_published_listings(text,text,integer,integer,text)', 'EXECUTE')
-      and has_function_privilege('authenticated', 'public.search_published_listings(text,text,integer,integer,text)', 'EXECUTE')
-      and has_function_privilege('service_role', 'public.search_published_listings(text,text,integer,integer,text)', 'EXECUTE')
+    to_regprocedure('public.search_published_listings(text,text,integer,integer,text,public.pet_species,integer,date,date)') is not null
+      and has_function_privilege('anon', 'public.search_published_listings(text,text,integer,integer,text,public.pet_species,integer,date,date)', 'EXECUTE')
+      and has_function_privilege('authenticated', 'public.search_published_listings(text,text,integer,integer,text,public.pet_species,integer,date,date)', 'EXECUTE')
+      and has_function_privilege('service_role', 'public.search_published_listings(text,text,integer,integer,text,public.pet_species,integer,date,date)', 'EXECUTE')
       and not exists (
         select 1
         from pg_proc as procedure,
         lateral aclexplode(coalesce(procedure.proacl, acldefault('f', procedure.proowner))) as privilege
-        where procedure.oid = 'public.search_published_listings(text,text,integer,integer,text)'::regprocedure
+        where procedure.oid = 'public.search_published_listings(text,text,integer,integer,text,public.pet_species,integer,date,date)'::regprocedure
           and privilege.grantee = 0
           and privilege.privilege_type = 'EXECUTE'
       )
+  ),
+  (
+    'published listing availability search has a fixed definer search path and no legacy overload',
+    exists (
+      select 1 from pg_proc
+      where oid = 'public.search_published_listings(text,text,integer,integer,text,public.pet_species,integer,date,date)'::regprocedure
+        and prosecdef
+        and proconfig @> array['search_path=""']
+    )
+    and (select count(*) from pg_proc where pronamespace = 'public'::regnamespace
+      and proname = 'search_published_listings') = 1
   );
 
 select check_name, passed

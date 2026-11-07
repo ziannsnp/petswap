@@ -129,6 +129,21 @@ Playwright is wired up: [`web/playwright.config.ts`](../web/playwright.config.ts
 
 `web/e2e/navbar-account-menu.spec.ts` covers the account-menu dropdown and mobile-menu logout flow; it signs in as `alex@petswap.test`, so it needs the local Supabase stack (`supabase start`) the same way the manual journey below does. It is not part of the required `Quality` gate or the `e2e-smoke.yml` workflow (both only run `smoke.spec.ts`), so run it locally after touching the navbar or logout flow: `npm run test:e2e -- navbar-account-menu.spec.ts`.
 
+## Manual search sort/reset journey
+
+Use a local dataset with at least ten available published listings. Combine location,
+keyword, pet type, minimum capacity, and dates; change each sort from a later page
+and verify that it starts at page 1 while retaining every criterion. Continue to
+page 2 to check global ordering. Clear must restore default newest listings and
+reset every field and pagination, including when only the page was non-default.
+Repeat from a filtered no-results state with an invalid date draft, and verify
+the error is cleared too. Check keyboard focus and narrow viewport overflow.
+
+The query/cache/adapter path is covered by `SearchScreen.integration.test.tsx`;
+`listing_search_filters.test.sql` covers server filters, availability, privacy,
+and ordering across pages. Recorded browser evidence and screenshots:
+[`qa/search-sort-reset-2026-11-07.md`](qa/search-sort-reset-2026-11-07.md).
+
 ## Manual listing journey
 
 After `npx supabase db reset`, configure `web/.env.local` with the local API URL and anon key printed by `supabase start`, run `npm run dev` from `web/`, and sign in as `alex@petswap.test` with password `petswap-local-dev`.

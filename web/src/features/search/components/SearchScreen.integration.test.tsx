@@ -2,8 +2,9 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom';
+import { Link, MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { getSupabaseClient } from '@/shared/lib/supabase';
+import { useUpdateBookingStatus } from '@/features/bookings';
 import type { Listing } from '@/features/listings';
 import { makeSearchResult } from '../testing/searchFixtures';
 import { SearchScreen } from './SearchScreen';
@@ -14,7 +15,17 @@ jest.mock('@/shared/lib/supabase', () => ({ getSupabaseClient: jest.fn() }));
 jest.mock('@/features/auth', () => ({ useAuth: jest.fn() }));
 
 const rpc = jest.fn();
+const bookingUpdate = jest.fn();
 const clients: QueryClient[] = [];
+
+function BookingStatusAction({ status }: { status: 'confirmed' | 'cancelled' }) {
+  const update = useUpdateBookingStatus();
+  const navigate = useNavigate();
+  return <>
+    <button type="button" onClick={() => update.mutate({ bookingId: 'booking-1', status })}>Update booking</button>
+    {update.isSuccess && <button type="button" onClick={() => navigate(-1)}>Return to search</button>}
+  </>;
+}
 
 function BrowserProbe() {
   const { search } = useLocation();
@@ -49,9 +60,14 @@ const shownTitles = () => within(screen.getByRole('region', { name: 'Listings' }
 
 beforeEach(() => {
   rpc.mockReset();
+  bookingUpdate.mockReset();
   const orderById = jest.fn().mockResolvedValue({ data: [], error: null });
   const orderByPosition = jest.fn().mockReturnValue({ order: orderById });
-  const from = jest.fn().mockReturnValue({
+  const from = jest.fn().mockImplementation((table) => table === 'bookings' ? {
+    update: (values: { status: string }) => ({
+      eq: () => ({ select: () => ({ single: () => bookingUpdate(values) }) }),
+    }),
+  } : {
     select: () => ({ in: () => ({ order: orderByPosition }) }),
   });
   jest.mocked(getSupabaseClient).mockReturnValue({ rpc, from } as never);
@@ -59,6 +75,50 @@ beforeEach(() => {
 
 afterEach(() => {
   clients.splice(0).forEach((client) => client.clear());
+});
+
+it.each(['confirmed', 'cancelled'] as const)('refreshes cached availability after a booking is %s', async (status) => {
+  const user = userEvent.setup();
+  let booked = status === 'cancelled';
+  rpc.mockImplementation(async () => rows(booked ? [] : [result('available', 'Garden home')]));
+  bookingUpdate.mockImplementation(async (values) => {
+    booked = values.status === 'confirmed';
+    return { data: { id: 'booking-1', ...values }, error: null };
+  });
+  // Keep unmounted search pages fresh indefinitely: only the booking mutation
+  // should make this search refetch when the visitor returns.
+  const client = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false, staleTime: Infinity, gcTime: Infinity, refetchOnWindowFocus: false },
+      mutations: { retry: false },
+    },
+  });
+  clients.push(client);
+  const criteria = '?petType=cat&startDate=2026-12-01&endDate=2026-12-05&sort=title';
+  render(<QueryClientProvider client={client}>
+    <MemoryRouter initialEntries={[`/${criteria}`]}>
+      <Routes>
+        <Route path="/" element={<><SearchScreen /><Link to="/bookings">Manage bookings</Link></>} />
+        <Route path="/bookings" element={<BookingStatusAction status={status} />} />
+      </Routes>
+      <BrowserProbe />
+    </MemoryRouter>
+  </QueryClientProvider>);
+
+  if (booked) await screen.findByRole('status', { name: 'No search results' });
+  else await screen.findByRole('link', { name: 'Garden home' });
+  await user.click(screen.getByRole('link', { name: 'Manage bookings' }));
+  await user.click(screen.getByRole('button', { name: 'Update booking' }));
+  await user.click(await screen.findByRole('button', { name: 'Return to search' }));
+
+  if (status === 'confirmed') {
+    await screen.findByRole('status', { name: 'No search results' });
+    expect(screen.queryByRole('link', { name: 'Garden home' })).not.toBeInTheDocument();
+  } else {
+    await screen.findByRole('link', { name: 'Garden home' });
+    expect(screen.queryByRole('status', { name: 'No search results' })).not.toBeInTheDocument();
+  }
+  expect(urlSearch()).toBe(criteria);
 });
 
 it('renders server sorting across pages with all criteria retained, then resets to default listings', async () => {

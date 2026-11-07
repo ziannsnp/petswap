@@ -302,3 +302,91 @@ it('shows an overlap conflict on the booking card when its owner cannot confirm'
     'This request overlaps another confirmed booking on this listing. Choose different dates before confirming.',
   );
 });
+
+it('shows a cancel button for confirmed incoming bookings', () => {
+  const pendingIncoming = makeBooking({ id: 'in-pending', status: 'pending' });
+  const confirmedIncoming = makeBooking({ id: 'in-confirmed', status: 'confirmed' });
+  mockUseOutgoingBookings.mockReturnValue(successResult([]));
+  mockUseIncomingBookings.mockReturnValue(successResult([confirmedIncoming]));
+
+  render(<BookingsScreen />);
+
+  expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
+});
+
+it('does not show a cancel button for pending incoming bookings', () => {
+  const pendingIncoming = makeBooking({ id: 'in-pending', status: 'pending' });
+  mockUseOutgoingBookings.mockReturnValue(successResult([]));
+  mockUseIncomingBookings.mockReturnValue(successResult([pendingIncoming]));
+
+  render(<BookingsScreen />);
+
+  expect(screen.queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument();
+});
+
+it('shows a cancel button for confirmed outgoing bookings', () => {
+  const confirmedOutgoing = makeBooking({ id: 'out-confirmed', status: 'confirmed' });
+  mockUseOutgoingBookings.mockReturnValue(successResult([confirmedOutgoing]));
+  mockUseIncomingBookings.mockReturnValue(successResult([]));
+
+  render(<BookingsScreen />);
+
+  expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
+});
+
+it('shows a cancel button for pending outgoing bookings', () => {
+  const pendingOutgoing = makeBooking({ id: 'out-pending', status: 'pending' });
+  mockUseOutgoingBookings.mockReturnValue(successResult([pendingOutgoing]));
+  mockUseIncomingBookings.mockReturnValue(successResult([]));
+
+  render(<BookingsScreen />);
+
+  expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
+});
+
+it('opens the confirm dialog when cancel is clicked', () => {
+  const pendingIncoming = makeBooking({ id: 'in-confirmed', status: 'confirmed' });
+  mockUseOutgoingBookings.mockReturnValue(successResult([]));
+  mockUseIncomingBookings.mockReturnValue(successResult([pendingIncoming]));
+
+  render(<BookingsScreen />);
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+  expect(screen.getByTestId('confirm-dialog-backdrop')).toBeInTheDocument();
+});
+
+it('calls cancel when confirm dialog is confirmed', async () => {
+  const mutateAsync = jest.fn().mockResolvedValue({});
+  mockUseUpdateBookingStatus.mockReturnValue({ mutateAsync });
+  mockUseOutgoingBookings.mockReturnValue(successResult([]));
+  mockUseIncomingBookings.mockReturnValue(successResult([makeBooking({ id: 'in-1', status: 'confirmed' })]));
+
+  render(<BookingsScreen />);
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel booking' }));
+
+  await waitFor(() => expect(mutateAsync).toHaveBeenCalledWith({ bookingId: 'in-1', status: 'cancelled' }));
+});
+
+it('shows an error when cancel update fails', async () => {
+  const mutateAsync = jest.fn().mockRejectedValue(new Error('Network error'));
+  mockUseUpdateBookingStatus.mockReturnValue({ mutateAsync });
+  mockUseOutgoingBookings.mockReturnValue(successResult([]));
+  mockUseIncomingBookings.mockReturnValue(successResult([makeBooking({ id: 'in-1', status: 'confirmed' })]));
+
+  render(<BookingsScreen />);
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel booking' }));
+
+  expect(await screen.findByRole('alert')).toHaveTextContent(/could not cancel this booking/i);
+});
+
+it('does not show a cancel button for completed bookings', () => {
+  const completedIncoming = makeBooking({ id: 'in-completed', status: 'completed' });
+  mockUseOutgoingBookings.mockReturnValue(successResult([]));
+  mockUseIncomingBookings.mockReturnValue(successResult([completedIncoming]));
+
+  render(<BookingsScreen />);
+
+  expect(screen.queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument();
+});

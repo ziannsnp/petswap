@@ -66,7 +66,11 @@ describe('usePublishedListingPage', () => {
   beforeEach(() => jest.clearAllMocks());
 
   it('scopes cached results by search criteria and page', async () => {
-    const query = { location: 'Bangkok', keyword: 'garden', page: 2 };
+    const query = {
+      location: 'Bangkok', keyword: 'garden', page: 2,
+      petType: 'cat' as const, minCapacity: 3,
+      startDate: '2026-12-01', endDate: '2026-12-05',
+    };
     usePublishedListingPage(query);
     const queryOptions = mockedUseQuery.mock.calls[0][0];
 

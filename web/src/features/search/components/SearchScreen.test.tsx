@@ -16,6 +16,7 @@ import {
   searchPageCases,
 } from '../testing/searchFixtures';
 import { SearchScreen } from './SearchScreen';
+import { EMPTY_SEARCH_CRITERIA } from '../lib/searchCriteria';
 
 // Only the data hook is replaced. Pet-type labels come from @/shared/lib/petSpecies, which
 // is not mocked, so the cards show the same labels as the rest of the app.
@@ -496,7 +497,7 @@ describe('SearchScreen sort and reset', () => {
     await user.selectOptions(screen.getByLabelText('Sort by'), 'title');
 
     expect(urlSearch()).toBe('?location=Bangkok&keyword=garden&sort=title');
-    expect(lastQuery()).toEqual({ location: 'Bangkok', keyword: 'garden', sort: 'title', page: 1 });
+    expect(lastQuery()).toEqual({ ...EMPTY_SEARCH_CRITERIA, location: 'Bangkok', keyword: 'garden', sort: 'title', page: 1 });
     expect(screen.getByLabelText('Sort by')).toHaveValue('title');
   });
 
@@ -508,7 +509,7 @@ describe('SearchScreen sort and reset', () => {
     await user.click(screen.getByRole('button', { name: 'Next' }));
 
     expect(urlSearch()).toBe('?keyword=garden&sort=capacity&page=2');
-    expect(lastQuery()).toEqual({ location: '', keyword: 'garden', sort: 'capacity', page: 2 });
+    expect(lastQuery()).toEqual({ ...EMPTY_SEARCH_CRITERIA, keyword: 'garden', sort: 'capacity', page: 2 });
   });
 
   it('keeps the sort when a new search is submitted from a later page', async () => {
@@ -551,7 +552,7 @@ describe('SearchScreen sort and reset', () => {
     await user.click(screen.getByRole('button', { name: 'Clear' }));
 
     expect(urlSearch()).toBe('');
-    expect(lastQuery()).toEqual({ location: '', keyword: '', sort: 'newest', page: 1 });
+    expect(lastQuery()).toEqual({ ...EMPTY_SEARCH_CRITERIA, page: 1 });
     expect(screen.getByLabelText('Sort by')).toHaveValue('newest');
     expect(screen.queryByRole('button', { name: 'Clear' })).not.toBeInTheDocument();
   });
@@ -568,6 +569,20 @@ describe('SearchScreen sort and reset', () => {
 
     expect(urlSearch()).toBe('');
     expect(screen.getByLabelText('Sort by')).toHaveValue('newest');
+  });
+
+  it('offers Clear when only pagination differs from the defaults', async () => {
+    const user = userEvent.setup();
+    servePages();
+    renderSearchAt('/?page=2');
+
+    await user.click(screen.getByRole('button', { name: 'Clear' }));
+
+    expect(urlSearch()).toBe('');
+    expect(lastQuery()).toEqual({ ...EMPTY_SEARCH_CRITERIA, page: 1 });
+    expect(screen.getByText('Page 1 of 3')).toBeInTheDocument();
+    expect(screen.getByLabelText('Location')).toHaveFocus();
+    expect(screen.queryByRole('button', { name: 'Clear' })).not.toBeInTheDocument();
   });
 
   it('resets the sort from the no-results state and shows the default listings again', async () => {

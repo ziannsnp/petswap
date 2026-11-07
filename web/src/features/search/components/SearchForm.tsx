@@ -22,10 +22,13 @@ const FILTER_DATE_CLASS = 'input-field h-12 px-2 text-gray-800 sm:px-4';
 interface SearchFormProps {
   /** The search currently applied, as read from the URL. */
   criteria: SearchCriteria;
+  page: number;
   onSearch: (criteria: SearchCriteria) => void;
 }
 
-export function SearchForm({ criteria, onSearch }: SearchFormProps) {
+export const SEARCH_FORM_ID = 'listing-search-form';
+
+export function SearchForm({ criteria, page, onSearch }: SearchFormProps) {
   const [location, setLocation] = useState(criteria.location);
   const [keyword, setKeyword] = useState(criteria.keyword);
   const [filters, setFilters] = useState(() => toSearchFilterDraft(criteria));
@@ -52,7 +55,7 @@ export function SearchForm({ criteria, onSearch }: SearchFormProps) {
 
   // The sort is applied from the results toolbar, so a clear must reset it too.
   const canClear = Boolean(location || keyword || Object.values(filters).some(Boolean))
-    || !isSameSearch(criteria, EMPTY_SEARCH_CRITERIA);
+    || !isSameSearch(criteria, EMPTY_SEARCH_CRITERIA) || page > 1;
 
   const changeFilter = (name: keyof SearchFilterDraft, value: string) => {
     setFilters((current) => ({ ...current, [name]: value }));
@@ -83,7 +86,8 @@ export function SearchForm({ criteria, onSearch }: SearchFormProps) {
     onSearch(next);
   };
 
-  const handleClear = () => {
+  const handleClear = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
     setLocation('');
     setKeyword('');
     setFilters(toSearchFilterDraft(EMPTY_SEARCH_CRITERIA));
@@ -104,10 +108,12 @@ export function SearchForm({ criteria, onSearch }: SearchFormProps) {
 
   return (
     <form
+      id={SEARCH_FORM_ID}
       className="space-y-3 rounded-xl bg-white p-4 shadow-lg"
       role="search"
       aria-label="Search listings"
       onSubmit={handleSubmit}
+      onReset={handleClear}
       noValidate
     >
       <div className="flex flex-col gap-3 md:flex-row">
@@ -210,7 +216,7 @@ export function SearchForm({ criteria, onSearch }: SearchFormProps) {
 
       <div className="flex flex-col gap-3 md:flex-row md:justify-end">
         {canClear && (
-          <button className="btn-secondary flex min-h-11 items-center justify-center gap-2" type="button" onClick={handleClear}>
+          <button className="btn-secondary flex min-h-11 items-center justify-center gap-2" type="reset">
             <X className="h-5 w-5" aria-hidden="true" />
             Clear
           </button>

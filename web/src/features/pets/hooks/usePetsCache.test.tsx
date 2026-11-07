@@ -108,6 +108,27 @@ describe('saving a pet and the cache', () => {
     expect(cache.myPets()).toEqual([renamedRocket, luna]);
   });
 
+  it('keeps saved care information through the refresh and a later refetch (FR-2.2)', async () => {
+    const cache = await renderEditScreen();
+    const caredRocket: Pet = { ...rocket, feeding_instruction: 'Twice a day', allergies: 'Chicken' };
+    const careValues = { ...values, name: 'Rocket', feeding_instruction: 'Twice a day', allergies: 'Chicken' };
+    jest.mocked(updatePet).mockResolvedValue(caredRocket);
+    serveFromApi([caredRocket, luna]);
+
+    await act(() => cache.result.current.update.mutateAsync({ petId: rocket.id, values: careValues }));
+
+    expect(updatePet).toHaveBeenCalledWith(rocket.id, careValues);
+    expect(cache.cachedPet(rocket.id)).toEqual(caredRocket);
+    expect(cache.myPets()).toEqual([caredRocket, luna]);
+
+    // Reopening the edit screen later refetches the pet from the server.
+    jest.mocked(getPet).mockClear();
+    await act(() => cache.queryClient.refetchQueries({ queryKey: petKeys.detail(rocket.id, OWNER_ID) }));
+
+    expect(getPet).toHaveBeenCalledWith(rocket.id);
+    expect(cache.result.current.pet.data).toMatchObject({ feeding_instruction: 'Twice a day', allergies: 'Chicken' });
+  });
+
   it('still refreshes the pets when the save fails, in case it committed before the response was lost', async () => {
     const cache = await renderEditScreen();
     const lostResponse = new Error('response lost');

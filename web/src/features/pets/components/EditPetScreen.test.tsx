@@ -171,6 +171,49 @@ describe('EditPetScreen', () => {
     expect(await screen.findByText('Pets page after save')).toBeInTheDocument();
   });
 
+  it('prefills stored care information in an open care section (FR-2.2)', () => {
+    mockPetState.data = { ...rocket, feeding_instruction: 'Twice a day', allergies: 'Chicken' };
+    renderScreen();
+
+    expect(screen.getByRole('button', { name: /care information/i })).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByLabelText(/feeding instructions/i)).toHaveValue('Twice a day');
+    expect(screen.getByLabelText(/allergies/i)).toHaveValue('Chicken');
+    expect(screen.getByLabelText(/medical notes/i)).toHaveValue('');
+  });
+
+  it('saves edited care information and a cleared note as null', async () => {
+    const user = userEvent.setup();
+    mockPetState.data = { ...rocket, feeding_instruction: 'Twice a day', allergies: 'Chicken' };
+    renderScreen();
+
+    await user.clear(screen.getByLabelText(/feeding instructions/i));
+    await user.type(screen.getByLabelText(/feeding instructions/i), 'Three times a day');
+    await user.clear(screen.getByLabelText(/allergies/i));
+    await user.type(screen.getByLabelText(/behavior notes/i), 'Shy with strangers');
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    expect(mockMutateAsync).toHaveBeenCalledWith({
+      petId: PET_ID,
+      values: expect.objectContaining({
+        feeding_instruction: 'Three times a day',
+        allergies: null,
+        behavior_note: 'Shy with strangers',
+      }),
+    });
+    expect(await screen.findByText('Pets page after save')).toBeInTheDocument();
+  });
+
+  it('keeps stored care notes the owner did not touch', async () => {
+    const user = userEvent.setup();
+    mockPetState.data = { ...rocket, medical_note: 'Heart pills at 8am' };
+    renderScreen();
+
+    await user.type(screen.getByLabelText(/breed/i), '!');
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    expect(mockMutateAsync.mock.calls[0][0].values).toEqual(expect.objectContaining({ medical_note: 'Heart pills at 8am' }));
+  });
+
   it('shows the stored photo', () => {
     renderScreen();
 

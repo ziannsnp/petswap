@@ -62,13 +62,39 @@ function isCalendarDate(value: string): boolean {
   return !Number.isNaN(date.getTime()) && date.toISOString().startsWith(value);
 }
 
-/** Dates in `YYYY-MM-DD` form sort as text, and the end is exclusive, as it is for a booking. */
-export function findSearchDateError(startDate: string, endDate: string): SearchDateError | null {
+/**
+ * Today as `YYYY-MM-DD` in the visitor's own timezone, the day their date picker shows as
+ * today. The booking form has the same helper; importing it would load the bookings feature.
+ */
+export function todaySearchDate(now: Date = new Date()): string {
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${now.getFullYear()}-${month}-${day}`;
+}
+
+/** The first end date worth offering: the day after the start date, or after today until a later start is chosen. */
+export function earliestSearchEndDate(startDate: string, today: string): string {
+  const from = isCalendarDate(startDate) && startDate > today ? startDate : today;
+  const next = new Date(`${from}T00:00:00Z`);
+  next.setUTCDate(next.getUTCDate() + 1);
+  return next.toISOString().slice(0, 10);
+}
+
+/**
+ * Dates in `YYYY-MM-DD` form sort as text, and the end is exclusive, as it is for a booking.
+ * A range cannot start before today, because no stay can be booked from a past date.
+ */
+export function findSearchDateError(
+  startDate: string,
+  endDate: string,
+  today: string = todaySearchDate(),
+): SearchDateError | null {
   if (!startDate && !endDate) return null;
   if (!startDate) return { field: 'startDate', message: 'Choose both a start date and an end date.' };
   if (!endDate) return { field: 'endDate', message: 'Choose both a start date and an end date.' };
   if (!isCalendarDate(startDate)) return { field: 'startDate', message: 'Enter a valid start date.' };
   if (!isCalendarDate(endDate)) return { field: 'endDate', message: 'Enter a valid end date.' };
+  if (startDate < today) return { field: 'startDate', message: 'Start date cannot be in the past.' };
   if (endDate <= startDate) return { field: 'endDate', message: 'End date must be later than the start date.' };
   return null;
 }
@@ -78,13 +104,16 @@ export function readSearchSort(params: URLSearchParams): SearchSort {
   return SEARCH_SORT_OPTIONS.find((option) => option.value === value)?.value ?? DEFAULT_SEARCH_SORT;
 }
 
-/** A value the controls could not have produced is treated as no filter, as an unknown sort is. */
-export function readSearchFilters(params: URLSearchParams): SearchFilters {
+/**
+ * A value the controls could not have produced is treated as no filter, as an unknown sort is.
+ * So is a range that starts before today, such as one in a link saved last week.
+ */
+export function readSearchFilters(params: URLSearchParams, today: string = todaySearchDate()): SearchFilters {
   const petType = params.get('petType');
   const minCapacity = Number(params.get('minCapacity'));
   const startDate = params.get('startDate') ?? '';
   const endDate = params.get('endDate') ?? '';
-  const hasDateRange = Boolean(startDate) && !findSearchDateError(startDate, endDate);
+  const hasDateRange = Boolean(startDate) && !findSearchDateError(startDate, endDate, today);
   return {
     petType: petType && isPetSpecies(petType) ? petType : null,
     minCapacity: SEARCH_MIN_CAPACITY_OPTIONS.includes(minCapacity) ? minCapacity : null,

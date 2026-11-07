@@ -116,11 +116,24 @@ describe('searchPublishedListings', () => {
       p_keyword: 'garden',
       p_page: 2,
       p_page_size: PUBLISHED_LISTINGS_PAGE_SIZE,
+      p_sort: 'newest',
     });
     expect(from).toHaveBeenCalledWith('listing_images');
     expect(filterIn).toHaveBeenCalledWith('listing_id', ['listing-1']);
     expect(orderByPosition).toHaveBeenCalledWith('sort_order', { ascending: true });
     expect(orderById).toHaveBeenCalledWith('id', { ascending: true });
+  });
+
+  it('passes the requested sort to the search function', async () => {
+    const rpc = jest.fn().mockResolvedValue({ data: [], error: null });
+    mockedGetSupabaseClient.mockReturnValue({ rpc, from: jest.fn() } as never);
+
+    await searchPublishedListings({ location: '', keyword: '', page: 3, sort: 'capacity' });
+
+    expect(rpc).toHaveBeenCalledWith('search_published_listings', expect.objectContaining({
+      p_page: 3,
+      p_sort: 'capacity',
+    }));
   });
 
   it('returns an empty first page without querying image rows when nothing matches', async () => {

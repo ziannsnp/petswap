@@ -483,15 +483,15 @@ insert into _contract (check_name, passed) values
   ),
   (
     'published listing search RPC has explicit app-role grants and no PUBLIC grant',
-    to_regprocedure('public.search_published_listings(text,text,integer,integer)') is not null
-      and has_function_privilege('anon', 'public.search_published_listings(text,text,integer,integer)', 'EXECUTE')
-      and has_function_privilege('authenticated', 'public.search_published_listings(text,text,integer,integer)', 'EXECUTE')
-      and has_function_privilege('service_role', 'public.search_published_listings(text,text,integer,integer)', 'EXECUTE')
+    to_regprocedure('public.search_published_listings(text,text,integer,integer,text)') is not null
+      and has_function_privilege('anon', 'public.search_published_listings(text,text,integer,integer,text)', 'EXECUTE')
+      and has_function_privilege('authenticated', 'public.search_published_listings(text,text,integer,integer,text)', 'EXECUTE')
+      and has_function_privilege('service_role', 'public.search_published_listings(text,text,integer,integer,text)', 'EXECUTE')
       and not exists (
         select 1
         from pg_proc as procedure,
         lateral aclexplode(coalesce(procedure.proacl, acldefault('f', procedure.proowner))) as privilege
-        where procedure.oid = 'public.search_published_listings(text,text,integer,integer)'::regprocedure
+        where procedure.oid = 'public.search_published_listings(text,text,integer,integer,text)'::regprocedure
           and privilege.grantee = 0
           and privilege.privilege_type = 'EXECUTE'
       )

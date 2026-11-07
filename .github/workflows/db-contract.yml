@@ -33,10 +33,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Use the CLI version that local `npx supabase` gets from web/package-lock.json,
+      # so CI only moves to a new release (such as v3) when the team upgrades it.
+      - name: Read the Supabase CLI version from web/package-lock.json
+        id: supabase-cli
+        run: |
+          version=$(jq -r '.packages["node_modules/supabase"].version' web/package-lock.json)
+          if [ -z "$version" ] || [ "$version" = null ]; then
+            echo "::error::No supabase package in web/package-lock.json"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
       - name: Set up Supabase CLI
         uses: supabase/setup-cli@v1
         with:
-          version: latest
+          version: ${{ steps.supabase-cli.outputs.version }}
 
       - name: Start local Supabase stack
         run: supabase start

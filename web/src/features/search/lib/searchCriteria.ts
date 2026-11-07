@@ -1,21 +1,42 @@
-import type { Listing } from '@/features/listings';
+import type { Listing, PublishedListingSort } from '@/features/listings';
 
 /**
- * The applied search lives in the URL (`/?location=…&keyword=…`) rather than in component
+ * The applied search lives in the URL (`/?location=…&keyword=…&sort=…`) rather than in component
  * state, so a search survives a reload, can be shared as a link, and the back button steps
  * through earlier searches. This module is the only place that knows the parameter names.
  */
+export type SearchSort = PublishedListingSort;
+
+export const DEFAULT_SEARCH_SORT: SearchSort = 'newest';
+
+export const SEARCH_SORT_OPTIONS: readonly { value: SearchSort; label: string }[] = [
+  { value: 'newest', label: 'Newest' },
+  { value: 'oldest', label: 'Oldest' },
+  { value: 'title', label: 'Title (A–Z)' },
+  { value: 'capacity', label: 'Capacity (high to low)' },
+];
+
 export interface SearchCriteria {
   location: string;
   keyword: string;
+  sort: SearchSort;
 }
 
-export const EMPTY_SEARCH_CRITERIA: SearchCriteria = { location: '', keyword: '' };
+/** What decides which listings match; the sort only changes their order. */
+export type SearchTerms = Pick<SearchCriteria, 'location' | 'keyword'>;
+
+export const EMPTY_SEARCH_CRITERIA: SearchCriteria = { location: '', keyword: '', sort: DEFAULT_SEARCH_SORT };
+
+export function readSearchSort(params: URLSearchParams): SearchSort {
+  const value = params.get('sort');
+  return SEARCH_SORT_OPTIONS.find((option) => option.value === value)?.value ?? DEFAULT_SEARCH_SORT;
+}
 
 export function readSearchCriteria(params: URLSearchParams): SearchCriteria {
   return {
     location: params.get('location')?.trim() ?? '',
     keyword: params.get('keyword')?.trim() ?? '',
+    sort: readSearchSort(params),
   };
 }
 
@@ -27,13 +48,14 @@ export function readSearchPage(params: URLSearchParams): number {
   return Number.isSafeInteger(page) ? Math.min(page, 2_147_483_647) : 1;
 }
 
-/** Blank fields are left out, so an empty search is the plain browse-all URL. */
+/** Blank fields and the default sort are left out, so an empty search is the plain browse-all URL. */
 export function toSearchParams(criteria: SearchCriteria, page = 1): URLSearchParams {
   const params = new URLSearchParams();
   const location = criteria.location.trim();
   const keyword = criteria.keyword.trim();
   if (location) params.set('location', location);
   if (keyword) params.set('keyword', keyword);
+  if (criteria.sort !== DEFAULT_SEARCH_SORT) params.set('sort', criteria.sort);
   if (Number.isSafeInteger(page) && page > 1) params.set('page', String(page));
   return params;
 }
@@ -55,7 +77,7 @@ function normalizeSearchText(value: string): string {
  */
 export function filterPublishedListings(
   listings: readonly Listing[],
-  criteria: SearchCriteria,
+  criteria: SearchTerms,
 ): Listing[] {
   const location = normalizeSearchText(criteria.location);
   const keyword = normalizeSearchText(criteria.keyword);

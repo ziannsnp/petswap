@@ -175,6 +175,91 @@ end;
 $$;
 reset role;
 
+alter table public.listings disable trigger set_listing_publication_timestamp;
+update public.listings set published_at = '2026-01-03T00:00:00Z', capacity = 2
+  where id = '30000000-0000-4000-8000-000000000091';
+update public.listings set published_at = '2026-01-01T00:00:00Z', capacity = 5
+  where id = '30000000-0000-4000-8000-000000000092';
+update public.listings set published_at = '2026-01-02T00:00:00Z', capacity = 3
+  where id = '30000000-0000-4000-8000-000000000093';
+alter table public.listings enable trigger set_listing_publication_timestamp;
+
+do $$
+declare
+  sorted_ids uuid[];
+  actual_page integer;
+  total bigint;
+begin
+  select array_agg(id), min(total_count)
+  into sorted_ids, total
+  from public.search_published_listings('', 'quartz', 1, 10, 'newest');
+  if sorted_ids is distinct from array[
+    '30000000-0000-4000-8000-000000000091'::uuid,
+    '30000000-0000-4000-8000-000000000093'::uuid,
+    '30000000-0000-4000-8000-000000000092'::uuid
+  ] then
+    raise exception 'newest sort failed: ids %', sorted_ids;
+  end if;
+
+  select array_agg(id) into sorted_ids
+  from public.search_published_listings('', 'quartz', 1, 10, 'oldest');
+  if sorted_ids is distinct from array[
+    '30000000-0000-4000-8000-000000000092'::uuid,
+    '30000000-0000-4000-8000-000000000093'::uuid,
+    '30000000-0000-4000-8000-000000000091'::uuid
+  ] then
+    raise exception 'oldest sort failed: ids %', sorted_ids;
+  end if;
+
+  select array_agg(id) into sorted_ids
+  from public.search_published_listings('', 'quartz', 1, 10, 'title');
+  if sorted_ids is distinct from array[
+    '30000000-0000-4000-8000-000000000091'::uuid,
+    '30000000-0000-4000-8000-000000000093'::uuid,
+    '30000000-0000-4000-8000-000000000092'::uuid
+  ] then
+    raise exception 'title sort failed: ids %', sorted_ids;
+  end if;
+
+  select array_agg(id) into sorted_ids
+  from public.search_published_listings('', 'quartz', 1, 10, 'capacity');
+  if sorted_ids is distinct from array[
+    '30000000-0000-4000-8000-000000000092'::uuid,
+    '30000000-0000-4000-8000-000000000093'::uuid,
+    '30000000-0000-4000-8000-000000000091'::uuid
+  ] then
+    raise exception 'capacity sort failed: ids %', sorted_ids;
+  end if;
+
+  -- The sort applies across pages: page 2 continues the same ordering, with the search kept.
+  select array_agg(id), min(page_number), min(total_count)
+  into sorted_ids, actual_page, total
+  from public.search_published_listings('', 'quartz', 2, 2, 'oldest');
+  if sorted_ids is distinct from array['30000000-0000-4000-8000-000000000091'::uuid]
+    or actual_page is distinct from 2 or total is distinct from 3 then
+    raise exception 'sorted page 2 failed: ids %, page %, total %', sorted_ids, actual_page, total;
+  end if;
+
+  select array_agg(id) into sorted_ids
+  from public.search_published_listings('', 'quartz', 1, 10);
+  if sorted_ids is distinct from array[
+    '30000000-0000-4000-8000-000000000091'::uuid,
+    '30000000-0000-4000-8000-000000000093'::uuid,
+    '30000000-0000-4000-8000-000000000092'::uuid
+  ] then
+    raise exception 'omitted sort did not default to newest: ids %', sorted_ids;
+  end if;
+
+  begin
+    perform * from public.search_published_listings('', '', 1, 10, 'price');
+    raise exception 'expected an unknown sort to be rejected';
+  exception
+    when raise_exception then
+      if sqlerrm <> 'Sort must be newest, oldest, title, or capacity.' then raise; end if;
+  end;
+end;
+$$;
+
 insert into public.listings (
   owner_id, title, location, description, capacity, accepted_pet_types, status
 )

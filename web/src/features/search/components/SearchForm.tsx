@@ -5,12 +5,19 @@ import { PET_SPECIES_OPTIONS } from '@/shared/lib/petSpecies';
 import {
   EMPTY_SEARCH_CRITERIA,
   SEARCH_MIN_CAPACITY_OPTIONS,
+  earliestSearchEndDate,
   findSearchDateError,
   isSameSearch,
   readSearchFilters,
   toSearchFilterDraft,
+  todaySearchDate,
 } from '../lib/searchCriteria';
 import type { SearchCriteria, SearchDateError, SearchFilterDraft } from '../lib/searchCriteria';
+
+// On a phone the filters sit two to a row, so their side padding shrinks to leave room for
+// the longest option ("Exotic mammal") and the date format.
+const FILTER_SELECT_CLASS = 'input-field h-12 pl-2 pr-1 text-gray-800 sm:px-4';
+const FILTER_DATE_CLASS = 'input-field h-12 px-2 text-gray-800 sm:px-4';
 
 interface SearchFormProps {
   /** The search currently applied, as read from the URL. */
@@ -43,6 +50,9 @@ export function SearchForm({ criteria, page, onSearch }: SearchFormProps) {
     setDateError(null);
   }
 
+  // Read on every render, so a page left open past midnight moves on to the new day.
+  const today = todaySearchDate();
+
   // The sort is applied from the results toolbar, so a clear must reset it too.
   const canClear = Boolean(location || keyword || Object.values(filters).some(Boolean))
     || !isSameSearch(criteria, EMPTY_SEARCH_CRITERIA) || page > 1;
@@ -58,7 +68,7 @@ export function SearchForm({ criteria, page, onSearch }: SearchFormProps) {
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const error = findSearchDateError(filters.startDate, filters.endDate);
+    const error = findSearchDateError(filters.startDate, filters.endDate, today);
     setDateError(error);
     if (error) {
       // Nothing is applied, so what is showing in the results stays as it was.
@@ -68,7 +78,7 @@ export function SearchForm({ criteria, page, onSearch }: SearchFormProps) {
     const next = {
       location: location.trim(),
       keyword: keyword.trim(),
-      ...readSearchFilters(new URLSearchParams(filters)),
+      ...readSearchFilters(new URLSearchParams(filters), today),
       sort: criteria.sort,
     };
     setLocation(next.location);
@@ -142,12 +152,13 @@ export function SearchForm({ criteria, page, onSearch }: SearchFormProps) {
 
       <fieldset>
         <legend className="sr-only">Filters</legend>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {/* Two columns from 360px keep the form short on a phone; narrower screens cannot fit two. */}
+        <div className="grid grid-cols-1 gap-3 min-[360px]:grid-cols-2 lg:grid-cols-4">
           <div>
             <label className="form-label" htmlFor="search-pet-type">Pet type</label>
             <select
               id="search-pet-type"
-              className="input-field h-12 text-gray-800"
+              className={FILTER_SELECT_CLASS}
               value={filters.petType}
               onChange={(event) => changeFilter('petType', event.target.value)}
             >
@@ -161,7 +172,7 @@ export function SearchForm({ criteria, page, onSearch }: SearchFormProps) {
             <label className="form-label" htmlFor="search-min-capacity">Minimum capacity</label>
             <select
               id="search-min-capacity"
-              className="input-field h-12 text-gray-800"
+              className={FILTER_SELECT_CLASS}
               value={filters.minCapacity}
               onChange={(event) => changeFilter('minCapacity', event.target.value)}
             >
@@ -176,8 +187,9 @@ export function SearchForm({ criteria, page, onSearch }: SearchFormProps) {
             <input
               id="search-start-date"
               ref={startDateInputRef}
-              className={`input-field h-12 text-gray-800 ${dateError?.field === 'startDate' ? 'input-field--error' : ''}`}
+              className={`${FILTER_DATE_CLASS} ${dateError?.field === 'startDate' ? 'input-field--error' : ''}`}
               type="date"
+              min={today}
               value={filters.startDate}
               onChange={(event) => changeDate('startDate', event.target.value)}
               aria-invalid={dateError?.field === 'startDate'}
@@ -189,9 +201,9 @@ export function SearchForm({ criteria, page, onSearch }: SearchFormProps) {
             <input
               id="search-end-date"
               ref={endDateInputRef}
-              className={`input-field h-12 text-gray-800 ${dateError?.field === 'endDate' ? 'input-field--error' : ''}`}
+              className={`${FILTER_DATE_CLASS} ${dateError?.field === 'endDate' ? 'input-field--error' : ''}`}
               type="date"
-              min={filters.startDate}
+              min={earliestSearchEndDate(filters.startDate, today)}
               value={filters.endDate}
               onChange={(event) => changeDate('endDate', event.target.value)}
               aria-invalid={dateError?.field === 'endDate'}

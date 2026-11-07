@@ -1,7 +1,9 @@
 import { PUBLISHED_LISTINGS_PAGE_SIZE } from '@/features/listings';
-import { DEFAULT_SEARCH_SORT, EMPTY_SEARCH_CRITERIA, filterPublishedListings, findSearchDateError, findTidiedSearchParams, isSameSearch, readSearchCriteria, readSearchFilters, readSearchPage, readSearchSort, toSearchFilterDraft, toSearchParams } from './searchCriteria';
+import { DEFAULT_SEARCH_SORT, EMPTY_SEARCH_CRITERIA, earliestSearchEndDate, filterPublishedListings, findSearchDateError, findTidiedSearchParams, isSameSearch, readSearchCriteria, readSearchFilters, readSearchPage, readSearchSort, toSearchFilterDraft, toSearchParams, todaySearchDate } from './searchCriteria';
 import {
   SEARCH_RESULTS_PAGE_SIZE,
+  SEARCH_TODAY,
+  fixSearchToday,
   hiddenSearchListings,
   makeSearchPage,
   makeSearchResult,
@@ -14,6 +16,8 @@ import {
 // The listings module is loaded only for its page size. Its Supabase client module reads
 // `import.meta`, which Jest cannot parse, so it is replaced.
 jest.mock('@/shared/lib/supabase', () => ({ getSupabaseClient: jest.fn() }));
+
+fixSearchToday();
 
 describe('search criteria in the URL', () => {
   it('reads a trimmed location and keyword, treating a missing one as empty', () => {
@@ -169,6 +173,7 @@ describe('filters in the URL', () => {
     ['a range that ends on its start', 'startDate=2026-12-05&endDate=2026-12-05'],
     ['a day that does not exist', 'startDate=2026-02-31&endDate=2026-03-02'],
     ['a date in another format', 'startDate=12/01/2026&endDate=12/05/2026'],
+    ['a range that starts before today', 'startDate=2026-11-06&endDate=2026-11-09'],
   ])('treats %s as no filter', (_name, query) => {
     expect(readSearchCriteria(new URLSearchParams(query))).toEqual(EMPTY_SEARCH_CRITERIA);
   });
@@ -187,6 +192,7 @@ describe('filters in the URL', () => {
 describe('date range validation', () => {
   const bothDates = 'Choose both a start date and an end date.';
   const endAfterStart = 'End date must be later than the start date.';
+  const inThePast = 'Start date cannot be in the past.';
 
   it.each([
     ['no dates at all', '', '', null],
@@ -198,8 +204,38 @@ describe('date range validation', () => {
     ['an end on the start', '2026-12-05', '2026-12-05', { field: 'endDate', message: endAfterStart }],
     ['a start that does not exist', '2026-02-31', '2026-03-02', { field: 'startDate', message: 'Enter a valid start date.' }],
     ['an end that does not exist', '2026-04-01', '2026-04-31', { field: 'endDate', message: 'Enter a valid end date.' }],
+    ['a range that starts today', SEARCH_TODAY, '2026-11-08', null],
+    ['a start before today', '2026-11-06', '2026-11-09', { field: 'startDate', message: inThePast }],
+    ['a start before today that is also after the end', '2026-11-05', '2026-11-01', { field: 'startDate', message: inThePast }],
   ])('gives the right answer for %s', (_name, startDate, endDate, expected) => {
     expect(findSearchDateError(startDate, endDate)).toEqual(expected);
+  });
+
+  it('measures the past from the day it is given', () => {
+    expect(findSearchDateError('2026-11-07', '2026-11-09', '2026-11-08')).toEqual({ field: 'startDate', message: inThePast });
+    expect(findSearchDateError('2026-11-06', '2026-11-09', '2026-11-06')).toBeNull();
+  });
+
+  it('reads today from the visitor\'s own calendar, not from UTC', () => {
+    expect(todaySearchDate()).toBe(SEARCH_TODAY);
+    // 01:00 on the 14th in UTC+7 is still the 13th in UTC.
+    expect(todaySearchDate(new Date(2026, 8, 14, 1, 0))).toBe('2026-09-14');
+    expect(todaySearchDate(new Date(2026, 11, 31, 23, 30))).toBe('2026-12-31');
+  });
+});
+
+describe('earliest end date', () => {
+  it.each([
+    ['no start date yet', '', '2026-11-08'],
+    ['a start today', SEARCH_TODAY, '2026-11-08'],
+    ['a later start', '2026-12-05', '2026-12-06'],
+    ['a start before today', '2026-11-01', '2026-11-08'],
+    ['a start that does not exist', '2026-02-31', '2026-11-08'],
+    ['a start at the end of a month', '2026-11-30', '2026-12-01'],
+    ['a start at the end of a year', '2026-12-31', '2027-01-01'],
+    ['a start on the day before a leap day', '2028-02-28', '2028-02-29'],
+  ])('is the day after the start, or after today, for %s', (_name, startDate, expected) => {
+    expect(earliestSearchEndDate(startDate, SEARCH_TODAY)).toBe(expected);
   });
 });
 
@@ -219,6 +255,7 @@ describe('tidying the URL', () => {
     ['an invalid filter', 'keyword=cat&petType=dragon', 1, 'keyword=cat'],
     ['an invalid range', 'startDate=2026-12-05&endDate=2026-12-01&minCapacity=3', 1, 'minCapacity=3'],
     ['half a range', 'endDate=2026-12-05&petType=cat', 1, 'petType=cat'],
+    ['a range that has already started', 'startDate=2026-11-01&endDate=2026-11-10&petType=cat', 1, 'petType=cat'],
     ['the default sort', 'sort=newest&petType=cat', 1, 'petType=cat'],
     ['an explicit first page', 'petType=cat&page=1', 1, 'petType=cat'],
     ['a page past the end', 'petType=cat&page=9', 2, 'petType=cat&page=2'],

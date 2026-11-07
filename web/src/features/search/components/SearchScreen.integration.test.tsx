@@ -6,13 +6,15 @@ import { Link, MemoryRouter, Route, Routes, useLocation, useNavigate } from 'rea
 import { getSupabaseClient } from '@/shared/lib/supabase';
 import { useUpdateBookingStatus } from '@/features/bookings';
 import type { Listing } from '@/features/listings';
-import { makeSearchResult } from '../testing/searchFixtures';
+import { fixSearchToday, makeSearchResult } from '../testing/searchFixtures';
 import { SearchScreen } from './SearchScreen';
 
 // Exercise the real screen, query cache, hook, and adapter. Only the Supabase
 // boundary is replaced; SQL checks verify how the server orders and filters rows.
 jest.mock('@/shared/lib/supabase', () => ({ getSupabaseClient: jest.fn() }));
 jest.mock('@/features/auth', () => ({ useAuth: jest.fn() }));
+
+fixSearchToday();
 
 const rpc = jest.fn();
 const bookingUpdate = jest.fn();

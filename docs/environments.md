@@ -45,6 +45,26 @@ Supabase treats only `.` and `/` as separators, so the single `*` matches both a
 
 Attaching a custom domain later means updating the Site URL, the production entry in Redirect URLs, and the Google OAuth authorised domains to match. The workers.dev URL keeps working alongside a custom domain.
 
+## Auth email
+
+Hosted Auth sends its emails (sign-up confirmation, password recovery) through custom SMTP on a team Gmail account, because Supabase's built-in sender only reaches members of the Supabase project and allows a few emails an hour. Authentication then Emails then SMTP Settings carries:
+
+```text
+Sender     PetSwap <petswap.app.mail@gmail.com>
+Host       smtp.gmail.com
+Port       587
+Username   petswap.app.mail@gmail.com
+Password   a Gmail app password (2-Step Verification must stay on)
+```
+
+The app password is not in the repository; ask a project owner for the account. Gmail rejects the normal account password with `534 5.7.9 Application-specific password required`, which surfaces as a 500 `unexpected_failure` from Auth. Authentication then Rate Limits allows 50 emails an hour, well inside Gmail's daily sending limit. Auth's own log (Logs then Auth), not the API gateway log, shows the SMTP error behind a failed email.
+
+Confirm email is on for the hosted project only. Local `supabase/config.toml` (`enable_confirmations = false`) and the Docker stack (`GOTRUE_MAILER_AUTOCONFIRM`) confirm new accounts automatically, so local sign-ups log in without an inbox. On hosted, every new account, including a teammate's test account, needs an inbox it can open; Gmail `+tag` addresses such as `name+test1@gmail.com` give fresh ones.
+
+With confirmation on, Supabase answers a sign-up for an already-registered email with a fake success (a user with no identities, and no email sent) rather than an error. `signUp()` turns that into the same "already registered" error the app shows when confirmation is off, so a local and a hosted sign-up behave alike.
+
+Gmail is a personal mailbox, so the dashboard warns that deliverability may suffer and some emails land in spam. A transactional provider such as Resend needs a custom domain to send to any address; revisit this together with attaching one.
+
 ## Local setup
 
 Prerequisites:

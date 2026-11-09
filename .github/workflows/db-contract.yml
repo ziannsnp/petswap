@@ -33,10 +33,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Use the CLI version that local `npx supabase` gets from web/package-lock.json,
+      # so CI only moves to a new release (such as v3) when the team upgrades it.
+      - name: Read the Supabase CLI version from web/package-lock.json
+        id: supabase-cli
+        run: |
+          version=$(jq -r '.packages["node_modules/supabase"].version' web/package-lock.json)
+          if [ -z "$version" ] || [ "$version" = null ]; then
+            echo "::error::No supabase package in web/package-lock.json"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
       - name: Set up Supabase CLI
         uses: supabase/setup-cli@v1
         with:
-          version: latest
+          version: ${{ steps.supabase-cli.outputs.version }}
 
       - name: Start local Supabase stack
         run: supabase start
@@ -70,6 +82,9 @@ jobs:
 
       - name: Listing search and pagination checks
         run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/listing_search.test.sql
+
+      - name: Listing filters and availability privacy checks
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/listing_search_filters.test.sql
 
       - name: Avatar storage access behavioural checks
         run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/avatar_storage_access.test.sql

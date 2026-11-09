@@ -46,3 +46,4 @@ Usually does not deserve an ADR:
 | [0007](0007-listing-facility-vocabulary.md) | Listing facilities use the approved prototype vocabulary | Accepted |
 | [0008](0008-docker-compose-stack.md) | Self-contained Docker Compose stack alongside the Supabase CLI | Accepted |
 | [0009](0009-public-availability-via-cloudflare.md) | Public availability through the existing Cloudflare Workers deployment | Accepted |
+| [0010](0010-listing-search-availability-privacy.md) | Public listing availability without exposing private bookings | Accepted |

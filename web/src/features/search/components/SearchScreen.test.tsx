@@ -1,10 +1,12 @@
 /** @jest-environment jsdom */
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, useLocation, useNavigate, useNavigationType } from 'react-router-dom';
 import { usePublishedListingPage } from '@/features/listings';
 import {
   SEARCH_RESULTS_PAGE_SIZE,
+  SEARCH_TODAY,
+  fixSearchToday,
   hiddenSearchListings,
   makeSearchPage,
   makeSearchResult,
@@ -14,6 +16,7 @@ import {
   searchPageCases,
 } from '../testing/searchFixtures';
 import { SearchScreen } from './SearchScreen';
+import { EMPTY_SEARCH_CRITERIA } from '../lib/searchCriteria';
 
 // Only the data hook is replaced. Pet-type labels come from @/shared/lib/petSpecies, which
 // is not mocked, so the cards show the same labels as the rest of the app.
@@ -53,6 +56,8 @@ function renderSearchAt(url: string) {
 }
 
 const urlSearch = () => screen.getByTestId('url-search').textContent;
+
+fixSearchToday();
 
 beforeEach(() => {
   mockedUsePublishedListingPage.mockReturnValue({
@@ -441,5 +446,453 @@ describe('SearchScreen pagination fixtures', () => {
 
     expect(urlSearch()).toBe('?keyword=paged&page=2');
     expect(shownIds()).toHaveLength(SEARCH_RESULTS_PAGE_SIZE);
+  });
+});
+
+describe('SearchScreen sort and reset', () => {
+  function servePages(totalCount = 20) {
+    mockedUsePublishedListingPage.mockImplementation(({ page }) => ({
+      data: makePage([makeSearchResult({ id: `result-${page}`, title: 'Garden home', location: 'Bangkok' })], totalCount, page),
+      isPending: false,
+      isError: false,
+      isFetching: false,
+      refetch: mockRefetch,
+    } as unknown as ReturnType<typeof usePublishedListingPage>));
+  }
+
+  const lastQuery = () => mockedUsePublishedListingPage.mock.calls.at(-1)?.[0];
+
+  it('requests newest first by default and lists every sort option', () => {
+    servePages();
+
+    renderSearchAt('/');
+
+    expect(lastQuery()).toMatchObject({ sort: 'newest', page: 1 });
+    expect(screen.getByLabelText('Sort by')).toHaveValue('newest');
+    expect(within(screen.getByLabelText('Sort by')).getAllByRole('option').map((option) => option.textContent))
+      .toEqual(['Newest', 'Oldest', 'Title (A–Z)', 'Capacity (high to low)']);
+  });
+
+  it('keeps the sort control mounted and focused while an uncached sort loads', async () => {
+    const user = userEvent.setup();
+    mockedUsePublishedListingPage.mockImplementation(({ sort }) => (sort === 'title'
+      ? { data: undefined, isPending: true, isError: false, isFetching: true, refetch: mockRefetch }
+      : { data: makePage([makeSearchResult({ id: 'result-1' })]), isPending: false, isError: false, isFetching: false, refetch: mockRefetch }
+    ) as unknown as ReturnType<typeof usePublishedListingPage>);
+
+    renderSearchAt('/');
+    const select = screen.getByLabelText('Sort by');
+    await user.selectOptions(select, 'title');
+
+    expect(screen.getByRole('status', { name: 'Loading listings' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Sort by')).toBe(select);
+    expect(select).toHaveFocus();
+  });
+
+  it('applies the chosen sort to the search and returns to the first page', async () => {
+    const user = userEvent.setup();
+    servePages();
+
+    renderSearchAt('/?location=Bangkok&keyword=garden&page=2');
+    await user.selectOptions(screen.getByLabelText('Sort by'), 'title');
+
+    expect(urlSearch()).toBe('?location=Bangkok&keyword=garden&sort=title');
+    expect(lastQuery()).toEqual({ ...EMPTY_SEARCH_CRITERIA, location: 'Bangkok', keyword: 'garden', sort: 'title', page: 1 });
+    expect(screen.getByLabelText('Sort by')).toHaveValue('title');
+  });
+
+  it('keeps the sort and the search while moving between pages', async () => {
+    const user = userEvent.setup();
+    servePages();
+
+    renderSearchAt('/?keyword=garden&sort=capacity');
+    await user.click(screen.getByRole('button', { name: 'Next' }));
+
+    expect(urlSearch()).toBe('?keyword=garden&sort=capacity&page=2');
+    expect(lastQuery()).toEqual({ ...EMPTY_SEARCH_CRITERIA, keyword: 'garden', sort: 'capacity', page: 2 });
+  });
+
+  it('keeps the sort when a new search is submitted from a later page', async () => {
+    const user = userEvent.setup();
+    servePages();
+
+    renderSearchAt('/?sort=oldest&page=2');
+    await user.type(screen.getByLabelText('Keyword'), 'garden{Enter}');
+
+    expect(urlSearch()).toBe('?keyword=garden&sort=oldest');
+  });
+
+  it('keeps the sort when the last page replaces a page beyond the range', async () => {
+    mockedUsePublishedListingPage.mockImplementation(({ page }) => ({
+      data: makePage([makeSearchResult({ id: 'last-page' })], 10, page > 2 ? 2 : page),
+      isPending: false,
+      isError: false,
+      isFetching: false,
+      refetch: mockRefetch,
+    } as unknown as ReturnType<typeof usePublishedListingPage>));
+
+    renderSearchAt('/?keyword=garden&sort=title&page=99');
+
+    await waitFor(() => expect(urlSearch()).toBe('?keyword=garden&sort=title&page=2'));
+  });
+
+  it('falls back to newest and tidies the URL for an unknown or default sort', async () => {
+    servePages(5);
+
+    renderSearchAt('/?sort=price');
+    await waitFor(() => expect(urlSearch()).toBe(''));
+    expect(screen.getByLabelText('Sort by')).toHaveValue('newest');
+  });
+
+  it('resets the sort, the search, and the page together with Clear', async () => {
+    const user = userEvent.setup();
+    servePages();
+
+    renderSearchAt('/?location=Bangkok&keyword=garden&sort=title&page=2');
+    await user.click(screen.getByRole('button', { name: 'Clear' }));
+
+    expect(urlSearch()).toBe('');
+    expect(lastQuery()).toEqual({ ...EMPTY_SEARCH_CRITERIA, page: 1 });
+    expect(screen.getByLabelText('Sort by')).toHaveValue('newest');
+    expect(screen.queryByRole('button', { name: 'Clear' })).not.toBeInTheDocument();
+  });
+
+  it('offers Clear when only the sort differs from the default', async () => {
+    const user = userEvent.setup();
+    servePages();
+
+    renderSearchAt('/');
+    expect(screen.queryByRole('button', { name: 'Clear' })).not.toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText('Sort by'), 'oldest');
+    await user.click(screen.getByRole('button', { name: 'Clear' }));
+
+    expect(urlSearch()).toBe('');
+    expect(screen.getByLabelText('Sort by')).toHaveValue('newest');
+  });
+
+  it('offers Clear when only pagination differs from the defaults', async () => {
+    const user = userEvent.setup();
+    servePages();
+    renderSearchAt('/?page=2');
+
+    await user.click(screen.getByRole('button', { name: 'Clear' }));
+
+    expect(urlSearch()).toBe('');
+    expect(lastQuery()).toEqual({ ...EMPTY_SEARCH_CRITERIA, page: 1 });
+    expect(screen.getByText('Page 1 of 3')).toBeInTheDocument();
+    expect(screen.getByLabelText('Location')).toHaveFocus();
+    expect(screen.queryByRole('button', { name: 'Clear' })).not.toBeInTheDocument();
+  });
+
+  it('resets the sort from the no-results state and shows the default listings again', async () => {
+    const user = userEvent.setup();
+    mockedUsePublishedListingPage.mockImplementation(({ keyword }) => ({
+      data: keyword ? makePage([], 0) : makePage([makeSearchResult({ id: 'default-listing', title: 'Default listing' })]),
+      isPending: false,
+      isError: false,
+      isFetching: false,
+      refetch: mockRefetch,
+    } as unknown as ReturnType<typeof usePublishedListingPage>));
+
+    renderSearchAt('/?keyword=nothing&sort=title');
+    await user.click(screen.getByRole('button', { name: 'Clear search' }));
+
+    expect(urlSearch()).toBe('');
+    expect(screen.getByRole('link', { name: 'Default listing' })).toBeInTheDocument();
+    expect(lastQuery()).toMatchObject({ sort: 'newest' });
+  });
+
+  it('steps back to the previous order with the browser back button', async () => {
+    const user = userEvent.setup();
+    servePages();
+
+    renderSearchAt('/?keyword=garden');
+    await user.selectOptions(screen.getByLabelText('Sort by'), 'title');
+    await user.click(screen.getByRole('button', { name: 'Browser back' }));
+
+    expect(urlSearch()).toBe('?keyword=garden');
+    expect(screen.getByLabelText('Sort by')).toHaveValue('newest');
+  });
+});
+
+describe('SearchScreen filters', () => {
+  const fullUrl = '?location=Bangkok&petType=cat&minCapacity=3&startDate=2026-12-01&endDate=2026-12-05&sort=title';
+
+  function servePages(totalCount = 20) {
+    mockedUsePublishedListingPage.mockImplementation(({ page }) => ({
+      data: makePage(
+        [makeSearchResult({ id: `result-${page}`, title: 'Garden home', location: 'Bangkok' })],
+        totalCount,
+        Math.min(page, Math.ceil(totalCount / 9)),
+      ),
+      isPending: false,
+      isError: false,
+      isFetching: false,
+      refetch: mockRefetch,
+    } as unknown as ReturnType<typeof usePublishedListingPage>));
+  }
+
+  const petType = () => screen.getByLabelText('Pet type');
+  const minCapacity = () => screen.getByLabelText('Minimum capacity');
+  const startDate = () => screen.getByLabelText('Start date');
+  const endDate = () => screen.getByLabelText('End date');
+  const setDates = (start: string, end: string) => {
+    fireEvent.change(startDate(), { target: { value: start } });
+    fireEvent.change(endDate(), { target: { value: end } });
+  };
+  const submit = (user: ReturnType<typeof userEvent.setup>) => user.click(screen.getByRole('button', { name: 'Search' }));
+
+  beforeEach(() => servePages());
+
+  it('offers every pet type, a choice of capacities, and two dates in the search form', () => {
+    renderSearchAt('/');
+
+    const form = within(screen.getByRole('search', { name: 'Search listings' }));
+    expect(within(form.getByLabelText('Pet type')).getAllByRole('option').map((option) => option.textContent))
+      .toEqual(['All pet types', 'Dog', 'Cat', 'Rabbit', 'Hamster', 'Guinea pig', 'Fish', 'Reptile', 'Exotic mammal', 'Bird', 'Other']);
+    expect(within(form.getByLabelText('Minimum capacity')).getAllByRole('option').map((option) => option.textContent))
+      .toEqual(['Any capacity', '2+ pets', '3+ pets', '4+ pets', '5+ pets', '6+ pets', '7+ pets', '8+ pets', '9+ pets', '10+ pets']);
+    expect(form.getByLabelText('Start date')).toHaveAttribute('type', 'date');
+    expect(form.getByLabelText('End date')).toHaveAttribute('type', 'date');
+  });
+
+  it('fills the controls from the URL', () => {
+    renderSearchAt(`/${fullUrl}`);
+
+    expect(petType()).toHaveValue('cat');
+    expect(minCapacity()).toHaveValue('3');
+    expect(startDate()).toHaveValue('2026-12-01');
+    expect(endDate()).toHaveValue('2026-12-05');
+    expect(endDate()).toHaveAttribute('min', '2026-12-02');
+  });
+
+  it('offers start dates from today, and end dates from the day after the start', () => {
+    renderSearchAt('/');
+
+    expect(startDate()).toHaveAttribute('min', SEARCH_TODAY);
+    expect(endDate()).toHaveAttribute('min', '2026-11-08');
+
+    fireEvent.change(startDate(), { target: { value: '2026-12-31' } });
+    expect(endDate()).toHaveAttribute('min', '2027-01-01');
+  });
+
+  it('applies a range that starts today', async () => {
+    const user = userEvent.setup();
+    renderSearchAt('/');
+
+    setDates(SEARCH_TODAY, '2026-11-08');
+    await submit(user);
+
+    expect(urlSearch()).toBe(`?startDate=${SEARCH_TODAY}&endDate=2026-11-08`);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('applies nothing until the search is submitted', async () => {
+    const user = userEvent.setup();
+    renderSearchAt('/');
+
+    await user.selectOptions(petType(), 'cat');
+    await user.selectOptions(minCapacity(), '3');
+    setDates('2026-12-01', '2026-12-05');
+
+    expect(urlSearch()).toBe('');
+  });
+
+  it('applies the filters with the search and the sort, and returns to the first page', async () => {
+    const user = userEvent.setup();
+    renderSearchAt('/?location=Bangkok&sort=title&page=2');
+
+    await user.selectOptions(petType(), 'cat');
+    await user.selectOptions(minCapacity(), '3');
+    setDates('2026-12-01', '2026-12-05');
+    await submit(user);
+
+    expect(urlSearch()).toBe(fullUrl);
+    expect(screen.getByTestId('navigation-type')).toHaveTextContent('PUSH');
+  });
+
+  it('keeps everything else when one filter is changed', async () => {
+    const user = userEvent.setup();
+    renderSearchAt(`/${fullUrl}`);
+
+    await user.selectOptions(petType(), 'dog');
+    await submit(user);
+
+    expect(urlSearch()).toBe(fullUrl.replace('petType=cat', 'petType=dog'));
+  });
+
+  it('keeps everything else when one filter is removed', async () => {
+    const user = userEvent.setup();
+    renderSearchAt(`/${fullUrl}`);
+
+    await user.selectOptions(minCapacity(), '');
+    await submit(user);
+
+    expect(urlSearch()).toBe(fullUrl.replace('&minCapacity=3', ''));
+  });
+
+  it('removes the date filter when both dates are emptied', async () => {
+    const user = userEvent.setup();
+    renderSearchAt(`/${fullUrl}`);
+
+    setDates('', '');
+    await submit(user);
+
+    expect(urlSearch()).toBe('?location=Bangkok&petType=cat&minCapacity=3&sort=title');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['ends before it starts', '2026-12-05', '2026-12-01', 'End date', 'End date must be later than the start date.'],
+    ['ends on the day it starts', '2026-12-05', '2026-12-05', 'End date', 'End date must be later than the start date.'],
+    ['has only a start date', '2026-12-05', '', 'End date', 'Choose both a start date and an end date.'],
+    ['has only an end date', '', '2026-12-05', 'Start date', 'Choose both a start date and an end date.'],
+    ['starts before today', '2026-11-06', '2026-11-09', 'Start date', 'Start date cannot be in the past.'],
+  ])('shows an error and applies nothing when the range %s', async (_name, start, end, field, message) => {
+    const user = userEvent.setup();
+    renderSearchAt('/?keyword=garden');
+
+    await user.clear(screen.getByLabelText('Keyword'));
+    await user.type(screen.getByLabelText('Keyword'), 'quiet');
+    await user.selectOptions(petType(), 'cat');
+    setDates(start, end);
+    await submit(user);
+
+    expect(screen.getByRole('alert')).toHaveTextContent(message);
+    expect(urlSearch()).toBe('?keyword=garden');
+    expect(screen.getByLabelText(field)).toHaveFocus();
+    expect(screen.getByLabelText(field)).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByLabelText(field)).toHaveAccessibleDescription(message);
+    expect(screen.getByLabelText('Keyword')).toHaveValue('quiet');
+    expect(petType()).toHaveValue('cat');
+  });
+
+  it('keeps the applied range and the entered dates while a bad range is corrected', async () => {
+    const user = userEvent.setup();
+    renderSearchAt(`/${fullUrl}`);
+
+    setDates('2026-12-10', '2026-12-08');
+    await submit(user);
+
+    expect(urlSearch()).toBe(fullUrl);
+    expect(startDate()).toHaveValue('2026-12-10');
+    expect(endDate()).toHaveValue('2026-12-08');
+
+    fireEvent.change(endDate(), { target: { value: '2026-12-12' } });
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(endDate()).toHaveAttribute('aria-invalid', 'false');
+
+    await submit(user);
+
+    expect(urlSearch()).toBe(fullUrl.replace('2026-12-01', '2026-12-10').replace('2026-12-05', '2026-12-12'));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('keeps the filters when the sort changes, and an unsent filter stays unsent', async () => {
+    const user = userEvent.setup();
+    renderSearchAt('/?petType=cat');
+
+    await user.selectOptions(minCapacity(), '4');
+    await user.selectOptions(screen.getByLabelText('Sort by'), 'title');
+
+    expect(urlSearch()).toBe('?petType=cat&sort=title');
+    expect(minCapacity()).toHaveValue('4');
+  });
+
+  it('keeps the filters while moving between pages', async () => {
+    const user = userEvent.setup();
+    renderSearchAt('/?petType=cat&minCapacity=3');
+
+    await user.click(screen.getByRole('button', { name: 'Next' }));
+
+    expect(urlSearch()).toBe('?petType=cat&minCapacity=3&page=2');
+  });
+
+  it('keeps the filters when the last page replaces a page beyond the range', async () => {
+    renderSearchAt('/?petType=cat&startDate=2026-12-01&endDate=2026-12-05&page=99');
+
+    await waitFor(() => expect(urlSearch()).toBe('?petType=cat&startDate=2026-12-01&endDate=2026-12-05&page=3'));
+  });
+
+  it('tidies invalid filters out of the URL and keeps the valid ones', async () => {
+    renderSearchAt('/?keyword=cat&petType=dragon&minCapacity=3&startDate=2026-12-05&endDate=2026-12-01');
+
+    await waitFor(() => expect(urlSearch()).toBe('?keyword=cat&minCapacity=3'));
+    expect(screen.getByTestId('navigation-type')).toHaveTextContent('REPLACE');
+    expect(petType()).toHaveValue('');
+    expect(minCapacity()).toHaveValue('3');
+    expect(startDate()).toHaveValue('');
+    expect(endDate()).toHaveValue('');
+  });
+
+  it('drops a range that has already started, such as one from an old link', async () => {
+    renderSearchAt('/?petType=cat&startDate=2026-11-01&endDate=2026-11-10');
+
+    await waitFor(() => expect(urlSearch()).toBe('?petType=cat'));
+    expect(screen.getByTestId('navigation-type')).toHaveTextContent('REPLACE');
+    expect(startDate()).toHaveValue('');
+    expect(endDate()).toHaveValue('');
+  });
+
+  it('clears the filters and any date error with the rest of the search', async () => {
+    const user = userEvent.setup();
+    renderSearchAt(`/${fullUrl}`);
+
+    setDates('2026-12-10', '2026-12-08');
+    await submit(user);
+    await user.click(screen.getByRole('button', { name: 'Clear' }));
+
+    expect(urlSearch()).toBe('');
+    expect(petType()).toHaveValue('');
+    expect(minCapacity()).toHaveValue('');
+    expect(startDate()).toHaveValue('');
+    expect(endDate()).toHaveValue('');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Location')).toHaveFocus();
+    expect(screen.queryByRole('button', { name: 'Clear' })).not.toBeInTheDocument();
+  });
+
+  it('empties filters and a date error that were never applied', async () => {
+    const user = userEvent.setup();
+    renderSearchAt('/');
+
+    await user.selectOptions(petType(), 'cat');
+    setDates('2026-12-10', '2026-12-08');
+    await submit(user);
+    await user.click(screen.getByRole('button', { name: 'Clear' }));
+
+    expect(petType()).toHaveValue('');
+    expect(startDate()).toHaveValue('');
+    expect(endDate()).toHaveValue('');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('offers Clear for a filter that is only chosen, or only applied', async () => {
+    const user = userEvent.setup();
+    renderSearchAt('/');
+
+    expect(screen.queryByRole('button', { name: 'Clear' })).not.toBeInTheDocument();
+    await user.selectOptions(petType(), 'cat');
+    expect(screen.getByRole('button', { name: 'Clear' })).toBeInTheDocument();
+
+    await submit(user);
+    await user.selectOptions(petType(), '');
+    expect(screen.getByRole('button', { name: 'Clear' })).toBeInTheDocument();
+  });
+
+  it('shows the earlier filters again when the visitor goes back', async () => {
+    const user = userEvent.setup();
+    renderSearchAt('/?petType=cat');
+
+    await user.selectOptions(petType(), 'dog');
+    setDates('2026-12-01', '2026-12-05');
+    await submit(user);
+    await user.click(screen.getByRole('button', { name: 'Browser back' }));
+
+    expect(urlSearch()).toBe('?petType=cat');
+    expect(petType()).toHaveValue('cat');
+    expect(startDate()).toHaveValue('');
+    expect(endDate()).toHaveValue('');
   });
 });

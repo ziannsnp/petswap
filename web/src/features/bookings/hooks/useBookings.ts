@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { listingKeys } from '@/features/listings';
 import {
   createBookingRequest,
   listIncomingBookings,
@@ -43,6 +44,8 @@ export function useUpdateBookingStatus() {
       updateBookingStatus(values.bookingId, values.status),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['bookings'] });
+      // Confirming or releasing a stay changes availability in every cached search.
+      void queryClient.invalidateQueries({ queryKey: listingKeys.publishedPages() });
     },
   });
 }

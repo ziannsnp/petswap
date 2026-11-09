@@ -4,7 +4,7 @@ export { ListingDetailScreen } from './components/ListingDetailScreen';
 export { ListingsScreen } from './components/ListingsScreen';
 export { useCreateListing } from './hooks/useCreateListing';
 export { useUpdateListing } from './hooks/useUpdateListing';
-export { useDeleteListing, useListing, useMyListings, usePublishedListingPage, usePublishedListings } from './hooks/useListings';
+export { listingKeys, useDeleteListing, useListing, useMyListings, usePublishedListingPage, usePublishedListings } from './hooks/useListings';
 export { createListing, deleteListing, getListing, listMyListings, listPublishedListings, searchPublishedListings, updateListing } from './lib/listingApi';
 export type {
   CreateListingValues,

@@ -2,17 +2,15 @@ import { useEffect, useTransition } from 'react';
 import { Home, RefreshCw } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { usePublishedListingPage } from '@/features/listings';
-import { DEFAULT_SEARCH_SORT, EMPTY_SEARCH_CRITERIA, SEARCH_SORT_OPTIONS, filterPublishedListings, isSameSearch, readSearchCriteria, readSearchPage, readSearchSort, toSearchParams } from '../lib/searchCriteria';
+import { SEARCH_SORT_OPTIONS, filterPublishedListings, findTidiedSearchParams, isSameSearch, readSearchCriteria, readSearchPage, readSearchSort, toSearchParams } from '../lib/searchCriteria';
 import type { SearchCriteria, SearchSort } from '../lib/searchCriteria';
-import { SearchForm } from './SearchForm';
+import { SEARCH_FORM_ID, SearchForm } from './SearchForm';
 import { SearchResultCard } from './SearchResultCard';
 
 export function SearchScreen() {
   const [searchParams, setSearchParams] = useSearchParams();
   const criteria = readSearchCriteria(searchParams);
   const page = readSearchPage(searchParams);
-  const pageParam = searchParams.get('page');
-  const sortParam = searchParams.get('sort');
   const [isSearchPending, startSearchTransition] = useTransition();
   const {
     data: listingPage,
@@ -23,7 +21,8 @@ export function SearchScreen() {
   } = usePublishedListingPage({ ...criteria, page });
   const listings = filterPublishedListings(listingPage?.listings ?? [], criteria);
   const totalPages = Math.ceil((listingPage?.totalCount ?? 0) / (listingPage?.pageSize ?? 1));
-  const hasSearchCriteria = Boolean(criteria.location || criteria.keyword);
+  const hasSearchCriteria = Boolean(criteria.location || criteria.keyword
+    || criteria.petType || criteria.minCapacity || criteria.startDate || criteria.endDate);
   const isActiveSearchLoading = !isPending && (isSearchPending || isFetching);
 
   const search = (next: SearchCriteria) => {
@@ -38,20 +37,10 @@ export function SearchScreen() {
 
   useEffect(() => {
     if (!listingPage) return;
-    const resolvedPage = listingPage.page;
-    // An unknown or default `sort` value is dropped so the address matches what is shown.
-    const hasUnusedSortParam = sortParam !== null
-      && (sortParam !== criteria.sort || criteria.sort === DEFAULT_SEARCH_SORT);
-    const shouldNormalizeUrl = resolvedPage !== page
-      || (pageParam !== null && (page === 1 || pageParam !== String(page)))
-      || hasUnusedSortParam;
-    if (!shouldNormalizeUrl) return;
-    setSearchParams(toSearchParams({
-      location: criteria.location,
-      keyword: criteria.keyword,
-      sort: criteria.sort,
-    }, resolvedPage), { replace: true });
-  }, [criteria.keyword, criteria.location, criteria.sort, listingPage, page, pageParam, setSearchParams, sortParam]);
+    // The address must match what is shown, without adding a history entry.
+    const tidied = findTidiedSearchParams(searchParams, listingPage.page);
+    if (tidied) setSearchParams(tidied, { replace: true });
+  }, [listingPage, searchParams, setSearchParams]);
 
   const goToPage = (nextPage: number) => {
     setSearchParams(toSearchParams(criteria, nextPage));
@@ -59,7 +48,7 @@ export function SearchScreen() {
 
   const changeSort = (sort: SearchSort) => {
     if (sort === criteria.sort) return;
-    // A new order starts again from page 1; the location and keyword stay applied.
+    // A new order starts again from page 1; all applied criteria stay in the URL and query.
     startSearchTransition(() => {
       setSearchParams(toSearchParams({ ...criteria, sort }));
     });
@@ -71,7 +60,7 @@ export function SearchScreen() {
         <div className="page-container">
           <h1 className="mb-2 text-3xl font-bold">Find pet care</h1>
           <p className="mb-6 text-brand-100">Find the right sitter for your pet.</p>
-          <SearchForm criteria={criteria} onSearch={search} />
+          <SearchForm criteria={criteria} page={page} onSearch={search} />
         </div>
       </section>
 
@@ -164,11 +153,11 @@ export function SearchScreen() {
                   </h3>
                   <p className="mt-1 max-w-md text-sm text-gray-500">
                     {hasSearchCriteria
-                      ? 'Try a different location or keyword, or clear your search.'
+                      ? 'Try a different location, keyword, or filter, or clear your search.'
                       : 'Published listings will appear here when they are available.'}
                   </p>
                   {hasSearchCriteria && (
-                    <button className="btn-secondary mt-4 min-h-11" type="button" onClick={() => search(EMPTY_SEARCH_CRITERIA)}>
+                    <button className="btn-secondary mt-4 min-h-11" type="reset" form={SEARCH_FORM_ID}>
                       Clear search
                     </button>
                   )}

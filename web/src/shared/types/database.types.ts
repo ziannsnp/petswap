@@ -232,6 +232,10 @@ export type Database = {
           p_page: number;
           p_page_size: number;
           p_sort?: string;
+          p_pet_type?: Database['public']['Enums']['pet_species'] | null;
+          p_min_capacity?: number | null;
+          p_start_date?: string | null;
+          p_end_date?: string | null;
         };
         Returns: {
           id: string;

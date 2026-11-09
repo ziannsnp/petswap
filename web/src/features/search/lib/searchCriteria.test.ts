@@ -1,7 +1,9 @@
 import { PUBLISHED_LISTINGS_PAGE_SIZE } from '@/features/listings';
-import { DEFAULT_SEARCH_SORT, EMPTY_SEARCH_CRITERIA, filterPublishedListings, isSameSearch, readSearchCriteria, readSearchPage, readSearchSort, toSearchParams } from './searchCriteria';
+import { DEFAULT_SEARCH_SORT, EMPTY_SEARCH_CRITERIA, earliestSearchEndDate, filterPublishedListings, findSearchDateError, findTidiedSearchParams, isSameSearch, readSearchCriteria, readSearchFilters, readSearchPage, readSearchSort, toSearchFilterDraft, toSearchParams, todaySearchDate } from './searchCriteria';
 import {
   SEARCH_RESULTS_PAGE_SIZE,
+  SEARCH_TODAY,
+  fixSearchToday,
   hiddenSearchListings,
   makeSearchPage,
   makeSearchResult,
@@ -15,16 +17,18 @@ import {
 // `import.meta`, which Jest cannot parse, so it is replaced.
 jest.mock('@/shared/lib/supabase', () => ({ getSupabaseClient: jest.fn() }));
 
+fixSearchToday();
+
 describe('search criteria in the URL', () => {
   it('reads a trimmed location and keyword, treating a missing one as empty', () => {
     expect(readSearchCriteria(new URLSearchParams('location=%20Chiang%20Mai%20&keyword=garden')))
-      .toEqual({ location: 'Chiang Mai', keyword: 'garden', sort: 'newest' });
-    expect(readSearchCriteria(new URLSearchParams(''))).toEqual({ location: '', keyword: '', sort: 'newest' });
+      .toEqual({ ...EMPTY_SEARCH_CRITERIA, location: 'Chiang Mai', keyword: 'garden' });
+    expect(readSearchCriteria(new URLSearchParams(''))).toEqual(EMPTY_SEARCH_CRITERIA);
   });
 
   it('leaves blank fields out, so an empty search is the plain browse-all URL', () => {
-    expect(toSearchParams({ location: '   ', keyword: '', sort: 'newest' }).toString()).toBe('');
-    expect(toSearchParams({ location: ' Bangkok ', keyword: '', sort: 'newest' }).toString()).toBe('location=Bangkok');
+    expect(toSearchParams({ ...EMPTY_SEARCH_CRITERIA, location: '   ' }).toString()).toBe('');
+    expect(toSearchParams({ ...EMPTY_SEARCH_CRITERIA, location: ' Bangkok ' }).toString()).toBe('location=Bangkok');
   });
 
   it('reads only positive safe-integer page values and defaults invalid values to the first page', () => {
@@ -38,7 +42,7 @@ describe('search criteria in the URL', () => {
   });
 
   it('stores later pages beside the applied search while omitting the first page', () => {
-    const criteria = { location: 'Bangkok', keyword: 'garden', sort: 'newest' as const };
+    const criteria = { ...EMPTY_SEARCH_CRITERIA, location: 'Bangkok', keyword: 'garden' };
     expect(toSearchParams(criteria).toString()).    toBe('location=Bangkok&keyword=garden');    expect(toSearchParams(criteria, 2).toString()).toBe('location=Bangkok&keyword=garden&page=2');
   });
 
@@ -113,7 +117,7 @@ describe('search fixtures', () => {
 
 describe('sort in the URL', () => {
   it.each(['oldest', 'title', 'capacity'] as const)('reads and writes the %s sort beside the search and page', (sort) => {
-    const criteria = { location: 'Bangkok', keyword: 'garden', sort };
+    const criteria = { ...EMPTY_SEARCH_CRITERIA, location: 'Bangkok', keyword: 'garden', sort };
 
     expect(readSearchCriteria(new URLSearchParams(`location=Bangkok&keyword=garden&sort=${sort}`))).toEqual(criteria);
     expect(toSearchParams(criteria, 2).toString()).toBe(`location=Bangkok&keyword=garden&sort=${sort}&page=2`);
@@ -128,6 +132,135 @@ describe('sort in the URL', () => {
   it('treats a different sort as a different search, and the empty search as the default sort', () => {
     expect(isSameSearch(EMPTY_SEARCH_CRITERIA, { ...EMPTY_SEARCH_CRITERIA, sort: 'title' })).toBe(false);
     expect(EMPTY_SEARCH_CRITERIA.sort).toBe(DEFAULT_SEARCH_SORT);
+  });
+});
+
+describe('filters in the URL', () => {
+  const filtered = {
+    ...EMPTY_SEARCH_CRITERIA,
+    location: 'Bangkok',
+    petType: 'guinea_pig' as const,
+    minCapacity: 3,
+    startDate: '2026-12-01',
+    endDate: '2026-12-05',
+    sort: 'title' as const,
+  };
+  const filteredUrl = 'location=Bangkok&petType=guinea_pig&minCapacity=3&startDate=2026-12-01&endDate=2026-12-05&sort=title';
+
+  it('reads and writes every filter beside the search, the sort, and the page', () => {
+    expect(readSearchCriteria(new URLSearchParams(filteredUrl))).toEqual(filtered);
+    expect(toSearchParams(filtered).toString()).toBe(filteredUrl);
+    expect(toSearchParams(filtered, 2).toString()).toBe(`${filteredUrl}&page=2`);
+  });
+
+  it('treats a different filter as a different search', () => {
+    expect(isSameSearch(filtered, { ...filtered })).toBe(true);
+    expect(isSameSearch(filtered, { ...filtered, petType: 'cat' })).toBe(false);
+    expect(isSameSearch(filtered, { ...filtered, minCapacity: null })).toBe(false);
+    expect(isSameSearch(filtered, { ...filtered, endDate: '2026-12-06' })).toBe(false);
+  });
+
+  it.each([
+    ['an unknown pet type', 'petType=dragon'],
+    ['a blank pet type', 'petType='],
+    ['a capacity every listing meets', 'minCapacity=1'],
+    ['a capacity beyond the options', 'minCapacity=11'],
+    ['a fractional capacity', 'minCapacity=2.5'],
+    ['a capacity that is not a number', 'minCapacity=many'],
+    ['a start date alone', 'startDate=2026-12-01'],
+    ['an end date alone', 'endDate=2026-12-05'],
+    ['a range that ends before it starts', 'startDate=2026-12-05&endDate=2026-12-01'],
+    ['a range that ends on its start', 'startDate=2026-12-05&endDate=2026-12-05'],
+    ['a day that does not exist', 'startDate=2026-02-31&endDate=2026-03-02'],
+    ['a date in another format', 'startDate=12/01/2026&endDate=12/05/2026'],
+    ['a range that starts before today', 'startDate=2026-11-06&endDate=2026-11-09'],
+  ])('treats %s as no filter', (_name, query) => {
+    expect(readSearchCriteria(new URLSearchParams(query))).toEqual(EMPTY_SEARCH_CRITERIA);
+  });
+
+  it('turns the control values back into the same filters', () => {
+    const { petType, minCapacity, startDate, endDate } = filtered;
+    const filters = { petType, minCapacity, startDate, endDate };
+    const empty = { petType: null, minCapacity: null, startDate: null, endDate: null };
+
+    expect(readSearchFilters(new URLSearchParams(toSearchFilterDraft(filters)))).toEqual(filters);
+    expect(toSearchFilterDraft(empty)).toEqual({ petType: '', minCapacity: '', startDate: '', endDate: '' });
+    expect(readSearchFilters(new URLSearchParams(toSearchFilterDraft(empty)))).toEqual(empty);
+  });
+});
+
+describe('date range validation', () => {
+  const bothDates = 'Choose both a start date and an end date.';
+  const endAfterStart = 'End date must be later than the start date.';
+  const inThePast = 'Start date cannot be in the past.';
+
+  it.each([
+    ['no dates at all', '', '', null],
+    ['a one-night range', '2026-12-01', '2026-12-02', null],
+    ['a range across a new year', '2026-12-31', '2027-01-01', null],
+    ['an end date alone', '', '2026-12-05', { field: 'startDate', message: bothDates }],
+    ['a start date alone', '2026-12-01', '', { field: 'endDate', message: bothDates }],
+    ['an end before the start', '2026-12-05', '2026-12-01', { field: 'endDate', message: endAfterStart }],
+    ['an end on the start', '2026-12-05', '2026-12-05', { field: 'endDate', message: endAfterStart }],
+    ['a start that does not exist', '2026-02-31', '2026-03-02', { field: 'startDate', message: 'Enter a valid start date.' }],
+    ['an end that does not exist', '2026-04-01', '2026-04-31', { field: 'endDate', message: 'Enter a valid end date.' }],
+    ['a range that starts today', SEARCH_TODAY, '2026-11-08', null],
+    ['a start before today', '2026-11-06', '2026-11-09', { field: 'startDate', message: inThePast }],
+    ['a start before today that is also after the end', '2026-11-05', '2026-11-01', { field: 'startDate', message: inThePast }],
+  ])('gives the right answer for %s', (_name, startDate, endDate, expected) => {
+    expect(findSearchDateError(startDate, endDate)).toEqual(expected);
+  });
+
+  it('measures the past from the day it is given', () => {
+    expect(findSearchDateError('2026-11-07', '2026-11-09', '2026-11-08')).toEqual({ field: 'startDate', message: inThePast });
+    expect(findSearchDateError('2026-11-06', '2026-11-09', '2026-11-06')).toBeNull();
+  });
+
+  it('reads today from the visitor\'s own calendar, not from UTC', () => {
+    expect(todaySearchDate()).toBe(SEARCH_TODAY);
+    // 01:00 on the 14th in UTC+7 is still the 13th in UTC.
+    expect(todaySearchDate(new Date(2026, 8, 14, 1, 0))).toBe('2026-09-14');
+    expect(todaySearchDate(new Date(2026, 11, 31, 23, 30))).toBe('2026-12-31');
+  });
+});
+
+describe('earliest end date', () => {
+  it.each([
+    ['no start date yet', '', '2026-11-08'],
+    ['a start today', SEARCH_TODAY, '2026-11-08'],
+    ['a later start', '2026-12-05', '2026-12-06'],
+    ['a start before today', '2026-11-01', '2026-11-08'],
+    ['a start that does not exist', '2026-02-31', '2026-11-08'],
+    ['a start at the end of a month', '2026-11-30', '2026-12-01'],
+    ['a start at the end of a year', '2026-12-31', '2027-01-01'],
+    ['a start on the day before a leap day', '2028-02-28', '2028-02-29'],
+  ])('is the day after the start, or after today, for %s', (_name, startDate, expected) => {
+    expect(earliestSearchEndDate(startDate, SEARCH_TODAY)).toBe(expected);
+  });
+});
+
+describe('tidying the URL', () => {
+  const filteredUrl = 'petType=cat&minCapacity=3&startDate=2026-12-01&endDate=2026-12-05&sort=title';
+
+  it('leaves a URL alone when it says what is applied', () => {
+    expect(findTidiedSearchParams(new URLSearchParams(filteredUrl), 1)).toBeNull();
+    expect(findTidiedSearchParams(new URLSearchParams(`${filteredUrl}&page=2`), 2)).toBeNull();
+  });
+
+  it('leaves blank or padded text for the next submit', () => {
+    expect(findTidiedSearchParams(new URLSearchParams('location=%20Bangkok&keyword='), 1)).toBeNull();
+  });
+
+  it.each([
+    ['an invalid filter', 'keyword=cat&petType=dragon', 1, 'keyword=cat'],
+    ['an invalid range', 'startDate=2026-12-05&endDate=2026-12-01&minCapacity=3', 1, 'minCapacity=3'],
+    ['half a range', 'endDate=2026-12-05&petType=cat', 1, 'petType=cat'],
+    ['a range that has already started', 'startDate=2026-11-01&endDate=2026-11-10&petType=cat', 1, 'petType=cat'],
+    ['the default sort', 'sort=newest&petType=cat', 1, 'petType=cat'],
+    ['an explicit first page', 'petType=cat&page=1', 1, 'petType=cat'],
+    ['a page past the end', 'petType=cat&page=9', 2, 'petType=cat&page=2'],
+  ])('replaces %s and keeps the rest', (_name, query, resolvedPage, expected) => {
+    expect(findTidiedSearchParams(new URLSearchParams(query), resolvedPage)?.toString()).toBe(expected);
   });
 });
 

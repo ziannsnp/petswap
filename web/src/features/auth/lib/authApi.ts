@@ -180,6 +180,12 @@ export async function signUp(input: SignUpInput): Promise<SignUpResult> {
     throw new SignUpError('UNKNOWN');
   }
 
+  // With email confirmation on, Supabase answers an already-registered email with a fake
+  // user that has no identities, instead of an error, and sends no email.
+  if (data.user.identities?.length === 0) {
+    throw new SignUpError('EMAIL_ALREADY_USED');
+  }
+
   return {
     user: data.user,
     session: data.session,

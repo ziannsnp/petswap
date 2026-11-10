@@ -40,3 +40,9 @@ export type SignInErrorCode =
   | 'RATE_LIMITED'
   | 'NETWORK'
   | 'UNKNOWN';
+
+export type ResendConfirmationErrorCode =
+  | 'INVALID_EMAIL'
+  | 'RATE_LIMITED'
+  | 'NETWORK'
+  | 'UNKNOWN';

@@ -200,7 +200,7 @@ describe('RegisterScreen', () => {
     expect(mutateAsync).not.toHaveBeenCalled();
   });
 
-  it('forwards the entered values and shows the confirmation message when no session is returned', async () => {
+  it('forwards the entered values and navigates to /check-email when no session is returned', async () => {
     const user = userEvent.setup();
     const mutateAsync = jest.fn().mockResolvedValue({ user: { id: 'user-1' }, session: null });
     mockedUseSignUp.mockReturnValue(mutationResult({ mutateAsync }));
@@ -220,34 +220,12 @@ describe('RegisterScreen', () => {
       password: 'Password1!',
       displayName: 'Pat',
     });
-    expect(await screen.findByRole('status')).toHaveTextContent(
-      'Check your email to confirm your account',
+    await waitFor(() =>
+      expect(mockNavigate).toHaveBeenCalledWith('/check-email', {
+        replace: true,
+        state: { email: 'pet@example.com' },
+      }),
     );
-    expect(mockNavigate).not.toHaveBeenCalled();
-  });
-
-  it('keeps the confirmation visible when the user edits a field afterwards', async () => {
-    const user = userEvent.setup();
-    const mutateAsync = jest.fn().mockResolvedValue({ user: { id: 'user-1' }, session: null });
-    mockedUseSignUp.mockReturnValue(mutationResult({ mutateAsync }));
-    renderForm();
-
-    await user.type(screen.getByLabelText(/email/i), 'pet@example.com');
-    await user.type(screen.getByLabelText(/username/i), 'pat_sitter');
-    await user.type(screen.getByLabelText(/^password$/i), 'Password1!');
-    await user.type(screen.getByLabelText(/confirm password/i), 'Password1!');
-    await user.type(screen.getByLabelText(/display name/i), 'Pat');
-    await user.click(screen.getByRole('checkbox'));
-    await user.click(screen.getByRole('button', { name: /create account/i }));
-
-    expect(await screen.findByRole('status')).toBeInTheDocument();
-
-    // The account exists on the server now. A keystroke must not erase the only
-    // record of that, or the user is left on a blank form believing it failed.
-    await user.type(screen.getByLabelText(/display name/i), 'x');
-
-    expect(screen.getByRole('status')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /go to sign in/i })).toBeInTheDocument();
   });
 
   it('redirects to / when signup returns a session', async () => {

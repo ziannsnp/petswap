@@ -1,5 +1,6 @@
 export { AuthScreen } from './components/AuthScreen';
 export { RegisterScreen } from './components/RegisterScreen';
+export { CheckEmailScreen } from './components/CheckEmailScreen';
 export { ProtectedRoute } from './components/ProtectedRoute';
 export { LogoutButton, type LogoutButtonProps } from './components/LogoutButton';
 export { LogoutConfirmDialog, type LogoutConfirmDialogProps } from './components/LogoutConfirmDialog';

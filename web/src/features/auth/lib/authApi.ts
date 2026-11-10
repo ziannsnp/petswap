@@ -8,6 +8,7 @@ import {
   type User,
 } from '@supabase/supabase-js';
 import type {
+  ResendConfirmationErrorCode,
   SignInErrorCode,
   SignInInput,
   SignInResult,
@@ -15,6 +16,7 @@ import type {
   SignUpInput,
   SignUpResult,
 } from '../types';
+import { isValidEmail, normalizeEmail } from './email';
 import { isValidPassword } from './password';
 import { isValidUsername, normalizeUsername, USERNAME_REQUIREMENTS_MESSAGE } from './username';
 
@@ -39,6 +41,13 @@ const SIGN_IN_ERROR_MESSAGES: Record<SignInErrorCode, string> = {
   UNKNOWN: "We couldn't sign you in. Please try again.",
 };
 
+const RESEND_ERROR_MESSAGES: Record<ResendConfirmationErrorCode, string> = {
+  INVALID_EMAIL: 'Enter a valid email address.',
+  RATE_LIMITED: 'Too many attempts. Please try again later.',
+  NETWORK: 'Unable to connect. Check your internet connection and try again.',
+  UNKNOWN: 'We could not resend the confirmation email. Please try again.',
+};
+
 interface UsernameSignInResponse {
   accessToken: string;
   refreshToken: string;
@@ -59,6 +68,13 @@ export class SignInError extends Error {
   constructor(public readonly code: SignInErrorCode) {
     super(SIGN_IN_ERROR_MESSAGES[code]);
     this.name = 'SignInError';
+  }
+}
+
+export class ResendConfirmationError extends Error {
+  constructor(public readonly code: ResendConfirmationErrorCode) {
+    super(RESEND_ERROR_MESSAGES[code]);
+    this.name = 'ResendConfirmationError';
   }
 }
 
@@ -102,6 +118,22 @@ export function translateSignInError(error: AuthError): SignInError {
       return new SignInError('RATE_LIMITED');
     default:
       return new SignInError('UNKNOWN');
+  }
+}
+
+export function translateResendError(error: AuthError): ResendConfirmationError {
+  if (isAuthRetryableFetchError(error)) {
+    return new ResendConfirmationError('NETWORK');
+  }
+
+  switch (error.code) {
+    case 'email_address_invalid':
+      return new ResendConfirmationError('INVALID_EMAIL');
+    case 'over_email_send_rate_limit':
+    case 'over_request_rate_limit':
+      return new ResendConfirmationError('RATE_LIMITED');
+    default:
+      return new ResendConfirmationError('UNKNOWN');
   }
 }
 
@@ -249,6 +281,24 @@ export async function signIn(input: SignInInput): Promise<SignInResult> {
   }
 
   return { user: data.user, session: data.session };
+}
+
+export async function resendConfirmationEmail(email: string): Promise<void> {
+  const normalized = normalizeEmail(email);
+
+  if (!normalized || !isValidEmail(normalized)) {
+    throw new ResendConfirmationError('INVALID_EMAIL');
+  }
+
+  const supabase = getSupabaseClient();
+  const { error } = await supabase.auth.resend({
+    type: 'signup',
+    email: normalized,
+  });
+
+  if (error) {
+    throw translateResendError(error);
+  }
 }
 
 export async function getCurrentSession(): Promise<Session | null> {

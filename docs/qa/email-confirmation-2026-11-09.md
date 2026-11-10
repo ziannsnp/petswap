@@ -4,7 +4,7 @@
 | --- | --- |
 | Requirement / story | FR-1.1 — custom SMTP on hosted Supabase, email confirmation on hosted only, and a confirmed account logging in by email or username |
 | Tester | Liger |
-| Date and environment | 2026-11-09, hosted Supabase project `gqtdnckwubfdghynavwg`. Steps 5–11 on the branch preview `https://feature-email-confirmation-petswap-web.zianporrutai.workers.dev` (`main` at `54a470b` plus this branch); the confirmation link opens the Site URL (production) |
+| Date and environment | TODO, hosted Supabase project `gqtdnckwubfdghynavwg`. Steps 5–11 on `npm run dev` (`http://localhost:5173`) from this branch (`main` at `35798b4` plus this branch) with `web/.env.local` pointing at the hosted project, because Cloudflare builds no branch previews; the confirmation link opens the Site URL (production) |
 | Browser and viewport | TODO |
 | Test data | A fresh Gmail `+tag` address outside the Supabase project, e.g. `<name>+confirm1@gmail.com`, username TODO. No password is recorded here |
 
@@ -18,7 +18,7 @@ Steps 1–4 are Supabase Dashboard settings; steps 5–11 run in the browser. Lo
 | 2 | Open Authentication → Rate Limits. | Emails sent per hour is 50. | TODO | TODO | [02](evidence/email-confirm-02.png) |
 | 3 | Send a password recovery email to an address outside the Supabase project. | It arrives from **PetSwap** and appears in the team Gmail's Sent folder. | TODO | TODO | [03](evidence/email-confirm-03.png) |
 | 4 | Open Authentication → Sign In / Providers → Email and turn on **Confirm email**. | The setting is saved as on. | TODO | TODO | [04](evidence/email-confirm-04.png) |
-| 5 | Register with the fresh address. | The app shows that a confirmation email was sent; the user is not signed in. | TODO | TODO | [05](evidence/email-confirm-05.png) |
+| 5 | Register with the fresh address. | The **Check your email** screen opens with the address and a Resend button; the user is not signed in. | TODO | TODO | [05](evidence/email-confirm-05.png) |
 | 6 | Before confirming, log in with the email, then with the username. | Both show **Confirm your email address before signing in.** | TODO | TODO | [06a](evidence/email-confirm-06a.png), [06b](evidence/email-confirm-06b.png) |
 | 7 | Open the inbox. | The confirmation email arrives from **PetSwap**. | TODO | TODO | [07](evidence/email-confirm-07.png) |
 | 8 | Click the link in the email. | It opens the PetSwap site, not `localhost`. | TODO | TODO | [08](evidence/email-confirm-08.png) |

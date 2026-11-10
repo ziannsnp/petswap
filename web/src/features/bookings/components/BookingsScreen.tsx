@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { UseQueryResult } from '@tanstack/react-query';
+import { PetCareInfo, hasPetCareInfo } from '@/features/pets';
 import { useIncomingBookings, useOutgoingBookings, useUpdateBookingStatus } from '../hooks/useBookings';
 import { BookingConflictError } from '../lib/bookingErrors';
 import type { BookingWithDetails } from '../lib/bookingApi';
@@ -63,6 +64,13 @@ function BookingCard({ booking, variant, onConfirm, onDecline, onCancel, onCompl
       <p className="booking-card__dates">
         {formatBookingDate(booking.start_date)} &ndash; {formatBookingDate(booking.end_date)}
       </p>
+      {/* FR-2.2: the host sees the pet's care notes on the request; the requester owns the pet
+          and already sees them on My Pets. */}
+      {variant === 'incoming' && (hasPetCareInfo(booking.pet) ? (
+        <PetCareInfo pet={booking.pet} className="mt-3 border-t border-gray-100 pt-3" />
+      ) : (
+        <p className="mt-3 text-sm text-gray-500">No care information added.</p>
+      ))}
       {(canRespond || canCancel || canComplete) && (
         <div className="booking-card__actions">
           {canRespond && (

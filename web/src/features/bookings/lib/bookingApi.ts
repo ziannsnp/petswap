@@ -7,7 +7,22 @@ export { BookingConflictError };
 export type Booking = Database['public']['Tables']['bookings']['Row'];
 export type BookingInsert = Database['public']['Tables']['bookings']['Insert'];
 
-export type BookingPetSummary = Pick<Database['public']['Tables']['pets']['Row'], 'id' | 'name' | 'species' | 'photo_url'>;
+type PetRow = Database['public']['Tables']['pets']['Row'];
+
+/** Care notes travel with the pet so the host can read them on the request (FR-2.2). */
+export type BookingPetSummary = Pick<
+  PetRow,
+  | 'id'
+  | 'name'
+  | 'species'
+  | 'photo_url'
+  | 'feeding_instruction'
+  | 'medical_note'
+  | 'behavior_note'
+  | 'allergies'
+  | 'vaccination_info'
+  | 'special_requirement'
+>;
 export type BookingListingSummary = Pick<Database['public']['Tables']['listings']['Row'], 'id' | 'title' | 'location'>;
 
 /** A booking plus enough pet/listing context to render FR-5.3's outgoing/incoming lists. */
@@ -30,7 +45,10 @@ async function getCurrentUserId(): Promise<string> {
   return data.user.id;
 }
 
-const BOOKING_DETAILS_SELECT = '*, pet:pets(id, name, species, photo_url), listing:listings(id, title, location)';
+// RLS lets a listing owner read a pet booked at their listing, care columns included.
+const BOOKING_PET_SELECT =
+  'pet:pets(id, name, species, photo_url, feeding_instruction, medical_note, behavior_note, allergies, vaccination_info, special_requirement)' as const;
+const BOOKING_DETAILS_SELECT = `*, ${BOOKING_PET_SELECT}, listing:listings(id, title, location)` as const;
 
 /** Bookings the current user requested, regardless of who owns the listing. */
 export async function listOutgoingBookings(): Promise<BookingWithDetails[]> {
@@ -55,7 +73,7 @@ export async function listIncomingBookings(): Promise<BookingWithDetails[]> {
 
   const { data, error } = await getSupabaseClient()
     .from('bookings')
-    .select('*, pet:pets(id, name, species, photo_url), listing:listings!inner(id, title, location, owner_id)')
+    .select(`*, ${BOOKING_PET_SELECT}, listing:listings!inner(id, title, location, owner_id)` as const)
     .eq('listing.owner_id', userId)
     .order('created_at', { ascending: false });
 

@@ -57,7 +57,7 @@ Username   petswap.app.mail@gmail.com
 Password   a Gmail app password (2-Step Verification must stay on)
 ```
 
-The app password is not in the repository; ask a project owner for the account. Gmail rejects the normal account password with `534 5.7.9 Application-specific password required`, which surfaces as a 500 `unexpected_failure` from Auth. Authentication then Rate Limits allows 50 emails an hour, well inside Gmail's daily sending limit. Auth's own log (Logs then Auth), not the API gateway log, shows the SMTP error behind a failed email.
+The app password is not in the repository; ask a project owner for the account. Gmail rejects the normal account password with `534 5.7.9 Application-specific password required`, which surfaces as a 500 `unexpected_failure` from Auth. Authentication then Rate Limits allows 50 emails an hour, well inside Gmail's daily sending limit, and at least 60 seconds between emails to the same user, which the Check your email screen's Resend cooldown (`RESEND_COOLDOWN_SECONDS`) matches. Auth's own log (Logs then Auth), not the API gateway log, shows the SMTP error behind a failed email.
 
 Confirm email is on for the hosted project only. Local `supabase/config.toml` (`enable_confirmations = false`) and the Docker stack (`GOTRUE_MAILER_AUTOCONFIRM`) confirm new accounts automatically, so local sign-ups log in without an inbox. On hosted, every new account, including a teammate's test account, needs an inbox it can open; Gmail `+tag` addresses such as `name+test1@gmail.com` give fresh ones.
 

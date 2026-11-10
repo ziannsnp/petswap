@@ -135,6 +135,34 @@ describe('signUp', () => {
     ).resolves.toEqual({ user, session: null });
   });
 
+  it('accepts a new account waiting for email confirmation', async () => {
+    const user = { id: 'user-1', identities: [{ provider: 'email' }] } as unknown as User;
+    arrangeSignUpResult({ data: { user, session: null }, error: null });
+
+    await expect(
+      signUp({
+        email: 'pet@example.com',
+        username: 'pat_sitter',
+        password: 'Password1!',
+        displayName: 'Pat',
+      }),
+    ).resolves.toEqual({ user, session: null });
+  });
+
+  it('reports an already-registered email when confirmation hides it behind a user without identities', async () => {
+    const user = { id: 'fake-user', identities: [] } as unknown as User;
+    arrangeSignUpResult({ data: { user, session: null }, error: null });
+
+    await expect(
+      signUp({
+        email: 'pet@example.com',
+        username: 'pat_sitter',
+        password: 'Password1!',
+        displayName: 'Pat',
+      }),
+    ).rejects.toEqual(new SignUpError('EMAIL_ALREADY_USED'));
+  });
+
   it.each([
     ['email_exists', 'EMAIL_ALREADY_USED', 'This email is already registered.'],
     ['user_already_exists', 'EMAIL_ALREADY_USED', 'This email is already registered.'],

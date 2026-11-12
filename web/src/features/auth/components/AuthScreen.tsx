@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { Eye, EyeOff, PawPrint } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useConfirmationLanding } from '../hooks/useConfirmationLanding';
 import { useSignIn } from '../hooks/useSignIn';
 import { SignInError } from '../lib/authApi';
 import { isValidEmail } from '../lib/email';
@@ -11,6 +12,9 @@ const IDENTIFIER_REQUIREMENTS_MESSAGE = 'Enter a valid email address or username
 const INCOMPLETE_MESSAGE = 'Complete all required fields.';
 const GENERIC_FAILURE_MESSAGE = "We couldn't sign you in. Please try again.";
 const DEFAULT_DESTINATION = '/';
+export const CONFIRMED_MESSAGE = 'Your email is confirmed. Sign in to continue.';
+export const CONFIRMATION_FAILED_MESSAGE =
+  'This confirmation link is invalid or has expired. Try signing in, or request a new link from the Check your email screen.';
 
 type FieldName = 'identifier' | 'password';
 type FieldErrors = Partial<Record<FieldName, string>>;
@@ -105,6 +109,7 @@ export function AuthScreen() {
   const navigate = useNavigate();
   const location = useLocation();
   const signInMutation = useSignIn();
+  const confirmationOutcome = useConfirmationLanding();
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [passwordVisible, setPasswordVisible] = useState(false);
@@ -205,6 +210,20 @@ export function AuthScreen() {
         </div>
 
         <h2 className="text-lg font-semibold text-gray-900">Sign in to your account</h2>
+
+        {confirmationOutcome === 'confirmed' && (
+          <p
+            role="status"
+            className="mt-4 border-l-4 border-green-600 bg-green-50 px-4 py-3 text-sm text-green-800"
+          >
+            {CONFIRMED_MESSAGE}
+          </p>
+        )}
+        {confirmationOutcome === 'failed' && (
+          <p role="status" className="mt-4 form-alert">
+            {CONFIRMATION_FAILED_MESSAGE}
+          </p>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4 mt-4" noValidate>
           <div>

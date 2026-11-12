@@ -41,6 +41,8 @@ https://*-petswap-web.zianporrutai.workers.dev/**
 http://localhost:5173/**
 ```
 
+The same list governs the confirmation email. `signUp()` and the Resend button pass `emailRedirectTo` as `<current origin>/login?confirmed=1`, so the link returns to the host the visitor signed up on: production, a branch preview, or `localhost`. The login page then shows **Your email is confirmed. Sign in to continue.** and signs out the session that following the link created, so the visitor signs in themselves. An expired or already-used link lands on the same page with a message saying so. If an origin is missing from Redirect URLs, Supabase ignores `emailRedirectTo` and sends the link to the Site URL root instead, which confirms the account but shows no message.
+
 Supabase treats only `.` and `/` as separators, so the single `*` matches both a version id and a slugified branch name without reaching another host. Google Cloud Console needs no per-preview change, because its only authorised redirect URI is the Supabase callback.
 
 Attaching a custom domain later means updating the Site URL, the production entry in Redirect URLs, and the Google OAuth authorised domains to match. The workers.dev URL keeps working alongside a custom domain.

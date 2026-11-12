@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, jest } from '@jest/globals';
+import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 import {
   AuthRetryableFetchError,
   FunctionsFetchError,
@@ -12,6 +12,7 @@ import {
   ResendConfirmationError,
   SignInError,
   SignUpError,
+  discardConfirmationSession,
   resendConfirmationEmail,
   signIn,
   signUp,
@@ -22,6 +23,21 @@ jest.mock('@/shared/lib/supabase', () => ({
 }));
 
 const mockedGetSupabaseClient = jest.mocked(getSupabaseClient);
+
+// Jest runs this file under Node, which has no window; the adapter reads the page origin
+// from it to build the confirmation link, so the tests that check that link provide one.
+const SITE_ORIGIN = 'https://petswap-web.zianporrutai.workers.dev';
+
+function stubBrowserOrigin(origin: string) {
+  Object.defineProperty(globalThis, 'window', {
+    value: { location: { origin } },
+    configurable: true,
+  });
+}
+
+afterEach(() => {
+  delete (globalThis as { window?: unknown }).window;
+});
 
 function authError(code: string): AuthError {
   return { code, message: 'Backend detail must not reach the user' } as AuthError;
@@ -54,6 +70,7 @@ describe('signUp', () => {
   });
 
   it('signs up with trimmed profile metadata and preserves the password', async () => {
+    stubBrowserOrigin(SITE_ORIGIN);
     const user = { id: 'user-1' } as User;
     const session = { access_token: 'token' } as Session;
     const { rpcMock, signUpMock } = arrangeSignUpResult({
@@ -74,6 +91,7 @@ describe('signUp', () => {
       email: 'pet@example.com',
       password: 'Password1!',
       options: {
+        emailRedirectTo: `${SITE_ORIGIN}/login?confirmed=1`,
         data: {
           username: 'pat_sitter',
           display_name: 'Pat',
@@ -387,6 +405,52 @@ describe('signIn', () => {
     );
   });
 
+  // FR-1.1: an account that has not followed its confirmation link cannot sign in with
+  // either credential, and is told why rather than shown the wrong-password message.
+  describe('an unconfirmed account', () => {
+    it('cannot sign in with its email address', async () => {
+      const signInWithPassword = jest.fn(async () => ({
+        data: { user: null, session: null },
+        error: authError('email_not_confirmed'),
+      }));
+      mockedGetSupabaseClient.mockReturnValue({
+        auth: { signInWithPassword },
+      } as unknown as AppSupabaseClient);
+
+      const result = signIn({ identifier: 'new@example.com', password: 'Password1!' });
+
+      await expect(result).rejects.toEqual(new SignInError('EMAIL_NOT_CONFIRMED'));
+      await expect(result).rejects.toHaveProperty(
+        'message',
+        'Confirm your email address before signing in.',
+      );
+    });
+
+    it('cannot sign in with its username, and no session is stored', async () => {
+      const setSession = jest.fn();
+      mockedGetSupabaseClient.mockReturnValue({
+        functions: {
+          invoke: jest.fn(async () => ({
+            data: null,
+            error: {
+              context: Response.json({ error: { code: 'EMAIL_NOT_CONFIRMED' } }, { status: 403 }),
+            },
+          })),
+        },
+        auth: { setSession },
+      } as unknown as AppSupabaseClient);
+
+      const result = signIn({ identifier: 'new_user', password: 'Password1!' });
+
+      await expect(result).rejects.toEqual(new SignInError('EMAIL_NOT_CONFIRMED'));
+      await expect(result).rejects.toHaveProperty(
+        'message',
+        'Confirm your email address before signing in.',
+      );
+      expect(setSession).not.toHaveBeenCalled();
+    });
+  });
+
   it('reports an empty password separately from an invalid identifier', async () => {
     await expect(signIn({ identifier: 'pet@example.com', password: '' })).rejects.toEqual(
       new SignInError('PASSWORD_REQUIRED'),
@@ -408,6 +472,7 @@ describe('resendConfirmationEmail', () => {
   });
 
   it('resends confirmation email with normalized email address', async () => {
+    stubBrowserOrigin(SITE_ORIGIN);
     type ResendRequest = Parameters<AppSupabaseClient['auth']['resend']>[0];
     const resendMock = jest.fn<
       (credentials: ResendRequest) => Promise<{ data: { user: null; session: null }; error: null }>
@@ -424,6 +489,7 @@ describe('resendConfirmationEmail', () => {
     expect(resendMock).toHaveBeenCalledWith({
       type: 'signup',
       email: 'user.name@example.com',
+      options: { emailRedirectTo: `${SITE_ORIGIN}/login?confirmed=1` },
     });
   });
 
@@ -477,5 +543,42 @@ describe('resendConfirmationEmail', () => {
     await expect(resendConfirmationEmail('user@example.com')).rejects.toEqual(
       new ResendConfirmationError('UNKNOWN'),
     );
+  });
+});
+
+describe('discardConfirmationSession', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('signs out only this browser when the confirmation link left a session', async () => {
+    const signOut = jest.fn<(options: { scope: string }) => Promise<{ error: null }>>(
+      async () => ({ error: null }),
+    );
+    mockedGetSupabaseClient.mockReturnValue({
+      auth: {
+        getSession: jest.fn(async () => ({
+          data: { session: { access_token: 'access' } },
+          error: null,
+        })),
+        signOut,
+      },
+    } as unknown as AppSupabaseClient);
+
+    await expect(discardConfirmationSession()).resolves.toBeUndefined();
+    expect(signOut).toHaveBeenCalledWith({ scope: 'local' });
+  });
+
+  it('does nothing when there is no session to discard', async () => {
+    const signOut = jest.fn();
+    mockedGetSupabaseClient.mockReturnValue({
+      auth: {
+        getSession: jest.fn(async () => ({ data: { session: null }, error: null })),
+        signOut,
+      },
+    } as unknown as AppSupabaseClient);
+
+    await expect(discardConfirmationSession()).resolves.toBeUndefined();
+    expect(signOut).not.toHaveBeenCalled();
   });
 });

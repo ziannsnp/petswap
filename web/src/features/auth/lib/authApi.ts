@@ -16,6 +16,7 @@ import type {
   SignUpInput,
   SignUpResult,
 } from '../types';
+import { buildConfirmationRedirectUrl } from './confirmationLink';
 import { isValidEmail, normalizeEmail } from './email';
 import { isValidPassword } from './password';
 import { isValidUsername, normalizeUsername, USERNAME_REQUIREMENTS_MESSAGE } from './username';
@@ -76,6 +77,16 @@ export class ResendConfirmationError extends Error {
     super(RESEND_ERROR_MESSAGES[code]);
     this.name = 'ResendConfirmationError';
   }
+}
+
+// The origin the visitor signed up from, so a sign-up on a preview or on localhost gets
+// its link back to that same host. Supabase only honours it when the URL matches the
+// project's Redirect URLs list (see docs/environments.md) and otherwise falls back to
+// the Site URL.
+function confirmationRedirectUrl(): string | undefined {
+  return typeof window === 'undefined'
+    ? undefined
+    : buildConfirmationRedirectUrl(window.location.origin);
 }
 
 export function translateSignUpError(error: AuthError): SignUpError {
@@ -188,6 +199,7 @@ export async function signUp(input: SignUpInput): Promise<SignUpResult> {
     email: input.email.trim(),
     password: input.password,
     options: {
+      emailRedirectTo: confirmationRedirectUrl(),
       data: {
         username,
         display_name: input.displayName.trim(),
@@ -300,10 +312,31 @@ export async function resendConfirmationEmail(email: string): Promise<void> {
   const { error } = await supabase.auth.resend({
     type: 'signup',
     email: normalized,
+    options: { emailRedirectTo: confirmationRedirectUrl() },
   });
 
   if (error) {
     throw translateResendError(error);
+  }
+}
+
+// Following the confirmation link signs the account in: Supabase hands the browser a
+// session in the redirect, and the client stores it on start-up. FR-1.1 instead returns
+// the visitor to the login page, so that session is dropped here. getSession() waits for
+// the client to finish reading the redirect, so this cannot run before the session it
+// is meant to remove exists. The local scope ends only this browser's session and leaves
+// the account signed in anywhere else it already was.
+export async function discardConfirmationSession(): Promise<void> {
+  const supabase = getSupabaseClient();
+  const { data } = await supabase.auth.getSession();
+
+  if (!data.session) {
+    return;
+  }
+
+  const { error } = await supabase.auth.signOut({ scope: 'local' });
+  if (error) {
+    throw error;
   }
 }
 

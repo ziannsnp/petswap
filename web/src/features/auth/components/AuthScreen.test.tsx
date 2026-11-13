@@ -2,7 +2,8 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
-import { AuthScreen } from './AuthScreen';
+import { AuthScreen, CONFIRMATION_FAILED_MESSAGE, CONFIRMED_MESSAGE } from './AuthScreen';
+import { useConfirmationLanding } from '../hooks/useConfirmationLanding';
 import { useSignIn } from '../hooks/useSignIn';
 import { SignInError } from '../lib/authApi';
 import type { SignInErrorCode } from '../types';
@@ -18,6 +19,8 @@ jest.mock('react-router-dom', () => ({
 
 // Factory form avoids loading the real modules, which transitively hit import.meta.env.
 jest.mock('../hooks/useSignIn', () => ({ useSignIn: jest.fn() }));
+// How the URL maps to an outcome is covered by useConfirmationLanding.test.tsx.
+jest.mock('../hooks/useConfirmationLanding', () => ({ useConfirmationLanding: jest.fn() }));
 jest.mock('../lib/authApi', () => ({
   // Skips the real code->message lookup table; that translation is covered by authApi.test.ts.
   SignInError: class SignInError extends Error {
@@ -32,6 +35,7 @@ jest.mock('../lib/authApi', () => ({
 }));
 
 const mockedUseSignIn = jest.mocked(useSignIn);
+const mockedUseConfirmationLanding = jest.mocked(useConfirmationLanding);
 
 function renderForm() {
   return render(
@@ -74,6 +78,61 @@ describe('AuthScreen', () => {
     jest.clearAllMocks();
     locationState = null;
     mockedUseSignIn.mockReturnValue(mutationResult());
+    mockedUseConfirmationLanding.mockReturnValue(null);
+  });
+
+  // FR-1.1: the confirmation link returns the visitor here with a success message.
+  describe('arriving from the confirmation email', () => {
+    it('shows no confirmation message on a plain visit', () => {
+      renderForm();
+
+      expect(screen.queryByText(CONFIRMED_MESSAGE)).not.toBeInTheDocument();
+      expect(screen.queryByText(CONFIRMATION_FAILED_MESSAGE)).not.toBeInTheDocument();
+    });
+
+    it('tells a visitor whose link worked that the email is confirmed', () => {
+      mockedUseConfirmationLanding.mockReturnValue('confirmed');
+      renderForm();
+
+      expect(screen.getByRole('status')).toHaveTextContent(CONFIRMED_MESSAGE);
+      expect(screen.getByRole('button', { name: /sign in/i })).toBeEnabled();
+    });
+
+    it('tells a visitor whose link expired or was used how to recover', () => {
+      mockedUseConfirmationLanding.mockReturnValue('failed');
+      renderForm();
+
+      expect(screen.getByRole('status')).toHaveTextContent(CONFIRMATION_FAILED_MESSAGE);
+      expect(screen.queryByText(CONFIRMED_MESSAGE)).not.toBeInTheDocument();
+    });
+  });
+
+  // FR-1.1: an unconfirmed account stays on the login page, whichever credential it used.
+  it.each([
+    ['email address', 'new@example.com'],
+    ['username', 'new_user'],
+  ])('keeps an unconfirmed account on the login page when it signs in with its %s', async (_label, identifier) => {
+    const user = userEvent.setup();
+    const mutateAsync = jest.fn(async () => {
+      throw signInError('EMAIL_NOT_CONFIRMED');
+    });
+    mockedUseSignIn.mockReturnValue(mutationResult({ mutateAsync }));
+    const { rerender } = renderForm();
+
+    await fillAndSubmit(user, { identifier, password: 'Password1!' });
+
+    expect(mutateAsync).toHaveBeenCalledWith({ identifier, password: 'Password1!' });
+    expect(mockNavigate).not.toHaveBeenCalled();
+
+    mockedUseSignIn.mockReturnValue(
+      mutationResult({ isError: true, error: signInError('EMAIL_NOT_CONFIRMED') }),
+    );
+    rerender(
+      <MemoryRouter>
+        <AuthScreen />
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole('alert')).toHaveTextContent('EMAIL_NOT_CONFIRMED');
   });
 
   it('names the product so a signed-out visitor knows where they are', () => {

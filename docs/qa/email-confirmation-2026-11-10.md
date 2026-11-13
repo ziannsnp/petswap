@@ -33,7 +33,7 @@ No defects in this change. Two findings outside it:
 1. **The confirmation link signs the user straight in** instead of returning to the login page with a success message, as FR-1.1 now asks. This is the separate "auth redirect URLs" card.
    - Issue link: none; tracked by that Sprint Backlog card
    - Owner: Pinn
-   - Retest date/result: not retested
+   - Retest date/result: 2026-11-12, pass on localhost against hosted: the link lands on the login page with a success message. Cause and evidence: [email-confirm-redirect-2026-11-12.md](email-confirm-redirect-2026-11-12.md)
 2. **Search shows "We could not load listings"** (visible in screenshots 08, 09b and 10b, and on production). The `Supabase DB Push` job failed on `main` after PR #100, so the hosted `search_published_listings` lacks the `p_sort` argument the app now sends (`PGRST202`).
    - Issue link: none yet; to raise with QA / Infra and the PR #100 author
    - Owner: QA / Scrum / Infra (Tonpai)

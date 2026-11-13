@@ -1,8 +1,8 @@
 import { getSupabaseClient } from '@/shared/lib/supabase';
 import type { Database } from '@/shared/types/database.types';
-import { BookingCompletionError, BookingConflictError } from './bookingErrors';
+import { BookingCompletionError, BookingConflictError, BookingStartDateError } from './bookingErrors';
 
-export { BookingCompletionError, BookingConflictError };
+export { BookingCompletionError, BookingConflictError, BookingStartDateError };
 
 export type Booking = Database['public']['Tables']['bookings']['Row'];
 export type BookingInsert = Database['public']['Tables']['bookings']['Insert'];
@@ -95,6 +95,10 @@ export async function createBookingRequest(values: BookingInsert): Promise<Booki
     .single();
 
   if (error) {
+    // guard_booking_change() judges the start day against the database's UTC day.
+    if (error.code === 'P0001' && error.message.includes('start date cannot be in the past')) {
+      throw new BookingStartDateError();
+    }
     throw error;
   }
 

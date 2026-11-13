@@ -54,8 +54,8 @@ export function isValidBookingTransition(from: BookingStatus, to: BookingStatus)
 /**
  * Pure completion check: a booking can be completed only when it is confirmed and its stay has finished.
  * - End-exclusive: the end date is check-out day, so completion is allowed on the end date itself.
- * - `today` is a `YYYY-MM-DD` calendar day; the UI passes the visitor's local day, while the database
- *   guard repeats the check against its own UTC day.
+ * - `today` is a `YYYY-MM-DD` calendar day. Callers pass the UTC day (`utcTodayIsoDate()`), the same
+ *   day the database guard checks, so the UI never offers a completion the database refuses (ADR 0011).
  * - Actor authorization (listing owner only) is enforced separately.
  */
 export function canCompleteBooking(

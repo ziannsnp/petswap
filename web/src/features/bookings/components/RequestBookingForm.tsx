@@ -2,7 +2,8 @@ import { useState, type FormEvent } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '@/features/auth';
 import { useMyPets } from '@/features/pets';
-import { todayIsoDate, validateBookingRequestForm } from '../lib/bookingRequestForm';
+import { earliestRequestStartDate, todayIsoDate, validateBookingRequestForm } from '../lib/bookingRequestForm';
+import { BookingStartDateError } from '../lib/bookingErrors';
 import type { BookingRequestFormErrors } from '../lib/bookingRequestForm';
 import { useCreateBookingRequest } from '../hooks/useBookings';
 
@@ -35,10 +36,13 @@ export function RequestBookingForm({ listingId, listingOwnerId, acceptedPetTypes
 
   // Recomputed per render rather than memoised, so a tab left open overnight
   // still rejects yesterday once the calendar day rolls over.
-  const today = todayIsoDate();
+  // `today` is the earliest bookable start: the later of the local and UTC day (ADR 0011).
+  const now = new Date();
+  const today = earliestRequestStartDate(now);
+  const localToday = todayIsoDate(now);
 
   const errors: BookingRequestFormErrors = hasSubmitted
-    ? validateBookingRequestForm({ petId, startDate, endDate }, today)
+    ? validateBookingRequestForm({ petId, startDate, endDate }, today, localToday)
     : {};
 
   if (!isAuthenticated || !user) {
@@ -68,7 +72,7 @@ export function RequestBookingForm({ listingId, listingOwnerId, acceptedPetTypes
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setHasSubmitted(true);
-    const nextErrors = validateBookingRequestForm({ petId, startDate, endDate }, today);
+    const nextErrors = validateBookingRequestForm({ petId, startDate, endDate }, today, localToday);
     if (Object.keys(nextErrors).length > 0 || !user) return;
 
     try {
@@ -164,7 +168,9 @@ export function RequestBookingForm({ listingId, listingOwnerId, acceptedPetTypes
 
             {createBookingRequestMutation.isError && (
               <p className="border-l-4 border-red-600 bg-red-50 px-4 py-3 text-sm text-red-700" role="alert">
-                We could not send your booking request. Check your connection and try again.
+                {createBookingRequestMutation.error instanceof BookingStartDateError
+                  ? createBookingRequestMutation.error.message
+                  : 'We could not send your booking request. Check your connection and try again.'}
               </p>
             )}
 

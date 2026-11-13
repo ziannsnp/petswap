@@ -153,7 +153,12 @@ values
   ('40000000-0000-4000-8000-000000000006', '30000000-0000-4000-8000-000000000003', '20000000-0000-4000-8000-000000000004', '10000000-0000-4000-8000-000000000003',
    'completed', date '2026-09-01', date '2026-09-05', null, null, date '2026-08-20', null, null, now()),
   ('40000000-0000-4000-8000-000000000007', '30000000-0000-4000-8000-000000000003', '20000000-0000-4000-8000-000000000002', '10000000-0000-4000-8000-000000000001',
-   'pending',   date '2026-12-01', date '2026-12-06', 'Nimbus needs a long daily walk.', null, null, null, null, null)
+   'pending',   date '2026-12-01', date '2026-12-06', 'Nimbus needs a long daily walk.', null, null, null, null, null),
+  -- A confirmed stay that has already ended, so the owner (Blair) can mark it completed.
+  -- Dates follow the reset day because a past stay cannot be requested through the app;
+  -- the booking-lifecycle Playwright journey completes it.
+  ('40000000-0000-4000-8000-000000000008', '30000000-0000-4000-8000-000000000003', '20000000-0000-4000-8000-000000000004', '10000000-0000-4000-8000-000000000003',
+   'confirmed', current_date - 10, current_date - 6, null, null, now(), null, null, null)
 on conflict (id) do nothing;
 
 reset session_replication_role;

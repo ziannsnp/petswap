@@ -116,11 +116,67 @@ describe('searchPublishedListings', () => {
       p_keyword: 'garden',
       p_page: 2,
       p_page_size: PUBLISHED_LISTINGS_PAGE_SIZE,
+      p_sort: 'newest',
     });
     expect(from).toHaveBeenCalledWith('listing_images');
     expect(filterIn).toHaveBeenCalledWith('listing_id', ['listing-1']);
     expect(orderByPosition).toHaveBeenCalledWith('sort_order', { ascending: true });
     expect(orderById).toHaveBeenCalledWith('id', { ascending: true });
+  });
+
+  it('passes the requested sort to the search function', async () => {
+    const rpc = jest.fn().mockResolvedValue({ data: [], error: null });
+    mockedGetSupabaseClient.mockReturnValue({ rpc, from: jest.fn() } as never);
+
+    await searchPublishedListings({ location: '', keyword: '', page: 3, sort: 'capacity' });
+
+    expect(rpc).toHaveBeenCalledWith('search_published_listings', expect.objectContaining({
+      p_page: 3,
+      p_sort: 'capacity',
+    }));
+  });
+
+  it('sends combined filters with the search, sort, and page', async () => {
+    const rpc = jest.fn().mockResolvedValue({ data: [], error: null });
+    mockedGetSupabaseClient.mockReturnValue({ rpc, from: jest.fn() } as never);
+
+    await searchPublishedListings({
+      location: 'Bangkok', keyword: 'garden', page: 2, sort: 'title',
+      petType: 'cat', minCapacity: 3, startDate: '2026-12-01', endDate: '2026-12-05',
+    });
+
+    expect(rpc).toHaveBeenCalledWith('search_published_listings', {
+      p_location: 'Bangkok', p_keyword: 'garden', p_page: 2,
+      p_page_size: PUBLISHED_LISTINGS_PAGE_SIZE, p_sort: 'title',
+      p_pet_type: 'cat', p_min_capacity: 3, p_start_date: '2026-12-01', p_end_date: '2026-12-05',
+    });
+  });
+
+  it('omits explicitly cleared filters for compatibility with the previous RPC', async () => {
+    const rpc = jest.fn().mockResolvedValue({ data: [], error: null });
+    mockedGetSupabaseClient.mockReturnValue({ rpc, from: jest.fn() } as never);
+
+    await searchPublishedListings({
+      location: '', keyword: '', page: 1, petType: null, minCapacity: null,
+      startDate: null, endDate: null,
+    });
+
+    expect(rpc).toHaveBeenCalledWith('search_published_listings', {
+      p_location: '', p_keyword: '', p_page: 1,
+      p_page_size: PUBLISHED_LISTINGS_PAGE_SIZE, p_sort: 'newest',
+    });
+  });
+
+  it('propagates server filter validation errors without fetching images', async () => {
+    const error = { message: 'End date must be later than the start date.' };
+    const rpc = jest.fn().mockResolvedValue({ data: null, error });
+    const from = jest.fn();
+    mockedGetSupabaseClient.mockReturnValue({ rpc, from } as never);
+
+    await expect(searchPublishedListings({
+      location: '', keyword: '', page: 1, startDate: '2026-12-05', endDate: '2026-12-01',
+    })).rejects.toBe(error);
+    expect(from).not.toHaveBeenCalled();
   });
 
   it('returns an empty first page without querying image rows when nothing matches', async () => {

@@ -56,6 +56,24 @@ UI components must not call `getSupabaseClient()` directly. Add feature-specific
 
 See [ADR 0001](decisions/0001-web-spa-feature-architecture.md), [ADR 0003](decisions/0003-booking-rules-and-scope.md), [ADR 0004](decisions/0004-supabase-mvp-foundation.md).
 
+## Published listing search
+
+`search_published_listings` accepts optional `p_pet_type`, `p_min_capacity`,
+`p_start_date`, and `p_end_date` after the existing search, page, and sort arguments.
+Omitted or null filters are unset. Capacity is an inclusive positive minimum;
+the date range must have two finite dates with end later than start. Only a confirmed
+booking on the same listing blocks the end-exclusive range. Filtering precedes the
+total count, page clamp, ordering, and page slice.
+
+The RPC is a restricted security-definer read with an empty search path and explicit
+published/undeleted predicates. Booking-table RLS remains participant-only; search
+returns listing rows and pagination metadata, with no booking details. See
+[ADR 0010](decisions/0010-listing-search-availability-privacy.md).
+
+The listings adapter accepts `petType`, `minCapacity`, `startDate`, and `endDate` on
+`PublishedListingQuery`; its query key includes these when supplied. Screens must
+pass all applied criteria to that query so cached pages are scoped to the filters.
+
 ## Listing creation consistency
 
 Listing creation is a client-orchestrated sequence: insert a private draft, upload no more than ten photos, insert image metadata, and optionally publish. Expected promise failures trigger best-effort removal of uploaded objects and the new draft. The photo bucket is private, and the app requests short-lived signed URLs only after RLS confirms the viewer can read the listing.

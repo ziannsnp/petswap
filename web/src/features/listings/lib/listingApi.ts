@@ -56,10 +56,19 @@ export type Listing = Database['public']['Tables']['listings']['Row'] & {
   host: ListingHost | null;
 };
 
+export type PublishedListingSort = 'newest' | 'oldest' | 'title' | 'capacity';
+
 export interface PublishedListingQuery {
   location: string;
   keyword: string;
   page: number;
+  /** Applied by the database before the page is cut; omitted means newest first. */
+  sort?: PublishedListingSort;
+  petType?: PetSpecies | null;
+  minCapacity?: number | null;
+  /** End-exclusive range. Supply both dates (YYYY-MM-DD) or neither. */
+  startDate?: string | null;
+  endDate?: string | null;
 }
 
 export interface PublishedListingPage {
@@ -371,6 +380,13 @@ export async function searchPublishedListings(query: PublishedListingQuery): Pro
     p_keyword: query.keyword,
     p_page: query.page,
     p_page_size: PUBLISHED_LISTINGS_PAGE_SIZE,
+    p_sort: query.sort ?? 'newest',
+    // Omit unset filters so existing browse calls also work before the migration
+    // is deployed. The database defaults omitted arguments to null.
+    ...(query.petType != null ? { p_pet_type: query.petType } : {}),
+    ...(query.minCapacity != null ? { p_min_capacity: query.minCapacity } : {}),
+    ...(query.startDate != null ? { p_start_date: query.startDate } : {}),
+    ...(query.endDate != null ? { p_end_date: query.endDate } : {}),
   });
 
   if (error) {

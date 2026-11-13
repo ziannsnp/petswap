@@ -19,6 +19,12 @@ Its `docs-links` job verifies that Markdown links under docs resolve. No pull re
 
 It is deliberately separate from `Quality` and not a required check: it starts containers and is slower, and [testing.md](testing.md) keeps live-service checks out of the required gate. A red run still blocks merging a schema change — the person changing the schema owns fixing it. Promote it to a required check only if the team decides the extra minutes are worth it.
 
+### Supabase CLI version
+
+Every workflow that installs the Supabase CLI (this one and `Supabase DB Push` in `Quality`) reads the version from `web/package-lock.json`, the same CLI that `npx supabase` runs locally. CI never picks up a new release on its own. They used `latest` until Supabase CLI v3.0.0 shipped on 2 November 2026: v3 cannot load a `config.toml` with an `[inbucket]` section, so every Database contract run failed before any check ran. The section is now `[local_smtp]`, which v2.108.0 and later also read.
+
+To upgrade the CLI, bump `supabase` in `web/package.json` and let CI pick it up from the lockfile. Read the release notes before a major upgrade. In v3, `supabase db push` targets the local stack unless given `--remote`, and every change to a hosted project needs `--yes`. The `Supabase DB Push` job would need both before it could run on v3.
+
 ## E2E smoke workflow
 
 `.github/workflows/e2e-smoke.yml` runs the Playwright smoke suite (`web/e2e/smoke.spec.ts`) on desktop and mobile Chromium, and desktop Firefox for every `web/**` change and on demand. It builds a browser and starts the dev server, so it is a separate, non-required workflow rather than part of `Quality`. A red run means the app shell or router regressed and the change author owns the fix. The full Playwright journey (`booking-flow.spec.ts`) stays skipped until its screens exist; see [testing.md](testing.md).

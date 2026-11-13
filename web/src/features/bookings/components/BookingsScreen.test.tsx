@@ -6,9 +6,15 @@ import { BookingsScreen } from './BookingsScreen';
 import { useIncomingBookings, useOutgoingBookings, useUpdateBookingStatus } from '../hooks/useBookings';
 import { BookingCompletionError, BookingConflictError } from '../lib/bookingErrors';
 import { todayIsoDate } from '../lib/bookingRequestForm';
-import type { BookingWithDetails } from '../lib/bookingApi';
+import type { BookingPetSummary, BookingWithDetails } from '../lib/bookingApi';
 
 // Explicit factory so the real hooks module (and its supabase/import.meta.env chain) never loads under Jest.
+// The real pets index pulls in its Supabase hooks; the booking card only needs the care display.
+jest.mock('@/features/pets', () => ({
+  PetCareInfo: jest.requireActual('@/features/pets/components/PetCareInfo').PetCareInfo,
+  hasPetCareInfo: jest.requireActual('@/features/pets/lib/petForm').hasPetCareInfo,
+}));
+
 jest.mock('../hooks/useBookings', () => ({
   useOutgoingBookings: jest.fn(),
   useIncomingBookings: jest.fn(),
@@ -30,6 +36,15 @@ function formatBookingDate(date: string): string {
 const MIDDOT = String.fromCharCode(0xb7);
 const EN_DASH = String.fromCharCode(0x2013);
 
+const NO_CARE_INFO = {
+  feeding_instruction: null,
+  medical_note: null,
+  behavior_note: null,
+  allergies: null,
+  vaccination_info: null,
+  special_requirement: null,
+} satisfies Partial<BookingPetSummary>;
+
 function makeBooking(overrides: Partial<BookingWithDetails> = {}): BookingWithDetails {
   return {
     id: 'booking-1',
@@ -47,7 +62,7 @@ function makeBooking(overrides: Partial<BookingWithDetails> = {}): BookingWithDe
     declined_at: null,
     cancelled_at: null,
     completed_at: null,
-    pet: { id: 'pet-1', name: 'Milo', species: 'dog', photo_url: null },
+    pet: { id: 'pet-1', name: 'Milo', species: 'dog', photo_url: null, ...NO_CARE_INFO },
     listing: { id: 'listing-1', title: 'Cozy Yard', location: 'Austin' },
     ...overrides,
   };
@@ -105,7 +120,7 @@ it('renders outgoing and incoming items with their pet and listing details', () 
   const outgoingBooking = makeBooking({
     id: 'out-1',
     status: 'confirmed',
-    pet: { id: 'pet-1', name: 'Milo', species: 'dog', photo_url: null },
+    pet: { id: 'pet-1', name: 'Milo', species: 'dog', photo_url: null, ...NO_CARE_INFO },
     listing: { id: 'listing-1', title: 'Cozy Yard', location: 'Austin' },
   });
   const incomingBooking = makeBooking({
@@ -113,7 +128,7 @@ it('renders outgoing and incoming items with their pet and listing details', () 
     status: 'pending',
     start_date: '2026-10-01',
     end_date: '2026-10-05',
-    pet: { id: 'pet-2', name: 'Bella', species: 'cat', photo_url: null },
+    pet: { id: 'pet-2', name: 'Bella', species: 'cat', photo_url: null, ...NO_CARE_INFO },
     listing: { id: 'listing-2', title: 'Sunny Deck', location: 'Denver' },
   });
   mockUseOutgoingBookings.mockReturnValue(successResult([outgoingBooking]));
@@ -348,8 +363,8 @@ it('shows an overlap conflict only on the card that failed to confirm', async ()
   mockUseUpdateBookingStatus.mockReturnValue({ mutateAsync });
   mockUseOutgoingBookings.mockReturnValue(successResult([]));
   mockUseIncomingBookings.mockReturnValue(successResult([
-    makeBooking({ id: 'in-1', status: 'pending', pet: { id: 'pet-1', name: 'Milo', species: 'dog', photo_url: null } }),
-    makeBooking({ id: 'in-2', status: 'pending', pet: { id: 'pet-2', name: 'Bella', species: 'cat', photo_url: null } }),
+    makeBooking({ id: 'in-1', status: 'pending', pet: { id: 'pet-1', name: 'Milo', species: 'dog', photo_url: null, ...NO_CARE_INFO } }),
+    makeBooking({ id: 'in-2', status: 'pending', pet: { id: 'pet-2', name: 'Bella', species: 'cat', photo_url: null, ...NO_CARE_INFO } }),
   ]));
 
   render(<BookingsScreen />);
@@ -474,4 +489,51 @@ it('explains on the card when the database refuses a completion', async () => {
   expect(await screen.findByRole('alert')).toHaveTextContent(
     'This booking can only be marked completed once it is confirmed and its end date has arrived.',
   );
+});
+describe('pet care information on booking requests (FR-2.2)', () => {
+  const caredPet = {
+    id: 'pet-2',
+    name: 'Bella',
+    species: 'cat' as const,
+    photo_url: null,
+    ...NO_CARE_INFO,
+    feeding_instruction: 'Half a can at 7am\nHalf a can at 6pm',
+    allergies: '   ',
+    medical_note: 'Thyroid pill with breakfast',
+  };
+
+  it('shows the host the care notes that have a value, and hides blank ones', () => {
+    mockUseOutgoingBookings.mockReturnValue(successResult([]));
+    mockUseIncomingBookings.mockReturnValue(successResult([makeBooking({ id: 'in-1', status: 'pending', pet: caredPet })]));
+
+    render(<BookingsScreen />);
+
+    const care = screen.getByRole('region', { name: 'Care information' });
+    expect(care).toHaveTextContent('Feeding instructions');
+    expect(care).toHaveTextContent('Half a can at 7am');
+    expect(care).toHaveTextContent('Medical notes');
+    expect(care).toHaveTextContent('Thyroid pill with breakfast');
+    expect(care).not.toHaveTextContent('Allergies');
+    expect(care).not.toHaveTextContent('Behavior notes');
+  });
+
+  it('tells the host when the pet has no care information', () => {
+    mockUseOutgoingBookings.mockReturnValue(successResult([]));
+    mockUseIncomingBookings.mockReturnValue(successResult([makeBooking({ id: 'in-1', status: 'pending' })]));
+
+    render(<BookingsScreen />);
+
+    expect(screen.queryByRole('region', { name: 'Care information' })).not.toBeInTheDocument();
+    expect(screen.getByText('No care information added.')).toBeInTheDocument();
+  });
+
+  it('does not repeat care notes on the requester\'s own outgoing requests', () => {
+    mockUseOutgoingBookings.mockReturnValue(successResult([makeBooking({ id: 'out-1', pet: caredPet })]));
+    mockUseIncomingBookings.mockReturnValue(successResult([]));
+
+    render(<BookingsScreen />);
+
+    expect(screen.queryByRole('region', { name: 'Care information' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/No care information added/)).not.toBeInTheDocument();
+  });
 });

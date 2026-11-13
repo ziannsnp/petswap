@@ -1,5 +1,5 @@
 import type { Listing, PublishedListingPage } from '@/features/listings';
-import type { SearchCriteria } from '../lib/searchCriteria';
+import type { SearchTerms } from '../lib/searchCriteria';
 
 /**
  * The page size the app requests (`PUBLISHED_LISTINGS_PAGE_SIZE`). It is copied rather than
@@ -7,6 +7,32 @@ import type { SearchCriteria } from '../lib/searchCriteria';
  * checks that the two still agree.
  */
 export const SEARCH_RESULTS_PAGE_SIZE = 9;
+
+/**
+ * The day search tests treat as today. A date range cannot start before today, so the
+ * December dates the tests use would start failing once that month had passed.
+ */
+export const SEARCH_TODAY = '2026-11-07';
+
+/**
+ * Fixes today at midday on `SEARCH_TODAY` for every test in the calling file. Only `Date` is
+ * faked; timers keep running, so user events and `waitFor` behave as usual.
+ */
+export function fixSearchToday(): void {
+  beforeEach(() => {
+    jest.useFakeTimers({
+      now: new Date(`${SEARCH_TODAY}T12:00:00`),
+      doNotFake: [
+        'hrtime', 'nextTick', 'performance', 'queueMicrotask',
+        'requestAnimationFrame', 'cancelAnimationFrame', 'requestIdleCallback', 'cancelIdleCallback',
+        'setImmediate', 'clearImmediate', 'setInterval', 'clearInterval', 'setTimeout', 'clearTimeout',
+      ],
+    });
+  });
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+}
 
 /** A published listing as `usePublishedListings` returns it: signed photo URLs, main photo first. */
 export function makeSearchResult(overrides: Partial<Listing> = {}): Listing {
@@ -58,7 +84,7 @@ export const searchMatchListings = [
 
 export interface SearchMatchCase {
   name: string;
-  criteria: SearchCriteria;
+  criteria: SearchTerms;
   expectedIds: string[];
 }
 
@@ -124,7 +150,7 @@ export const noPhotoSearchResult = makeSearchResult({
  * Searches that `searchMatchListings` cannot satisfy. The last two match only a hidden
  * listing, or each field on a different listing, so they must still come back empty.
  */
-export const noResultSearches: readonly { name: string; criteria: SearchCriteria }[] = [
+export const noResultSearches: readonly { name: string; criteria: SearchTerms }[] = [
   { name: 'a location with no listings', criteria: { location: 'Krabi', keyword: '' } },
   { name: 'a keyword no listing uses', criteria: { location: '', keyword: 'hamster' } },
   { name: 'text only a hidden listing has', criteria: { location: '', keyword: 'suite' } },

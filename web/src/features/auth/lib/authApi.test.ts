@@ -8,7 +8,14 @@ import {
 } from '@supabase/supabase-js';
 import { getSupabaseClient, type AppSupabaseClient } from '@/shared/lib/supabase';
 import { CURRENT_CONSENT_VERSION } from '@/features/consent';
-import { SignInError, SignUpError, signIn, signUp } from './authApi';
+import {
+  ResendConfirmationError,
+  SignInError,
+  SignUpError,
+  resendConfirmationEmail,
+  signIn,
+  signUp,
+} from './authApi';
 
 jest.mock('@/shared/lib/supabase', () => ({
   getSupabaseClient: jest.fn(),
@@ -126,6 +133,34 @@ describe('signUp', () => {
         displayName: 'Pat',
       }),
     ).resolves.toEqual({ user, session: null });
+  });
+
+  it('accepts a new account waiting for email confirmation', async () => {
+    const user = { id: 'user-1', identities: [{ provider: 'email' }] } as unknown as User;
+    arrangeSignUpResult({ data: { user, session: null }, error: null });
+
+    await expect(
+      signUp({
+        email: 'pet@example.com',
+        username: 'pat_sitter',
+        password: 'Password1!',
+        displayName: 'Pat',
+      }),
+    ).resolves.toEqual({ user, session: null });
+  });
+
+  it('reports an already-registered email when confirmation hides it behind a user without identities', async () => {
+    const user = { id: 'fake-user', identities: [] } as unknown as User;
+    arrangeSignUpResult({ data: { user, session: null }, error: null });
+
+    await expect(
+      signUp({
+        email: 'pet@example.com',
+        username: 'pat_sitter',
+        password: 'Password1!',
+        displayName: 'Pat',
+      }),
+    ).rejects.toEqual(new SignUpError('EMAIL_ALREADY_USED'));
   });
 
   it.each([
@@ -364,5 +399,83 @@ describe('signIn', () => {
 
     await expect(result).rejects.toEqual(new SignInError('INVALID_IDENTIFIER'));
     expect(mockedGetSupabaseClient).not.toHaveBeenCalled();
+  });
+});
+
+describe('resendConfirmationEmail', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('resends confirmation email with normalized email address', async () => {
+    type ResendRequest = Parameters<AppSupabaseClient['auth']['resend']>[0];
+    const resendMock = jest.fn<
+      (credentials: ResendRequest) => Promise<{ data: { user: null; session: null }; error: null }>
+    >(async () => ({
+      data: { user: null, session: null },
+      error: null,
+    }));
+    mockedGetSupabaseClient.mockReturnValue({
+      auth: { resend: resendMock },
+    } as unknown as AppSupabaseClient);
+
+    await expect(resendConfirmationEmail('  User.Name@Example.COM  ')).resolves.toBeUndefined();
+
+    expect(resendMock).toHaveBeenCalledWith({
+      type: 'signup',
+      email: 'user.name@example.com',
+    });
+  });
+
+  it('rejects an invalid or blank email address before calling Supabase', async () => {
+    await expect(resendConfirmationEmail('')).rejects.toEqual(
+      new ResendConfirmationError('INVALID_EMAIL'),
+    );
+    await expect(resendConfirmationEmail('not-an-email')).rejects.toEqual(
+      new ResendConfirmationError('INVALID_EMAIL'),
+    );
+    expect(mockedGetSupabaseClient).not.toHaveBeenCalled();
+  });
+
+  it('translates rate limit error from Supabase', async () => {
+    const resendMock = jest.fn(async () => ({
+      data: null,
+      error: authError('over_email_send_rate_limit'),
+    }));
+    mockedGetSupabaseClient.mockReturnValue({
+      auth: { resend: resendMock },
+    } as unknown as AppSupabaseClient);
+
+    await expect(resendConfirmationEmail('user@example.com')).rejects.toEqual(
+      new ResendConfirmationError('RATE_LIMITED'),
+    );
+  });
+
+  it('translates network retryable error from Supabase', async () => {
+    const resendMock = jest.fn(async () => ({
+      data: null,
+      error: new AuthRetryableFetchError('offline', 0),
+    }));
+    mockedGetSupabaseClient.mockReturnValue({
+      auth: { resend: resendMock },
+    } as unknown as AppSupabaseClient);
+
+    await expect(resendConfirmationEmail('user@example.com')).rejects.toEqual(
+      new ResendConfirmationError('NETWORK'),
+    );
+  });
+
+  it('translates unknown error from Supabase', async () => {
+    const resendMock = jest.fn(async () => ({
+      data: null,
+      error: authError('unexpected_failure'),
+    }));
+    mockedGetSupabaseClient.mockReturnValue({
+      auth: { resend: resendMock },
+    } as unknown as AppSupabaseClient);
+
+    await expect(resendConfirmationEmail('user@example.com')).rejects.toEqual(
+      new ResendConfirmationError('UNKNOWN'),
+    );
   });
 });

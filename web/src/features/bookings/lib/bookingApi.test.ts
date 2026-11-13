@@ -102,6 +102,10 @@ describe('listIncomingBookings', () => {
 
     expect(from).toHaveBeenCalledWith('bookings');
     expect(builder.select).toHaveBeenCalledWith(expect.stringContaining('listings!inner(id, title, location, owner_id)'));
+    // The host reads the pet's care notes on the request (FR-2.2).
+    expect(builder.select).toHaveBeenCalledWith(expect.stringContaining(
+      'pet:pets(id, name, species, photo_url, feeding_instruction, medical_note, behavior_note, allergies, vaccination_info, special_requirement)',
+    ));
     expect(builder.eq).toHaveBeenCalledWith('listing.owner_id', 'owner-1');
     // owner_id is join-filter-only and must not leak into the returned listing summary
     expect(result).toEqual([{ ...row, listing: { id: 'listing-1', title: 'Cozy Yard', location: 'Austin' } }]);

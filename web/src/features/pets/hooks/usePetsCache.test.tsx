@@ -126,7 +126,11 @@ describe('saving a pet and the cache', () => {
     await act(() => cache.queryClient.refetchQueries({ queryKey: petKeys.detail(rocket.id, OWNER_ID) }));
 
     expect(getPet).toHaveBeenCalledWith(rocket.id);
-    expect(cache.result.current.pet.data).toMatchObject({ feeding_instruction: 'Twice a day', allergies: 'Chicken' });
+    expect(cache.cachedPet(rocket.id)).toMatchObject({ feeding_instruction: 'Twice a day', allergies: 'Chicken' });
+    // React Query notifies observers on a later tick, so the open edit screen re-renders
+    // after the refetch resolves; on a slow runner that is after act() returns.
+    await waitFor(() => expect(cache.result.current.pet.data)
+      .toMatchObject({ feeding_instruction: 'Twice a day', allergies: 'Chicken' }));
   });
 
   it('still refreshes the pets when the save fails, in case it committed before the response was lost', async () => {

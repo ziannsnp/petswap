@@ -1,6 +1,6 @@
 # ADR 0010: Public listing availability without exposing private bookings
 
-**Status:** Accepted
+**Status:** Accepted, amended by 0011
 
 ## Context
 

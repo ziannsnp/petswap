@@ -100,11 +100,11 @@ The CI gate runs lint, typecheck, Jest, and production build for every relevant 
 
 ## Booking minimum coverage
 
-`hasBookingConflict()` must cover overlap, non-overlap, back-to-back bookings, a different listing, and non-confirmed existing bookings.
+`hasBookingConflict()` must cover overlap, non-overlap, back-to-back bookings, a different listing, and non-confirmed existing bookings. Once capacity lands (ADR 0011) it must also cover peak occupancy versus overlap count (capacity 2 with A `[1,3)`, B `[3,5)`, C `[1,5)`) and the same pet overlapping on another listing.
 
 `isValidBookingTransition()` must cover every allowed transition and reject invalid transitions.
 
-`canCompleteBooking()` must allow a confirmed booking on and after its end date, and block it before the end date or from any other status.
+`canCompleteBooking()` must allow a confirmed booking on and after its end date, and block it before the end date or from any other status. Booking-day helpers (`bookingDates.ts`) must cover the local-ahead and local-behind-UTC cases near midnight, and the UI must be tested at the 00:00 UTC completion boundary. `supabase/tests/booking_day.test.sql` is the database half.
 
 ## Database and RLS verification
 

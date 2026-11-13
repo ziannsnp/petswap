@@ -5,7 +5,7 @@ import type { UseQueryResult } from '@tanstack/react-query';
 import { BookingsScreen } from './BookingsScreen';
 import { useIncomingBookings, useOutgoingBookings, useUpdateBookingStatus } from '../hooks/useBookings';
 import { BookingCompletionError, BookingConflictError } from '../lib/bookingErrors';
-import { todayIsoDate } from '../lib/bookingRequestForm';
+import { utcTodayIsoDate } from '../lib/bookingDates';
 import type { BookingPetSummary, BookingWithDetails } from '../lib/bookingApi';
 
 // Explicit factory so the real hooks module (and its supabase/import.meta.env chain) never loads under Jest.
@@ -417,12 +417,38 @@ it('offers Mark completed on a confirmed incoming booking whose end date has pas
 it('offers Mark completed on the end date itself (check-out day)', () => {
   mockUseOutgoingBookings.mockReturnValue(successResult([]));
   mockUseIncomingBookings.mockReturnValue(successResult([
-    makeBooking({ status: 'confirmed', start_date: '2020-01-05', end_date: todayIsoDate() }),
+    makeBooking({ status: 'confirmed', start_date: '2020-01-05', end_date: utcTodayIsoDate() }),
   ]));
 
   render(<BookingsScreen />);
 
   expect(screen.getByRole('button', { name: 'Mark completed' })).toBeInTheDocument();
+});
+
+describe('completion follows the database UTC day near midnight', () => {
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  function renderEndingOn(endDate: string) {
+    mockUseOutgoingBookings.mockReturnValue(successResult([]));
+    mockUseIncomingBookings.mockReturnValue(successResult([
+      makeBooking({ status: 'confirmed', start_date: '2026-09-10', end_date: endDate }),
+    ]));
+    render(<BookingsScreen />);
+  }
+
+  it('hides Mark completed one minute before the UTC end day, whatever the local day is', () => {
+    jest.useFakeTimers({ now: new Date('2026-09-14T23:59:00Z'), doNotFake: ['setTimeout', 'clearTimeout'] });
+    renderEndingOn('2026-09-15');
+    expect(screen.queryByRole('button', { name: 'Mark completed' })).not.toBeInTheDocument();
+  });
+
+  it('offers Mark completed from 00:00 UTC on the end day', () => {
+    jest.useFakeTimers({ now: new Date('2026-09-15T00:00:00Z'), doNotFake: ['setTimeout', 'clearTimeout'] });
+    renderEndingOn('2026-09-15');
+    expect(screen.getByRole('button', { name: 'Mark completed' })).toBeInTheDocument();
+  });
 });
 
 it('does not offer Mark completed before the end date', () => {

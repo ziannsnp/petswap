@@ -1,4 +1,7 @@
+import { earliestRequestStartDate, todayIsoDate } from './bookingDates';
 import { asUtcDay } from './bookingRules';
+
+export { earliestRequestStartDate, todayIsoDate };
 
 export interface BookingRequestFormValues {
   petId: string;
@@ -9,18 +12,15 @@ export interface BookingRequestFormValues {
 export type BookingRequestFormErrors = Partial<Record<keyof BookingRequestFormValues, string>>;
 
 /**
- * Today as a `YYYY-MM-DD` calendar day in the visitor's own timezone, so "in the past"
- * means the same thing here as it does in the date picker they chose from.
+ * @param earliestStart the first allowed start day, normally `earliestRequestStartDate()`:
+ *   the later of the visitor's local day and the database's UTC day.
+ * @param localToday the visitor's own calendar day, used only to explain why a day that is
+ *   still "today" locally is refused when UTC has already moved on.
  */
-export function todayIsoDate(now: Date = new Date()): string {
-  const month = `${now.getMonth() + 1}`.padStart(2, '0');
-  const day = `${now.getDate()}`.padStart(2, '0');
-  return `${now.getFullYear()}-${month}-${day}`;
-}
-
 export function validateBookingRequestForm(
   values: BookingRequestFormValues,
-  today: string = todayIsoDate(),
+  earliestStart: string = earliestRequestStartDate(),
+  localToday: string = earliestStart,
 ): BookingRequestFormErrors {
   const errors: BookingRequestFormErrors = {};
 
@@ -40,8 +40,10 @@ export function validateBookingRequestForm(
     try {
       const start = asUtcDay(values.startDate);
 
-      if (start < asUtcDay(today)) {
-        errors.startDate = 'Start date cannot be in the past.';
+      if (start < asUtcDay(earliestStart)) {
+        errors.startDate = start >= asUtcDay(localToday)
+          ? `Bookings can start from ${earliestStart}: the booking day changes at midnight UTC.`
+          : 'Start date cannot be in the past.';
       }
 
       if (start >= asUtcDay(values.endDate)) {

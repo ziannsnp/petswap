@@ -65,6 +65,9 @@ jobs:
       - name: Booking lifecycle behavioural checks
         run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/booking_lifecycle.test.sql
 
+      - name: Booking day (UTC) behavioural checks
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/booking_day.test.sql
+
       - name: Listing rules behavioural checks
         run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/listing_rules.test.sql
 

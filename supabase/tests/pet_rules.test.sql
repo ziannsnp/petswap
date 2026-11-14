@@ -557,7 +557,9 @@ begin
 end;
 $$;
 
--- Alex hosted the cancelled booking, so Alex can still read the deleted pet.
+-- Alex hosted these bookings. A completed stay keeps the deleted pet readable for booking
+-- history; a declined or cancelled request grants no access to the pet or its care notes
+-- (20261114010000_limit_host_pet_access_to_active_bookings.sql).
 reset role;
 select set_config(
   'request.jwt.claims',
@@ -568,8 +570,16 @@ set local role authenticated;
 
 do $$
 begin
-  if not exists (select 1 from public.pets where id = '20000000-0000-4000-8000-000000000104') then
-    raise exception 'pet deletion: the host of a past booking can no longer read the deleted pet';
+  if not exists (select 1 from public.pets where id = '20000000-0000-4000-8000-000000000105') then
+    raise exception 'pet deletion: the host of a completed stay can no longer read the deleted pet';
+  end if;
+
+  if exists (select 1 from public.pets where id = '20000000-0000-4000-8000-000000000104') then
+    raise exception 'pet deletion: the host of a cancelled request can still read the pet';
+  end if;
+
+  if exists (select 1 from public.pets where id = '20000000-0000-4000-8000-000000000103') then
+    raise exception 'pet deletion: the host of a declined request can still read the pet';
   end if;
 end;
 $$;

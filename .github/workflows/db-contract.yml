@@ -95,6 +95,9 @@ jobs:
       - name: Pet photo access behavioural checks
         run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/pet_photo_access.test.sql
 
+      - name: Host access to booked pets behavioural checks
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/host_pet_access.test.sql
+
       - name: Profile rules behavioural checks
         run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/profile_rules.test.sql
 

@@ -170,3 +170,28 @@ it('stops the date pickers offering days before today', () => {
   fireEvent.change(screen.getByLabelText('Start date'), { target: { value: '2027-01-10' } });
   expect(screen.getByLabelText('End date')).toHaveAttribute('min', '2027-01-10');
 });
+
+it('tells a requester with no pets at all to add their first pet', () => {
+  authenticatedAs(REQUESTER_ID);
+  mockUseMyPets.mockReturnValue(petsResult([]));
+  mockUseCreateBookingRequest.mockReturnValue({ mutateAsync: jest.fn(), isPending: false, isError: false, reset: jest.fn() });
+
+  renderForm();
+
+  expect(screen.getByText(/you have not added any pets yet/i)).toBeInTheDocument();
+  expect(screen.queryByText(/none of your pets match/i)).not.toBeInTheDocument();
+  expect(screen.getByRole('link', { name: /add your first pet/i })).toHaveAttribute('href', '/pets/new');
+});
+
+it('explains and offers a retry when the pets cannot be loaded', () => {
+  authenticatedAs(REQUESTER_ID);
+  const refetch = jest.fn().mockResolvedValue(undefined);
+  mockUseMyPets.mockReturnValue(petsResult(undefined, { isError: true, refetch }));
+  mockUseCreateBookingRequest.mockReturnValue({ mutateAsync: jest.fn(), isPending: false, isError: false, reset: jest.fn() });
+
+  renderForm();
+
+  expect(screen.getByRole('alert')).toHaveTextContent(/could not load your pets/i);
+  fireEvent.click(screen.getByRole('button', { name: /try again/i }));
+  expect(refetch).toHaveBeenCalledTimes(1);
+});

@@ -764,6 +764,8 @@ describe('SearchScreen filters', () => {
     expect(screen.getByLabelText(field)).toHaveFocus();
     expect(screen.getByLabelText(field)).toHaveAttribute('aria-invalid', 'true');
     expect(screen.getByLabelText(field)).toHaveAccessibleDescription(message);
+    // The message sits directly under the field it is about, not below the whole filter grid.
+    expect(screen.getByLabelText(field).parentElement).toContainElement(screen.getByRole('alert'));
     expect(screen.getByLabelText('Keyword')).toHaveValue('quiet');
     expect(petType()).toHaveValue('cat');
   });

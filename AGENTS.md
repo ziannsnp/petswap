@@ -15,6 +15,10 @@ Before changing code, identify the relevant requirement and read only the docume
 | `docs/conventions.md` | Write code, use AI assistance, name branches/commits, or prepare a pull request. |
 | `docs/team-protocol.md` | Understand squad ownership, ceremonies, Google Sheet process, handoffs, or definition of done. |
 | `docs/testing.md` | Add tests, record evidence, or decide which checks a change requires. |
+| `docs/design-document.md` | See the use-case, activity, ER, sequence, state, component, and deployment diagrams, and the coupling table. Update it when a flow or the schema changes. |
+| `docs/test-plan.md`, `docs/acceptance/` | Check test levels, entry/exit criteria, requirement-to-test traceability, and Gherkin acceptance scenarios. |
+| `docs/api/` | Change an RPC, policy, or column the app uses: update `openapi.yaml` in the same PR. |
+| `docs/project-management-plan.md`, `docs/sqa-scm-plan.md`, `docs/team-collaboration.md`, `docs/impact-assessment.md` | Course deliverables: plan, estimate, risks, SQA/SCM, ISO 29110 mapping, contribution evidence, societal impact. |
 | `docs/ci-cd.md` | Work on the GitHub quality gate or future deployment. |
 | `docs/environments.md` | Begin local/hosted Supabase work or configure environment variables. |
 | `docs/decisions/` | Change a durable, non-obvious architecture or product-shaping decision. Read the ADR guide in `docs/decisions/README.md` first. ADRs are historical records—add a later ADR; do not rewrite an old one. |
@@ -42,7 +46,6 @@ Before changing code, identify the relevant requirement and read only the docume
 
 - Only confirmed bookings on the same listing block overlapping dates.
 - Date ranges are end-exclusive: back-to-back bookings are valid.
-- A booking's pet must be a species the listing accepts; an identical pending request cannot be sent twice; a request whose start date has passed can be declined but not confirmed; a confirmed stay cannot be cancelled from its check-out day on. `guard_booking_change()` enforces all four.
 - Keep `hasBookingConflict()` and `isValidBookingTransition()` pure and Jest-tested.
 - Browser validation is not authorization. When Supabase is added, enforce ownership and conflict rules through RLS/database constraints as well.
 

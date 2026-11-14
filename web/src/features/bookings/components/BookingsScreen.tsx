@@ -69,7 +69,13 @@ function BookingCard({
     <li className="booking-card">
       <div className="booking-card__row">
         <span className="booking-card__pet">
-          {booking.pet.name} <span className="booking-card__species">({formatSpecies(booking.pet.species)})</span>
+          {booking.pet ? (
+            <>
+              {booking.pet.name} <span className="booking-card__species">({formatSpecies(booking.pet.species)})</span>
+            </>
+          ) : (
+            <span className="booking-card__species">Pet details are no longer shared</span>
+          )}
         </span>
         <BookingStatusBadge status={booking.status} />
       </div>
@@ -81,7 +87,7 @@ function BookingCard({
       </p>
       {/* FR-2.2: the host sees the pet's care notes on the request; the requester owns the pet
           and already sees them on My Pets. */}
-      {variant === 'incoming' && (hasPetCareInfo(booking.pet) ? (
+      {variant === 'incoming' && booking.pet && (hasPetCareInfo(booking.pet) ? (
         <PetCareInfo pet={booking.pet} className="mt-3 border-t border-gray-100 pt-3" />
       ) : (
         <p className="mt-3 text-sm text-gray-500">No care information added.</p>

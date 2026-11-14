@@ -6,6 +6,10 @@ describe('isValidPassword', () => {
     expect(isValidPassword(password)).toBe(true);
   });
 
+  it('accepts a password of exactly 72 characters', () => {
+    expect(isValidPassword(`Aa1!${'a'.repeat(68)}`)).toBe(true);
+  });
+
   it.each([
     'Pass1!',
     'PASSWORD1!',
@@ -15,6 +19,8 @@ describe('isValidPassword', () => {
     'รหัสผ่านA1!',
     'Password 1!',
     'Password1😊',
+    `Aa1!${'a'.repeat(69)}`,
+    `Aa1!${'a'.repeat(1100)}`,
   ])('rejects %s', (password) => {
     expect(isValidPassword(password)).toBe(false);
   });

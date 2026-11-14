@@ -1,5 +1,12 @@
 import { isPetSpecies, type PetSpecies } from '@/shared/lib/petSpecies';
 
+/**
+ * A host looks after a handful of pets at once. The bound also keeps the value far inside the
+ * Postgres `integer` column, which a browser-only form would otherwise let overflow into a
+ * generic save failure.
+ */
+export const LISTING_CAPACITY_MAX = 50;
+
 export interface ListingFormValues {
   title: string;
   location: string;
@@ -22,6 +29,8 @@ export function validateListingForm(values: ListingFormValues): ListingFormError
     errors.capacity = 'Capacity must be a whole number.';
   } else if (values.capacity < 1) {
     errors.capacity = 'Capacity must be at least 1.';
+  } else if (values.capacity > LISTING_CAPACITY_MAX) {
+    errors.capacity = `Capacity must be ${LISTING_CAPACITY_MAX} or fewer.`;
   }
   if (values.acceptedPetTypes.length === 0) {
     errors.acceptedPetTypes = 'Choose at least one accepted pet type.';

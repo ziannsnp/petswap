@@ -255,6 +255,17 @@ describe('assertValidWindow and asUtcDay helpers', () => {
     expect(() => asUtcDay('invalid')).toThrow(RangeError);
   });
 
+  it.each(['2026-02-30', '2026-04-31', '2027-02-29', '2026-13-01', '2026-9-10', '2026-09-10T00:00:00Z'])(
+    'rejects %s, which is not a calendar day',
+    (date) => {
+      expect(() => asUtcDay(date)).toThrow(RangeError);
+    },
+  );
+
+  it('accepts 29 February in a leap year', () => {
+    expect(asUtcDay('2028-02-29')).toBe(Date.parse('2028-02-29T00:00:00.000Z'));
+  });
+
   it('validates proper date windows', () => {
     expect(() =>
       assertValidWindow({ listingId: 'l1', startDate: '2026-09-10', endDate: '2026-09-11' }),

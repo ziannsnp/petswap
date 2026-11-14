@@ -11,10 +11,9 @@ export function TermsOfServiceScreen() {
         booking information, and to honour bookings you accept. We may suspend accounts that abuse
         the service or endanger animals.
       </p>
-      <p>Foundation route for US-D.1. Replace with the approved VibeCode privacy/terms content.</p>
       <p>Policy version: {CURRENT_CONSENT_VERSION}</p>
       <p>
-        <Link to="/privacy">Read the privacy notice</Link>
+        <Link className="font-medium text-brand-600 hover:underline" to="/privacy">Read the privacy notice</Link>
       </p>
     </main>
   );

@@ -5,7 +5,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMyListings } from '../hooks/useListings';
 import { useUpdateListing } from '../hooks/useUpdateListing';
 import type { Listing } from '../lib/listingApi';
-import { validateListingForm } from '../lib/listingForm';
+import { LISTING_CAPACITY_MAX, validateListingForm } from '../lib/listingForm';
 import type { ListingFormErrors } from '../lib/listingForm';
 import { FACILITY_OPTIONS, parseFacilities } from '../lib/listingOptions';
 import { PET_SPECIES_OPTIONS, petSpeciesLabel } from '@/shared/lib/petSpecies';
@@ -226,6 +226,7 @@ function EditListingForm({ listing }: EditListingFormProps) {
           id="listing-capacity"
           type="number"
           min="1"
+          max={LISTING_CAPACITY_MAX}
           step="1"
           value={capacity}
           onChange={(event) => editCapacity(event.target.value === '' ? '' : Number(event.target.value))}

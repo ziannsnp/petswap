@@ -176,7 +176,7 @@ describe('RegisterScreen', () => {
     await user.click(screen.getByRole('button', { name: /create account/i }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Password must be at least 8 characters and include lowercase, uppercase, number, and special characters.',
+      'Password must be 8 to 72 characters and include lowercase, uppercase, number, and special characters.',
     );
     expect(mutateAsync).not.toHaveBeenCalled();
   });

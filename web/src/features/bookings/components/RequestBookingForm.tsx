@@ -5,6 +5,7 @@ import { useMyPets } from '@/features/pets';
 import { todayIsoDate, validateBookingRequestForm } from '../lib/bookingRequestForm';
 import type { BookingRequestFormErrors } from '../lib/bookingRequestForm';
 import { useCreateBookingRequest } from '../hooks/useBookings';
+import { DuplicateBookingRequestError } from '../lib/bookingErrors';
 
 function formatSpecies(species: string): string {
   return species.replace(/_/g, ' ').replace(/^\w/, (letter) => letter.toUpperCase());
@@ -164,7 +165,9 @@ export function RequestBookingForm({ listingId, listingOwnerId, acceptedPetTypes
 
             {createBookingRequestMutation.isError && (
               <p className="border-l-4 border-red-600 bg-red-50 px-4 py-3 text-sm text-red-700" role="alert">
-                We could not send your booking request. Check your connection and try again.
+                {createBookingRequestMutation.error instanceof DuplicateBookingRequestError
+                  ? createBookingRequestMutation.error.message
+                  : 'We could not send your booking request. Check your connection and try again.'}
               </p>
             )}
 

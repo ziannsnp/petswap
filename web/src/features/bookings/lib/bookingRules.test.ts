@@ -1,4 +1,4 @@
-import { hasBookingConflict, isValidBookingTransition, assertValidWindow, asUtcDay, canCompleteBooking } from './bookingRules';
+import { hasBookingConflict, isValidBookingTransition, assertValidWindow, asUtcDay, canCancelBooking, canCompleteBooking, canConfirmBooking } from './bookingRules';
 import type { BookingStatus, ExistingBooking } from '../types';
 
 describe('hasBookingConflict', () => {
@@ -357,5 +357,43 @@ describe('canCompleteBooking', () => {
 
   it('throws RangeError for an invalid date instead of guessing', () => {
     expect(() => canCompleteBooking({ status: 'confirmed', endDate }, 'not-a-date')).toThrow(RangeError);
+  });
+});
+
+describe('canConfirmBooking', () => {
+  const startDate = '2026-11-10';
+
+  it('allows confirming a pending request that starts today or later', () => {
+    expect(canConfirmBooking({ status: 'pending', startDate }, '2026-11-10')).toBe(true);
+    expect(canConfirmBooking({ status: 'pending', startDate }, '2026-11-01')).toBe(true);
+  });
+
+  it('blocks confirming a pending request whose start date has passed', () => {
+    expect(canConfirmBooking({ status: 'pending', startDate }, '2026-11-11')).toBe(false);
+  });
+
+  it.each(['confirmed', 'declined', 'cancelled', 'completed'] as const)('blocks confirming a %s booking', (status) => {
+    expect(canConfirmBooking({ status, startDate }, '2026-11-01')).toBe(false);
+  });
+});
+
+describe('canCancelBooking', () => {
+  const endDate = '2026-11-14';
+
+  it('allows cancelling a pending request, even after its dates', () => {
+    expect(canCancelBooking({ status: 'pending', endDate }, '2026-11-20')).toBe(true);
+  });
+
+  it('allows cancelling a confirmed stay before its check-out day', () => {
+    expect(canCancelBooking({ status: 'confirmed', endDate }, '2026-11-13')).toBe(true);
+  });
+
+  it('blocks cancelling a confirmed stay from its check-out day on (end-exclusive)', () => {
+    expect(canCancelBooking({ status: 'confirmed', endDate }, '2026-11-14')).toBe(false);
+    expect(canCancelBooking({ status: 'confirmed', endDate }, '2026-11-20')).toBe(false);
+  });
+
+  it.each(['declined', 'cancelled', 'completed'] as const)('blocks cancelling a %s booking', (status) => {
+    expect(canCancelBooking({ status, endDate }, '2026-11-01')).toBe(false);
   });
 });

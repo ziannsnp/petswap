@@ -11,3 +11,24 @@ export class BookingCompletionError extends Error {
     this.name = 'BookingCompletionError';
   }
 }
+
+export class BookingExpiredError extends Error {
+  constructor() {
+    super("This request's start date has passed, so it can no longer be confirmed. Decline it to close the request.");
+    this.name = 'BookingExpiredError';
+  }
+}
+
+export class BookingCancellationError extends Error {
+  constructor() {
+    super('This stay has already ended and can no longer be cancelled.');
+    this.name = 'BookingCancellationError';
+  }
+}
+
+export class DuplicateBookingRequestError extends Error {
+  constructor() {
+    super('You already have a pending request for this pet on these dates.');
+    this.name = 'DuplicateBookingRequestError';
+  }
+}

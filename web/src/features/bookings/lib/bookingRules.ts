@@ -1,8 +1,15 @@
 import type { BookingStatus, BookingWindow, ExistingBooking } from '../types';
 
+const CALENDAR_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Midnight UTC of a `YYYY-MM-DD` calendar day. V8 rolls an impossible day such as 2026-02-30 over
+ * to 2026-03-02 instead of rejecting it, so the parsed value is formatted back and must match;
+ * the same round trip guards search dates (searchCriteria.ts).
+ */
 export function asUtcDay(date: string): number {
-  const timestamp = Date.parse(`${date}T00:00:00.000Z`);
-  if (Number.isNaN(timestamp)) {
+  const timestamp = CALENDAR_DATE_PATTERN.test(date) ? Date.parse(`${date}T00:00:00.000Z`) : Number.NaN;
+  if (Number.isNaN(timestamp) || new Date(timestamp).toISOString().slice(0, 10) !== date) {
     throw new RangeError(`Invalid booking date: ${date}`);
   }
   return timestamp;

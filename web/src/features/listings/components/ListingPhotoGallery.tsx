@@ -71,13 +71,21 @@ export function ListingPhotoGallery({ listingTitle, photos }: ListingPhotoGaller
             onError={() => markPhotoFailed(selectedPhoto.id)}
           />
         ) : (
-          <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center text-gray-500" role="img" aria-label={`${listingTitle} photo unavailable`}>
-            <Image className="h-10 w-10" aria-hidden="true" />
-            <div>
-              <p className="font-medium text-gray-700">Photo unavailable</p>
-              <p className="mt-1 text-sm">The listing details are still available below.</p>
+          photos.length === 0 ? (
+            // The host has not added photos: an empty state, not an error.
+            <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center text-gray-500" role="img" aria-label={`${listingTitle} has no photos yet`}>
+              <Image className="h-10 w-10" aria-hidden="true" />
+              <p className="font-medium text-gray-700">No photo yet</p>
             </div>
-          </div>
+          ) : (
+            <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center text-gray-500" role="img" aria-label={`${listingTitle} photo unavailable`}>
+              <Image className="h-10 w-10" aria-hidden="true" />
+              <div>
+                <p className="font-medium text-gray-700">Photo unavailable</p>
+                <p className="mt-1 text-sm">The listing details are still available below.</p>
+              </div>
+            </div>
+          )
         )}
 
         {hasMultiplePhotos && (

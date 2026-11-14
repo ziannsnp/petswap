@@ -419,6 +419,32 @@ describe('ProfileEditLayout', () => {
       expect(mutateAsync).toHaveBeenCalledWith(expect.objectContaining({ photo_url: null }));
     });
 
+    it('keeps the stored avatar when the profile save fails after Remove photo', async () => {
+      mutateAsync.mockRejectedValue(new Error('network down'));
+      renderLayout({ profile: { ...sampleProfile, photo_url: 'https://example.com/old.jpg' } });
+
+      fireEvent.click(screen.getByRole('button', { name: /remove photo/i }));
+      fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
+
+      await waitFor(() => expect(mutateAsync).toHaveBeenCalled());
+      await screen.findByRole('button', { name: /save changes/i });
+      expect(deleteAvatarMutateAsync).not.toHaveBeenCalled();
+    });
+
+    it('deletes the stored avatar only after the profile has saved, then calls onSave', async () => {
+      const calls: string[] = [];
+      mutateAsync.mockImplementation(async () => { calls.push('save'); return sampleProfile; });
+      deleteAvatarMutateAsync.mockImplementation(async () => { calls.push('delete'); });
+      const onSave = jest.fn(() => { calls.push('onSave'); });
+      renderLayout({ profile: { ...sampleProfile, photo_url: 'https://example.com/old.jpg' }, onSave });
+
+      fireEvent.click(screen.getByRole('button', { name: /remove photo/i }));
+      fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
+
+      await waitFor(() => expect(onSave).toHaveBeenCalled());
+      expect(calls).toEqual(['save', 'delete', 'onSave']);
+    });
+
     it('shows an upload error and does not save the rest of the form when the upload fails', async () => {
       uploadMutateAsync.mockRejectedValue(new Error('Storage is unreachable.'));
       renderLayout();

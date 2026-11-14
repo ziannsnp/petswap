@@ -238,7 +238,7 @@ describe('ListingDetailScreen content', () => {
 
     expect(screen.getByRole('heading', { level: 1, name: listing.title })).toBeInTheDocument();
     expect(screen.getByText('No facilities have been added.')).toBeInTheDocument();
-    expect(screen.getByRole('img', { name: `${listing.title} photo unavailable` })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: `${listing.title} has no photos yet` })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Your host' })).not.toBeInTheDocument();
   });
 

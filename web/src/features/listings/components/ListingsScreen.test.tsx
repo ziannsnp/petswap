@@ -17,7 +17,7 @@ const mockMutationState = {
   isError: false,
   variables: undefined as { listingId: string; status: 'draft' | 'published' } | undefined,
 };
-const mockListingState = { status: 'published' as 'draft' | 'published' };
+const mockListingState = { status: 'published' as 'draft' | 'published', capacity: 2 };
 
 jest.mock('../hooks/useListings', () => ({
   useMyListings: () => ({
@@ -26,7 +26,7 @@ jest.mock('../hooks/useListings', () => ({
       title: 'Quiet home',
       location: 'Chiang Mai',
       description: 'A calm place for pets.',
-      capacity: 2,
+      capacity: mockListingState.capacity,
       accepted_pet_types: ['dog'],
       facilities: null,
       status: mockListingState.status,
@@ -62,6 +62,7 @@ afterEach(() => {
   mockMutationState.isError = false;
   mockMutationState.variables = undefined;
   mockListingState.status = 'published';
+  mockListingState.capacity = 2;
 });
 
 function renderListings() {
@@ -73,6 +74,16 @@ function renderListings() {
 }
 
 describe('ListingsScreen', () => {
+  it.each([
+    [1, 'Up to 1 pet'],
+    [2, 'Up to 2 pets'],
+  ])('shows capacity %i as "%s"', (capacity, text) => {
+    mockListingState.capacity = capacity;
+    renderListings();
+
+    expect(screen.getByText(text)).toBeInTheDocument();
+  });
+
   it('confirms that a newly published listing is discoverable', () => {
     render(
       <MemoryRouter initialEntries={[{ pathname: '/listings', state: { listingSaved: 'published' } }]}>

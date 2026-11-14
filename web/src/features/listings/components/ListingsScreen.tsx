@@ -89,7 +89,7 @@ function ListingCard({ listing, isPending, isPublishing, publishError, onRequest
             {listing.accepted_pet_types.map((petType) => (
               <span className="badge-brand" key={petType}>{petSpeciesLabel(petType)}</span>
             ))}
-            <span className="badge-brand">Up to {listing.capacity} pets</span>
+            <span className="badge-brand">Up to {listing.capacity} {listing.capacity === 1 ? 'pet' : 'pets'}</span>
           </div>
         </div>
       </Link>

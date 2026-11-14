@@ -537,3 +537,16 @@ describe('pet care information on booking requests (FR-2.2)', () => {
     expect(screen.queryByText(/No care information added/)).not.toBeInTheDocument();
   });
 });
+
+it('shows a declined incoming booking whose pet is no longer shared with the host', () => {
+  mockUseOutgoingBookings.mockReturnValue(successResult([]));
+  mockUseIncomingBookings.mockReturnValue(
+    successResult([makeBooking({ id: 'in-declined', status: 'declined', pet: null })]),
+  );
+
+  render(<BookingsScreen />);
+
+  expect(screen.getByText('Pet details are no longer shared')).toBeInTheDocument();
+  expect(screen.queryByText('No care information added.')).not.toBeInTheDocument();
+  expect(screen.getByText('Declined')).toBeInTheDocument();
+});

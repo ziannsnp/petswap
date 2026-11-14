@@ -39,7 +39,12 @@ export type BookingListingSummary = Pick<Database['public']['Tables']['listings'
 
 /** A booking plus enough pet/listing context to render FR-5.3's outgoing/incoming lists. */
 export type BookingWithDetails = Booking & {
-  pet: BookingPetSummary;
+  /**
+   * Null when the pet is no longer shared with the viewer: a host keeps access to the requester's
+   * pet only while the booking is pending, confirmed, or completed (not after declining it or after
+   * the requester cancels).
+   */
+  pet: BookingPetSummary | null;
   listing: BookingListingSummary;
 };
 

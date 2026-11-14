@@ -5,6 +5,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { useMyListings } from '../hooks/useListings';
 import { useUpdateListing } from '../hooks/useUpdateListing';
 import type { Listing } from '../lib/listingApi';
+import { ListingError } from '../lib/listingErrors';
 import { EditListingScreen } from './EditListingScreen';
 
 jest.mock('../hooks/useListings', () => ({
@@ -244,6 +245,30 @@ describe('EditListingScreen', () => {
       { kind: 'existing', id: 'img-1' },
       { kind: 'existing', id: 'img-new' },
     ]);
+  });
+
+  it('explains a refused capacity cut instead of blaming the connection', () => {
+    mockedUseUpdateListing.mockReturnValue({
+      isPending: false,
+      isError: true,
+      error: new ListingError('capacity_below_bookings', "Capacity can't be lower than the number of pets already confirmed for an upcoming night. Keep a higher capacity, or wait until those stays have ended."),
+      mutateAsync: jest.fn(),
+    } as never);
+    mockedUseMyListings.mockReturnValue(listingsQuery({ data: [sunnyRoom] }));
+    renderAt('listing-1');
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/capacity can't be lower than the number of pets already confirmed/i);
+    expect(screen.getByRole('alert')).not.toHaveTextContent(/check your connection/i);
+  });
+
+  it('keeps the generic save error for other failures', () => {
+    mockedUseUpdateListing.mockReturnValue({
+      isPending: false, isError: true, error: new Error('boom'), mutateAsync: jest.fn(),
+    } as never);
+    mockedUseMyListings.mockReturnValue(listingsQuery({ data: [sunnyRoom] }));
+    renderAt('listing-1');
+
+    expect(screen.getByRole('alert')).toHaveTextContent('We could not save your changes. Check your connection and try again.');
   });
 
   it('shows an empty photo state for a listing with no photos', () => {

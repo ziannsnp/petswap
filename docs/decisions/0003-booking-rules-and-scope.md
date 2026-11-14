@@ -1,6 +1,6 @@
 # ADR 0003: Booking rules and ratings-free scope
 
-**Status:** Accepted
+**Status:** Accepted, amended by 0011
 
 ## Context
 

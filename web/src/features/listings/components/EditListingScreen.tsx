@@ -5,6 +5,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMyListings } from '../hooks/useListings';
 import { useUpdateListing } from '../hooks/useUpdateListing';
 import type { Listing } from '../lib/listingApi';
+import { ListingError } from '../lib/listingErrors';
 import { validateListingForm } from '../lib/listingForm';
 import type { ListingFormErrors } from '../lib/listingForm';
 import { FACILITY_OPTIONS, parseFacilities } from '../lib/listingOptions';
@@ -339,7 +340,9 @@ function EditListingForm({ listing }: EditListingFormProps) {
 
       {updateListingMutation.isError && (
         <p className="border-l-4 border-red-600 bg-red-50 px-4 py-3 text-sm text-red-700" role="alert">
-          We could not save your changes. Check your connection and try again.
+          {updateListingMutation.error instanceof ListingError && updateListingMutation.error.code === 'capacity_below_bookings'
+            ? updateListingMutation.error.message
+            : 'We could not save your changes. Check your connection and try again.'}
         </p>
       )}
 

@@ -40,8 +40,9 @@ Before changing code, identify the relevant requirement and read only the docume
 
 ## Booking rules
 
-- Only confirmed bookings on the same listing block overlapping dates.
+- One booking is one pet. Confirmed bookings on a listing may not exceed its capacity on any night (peak occupancy, not overlap count); a pet may not have overlapping confirmed bookings on any listings. Pending and terminal statuses never block. See ADR 0011.
 - Date ranges are end-exclusive: back-to-back bookings are valid.
+- The booking day is the UTC day (`public.booking_today()`); use `bookingDates.ts` helpers in the UI, never raw `new Date()` comparisons.
 - Keep `hasBookingConflict()` and `isValidBookingTransition()` pure and Jest-tested.
 - Browser validation is not authorization. When Supabase is added, enforce ownership and conflict rules through RLS/database constraints as well.
 

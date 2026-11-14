@@ -1,6 +1,12 @@
 import { getSupabaseClient, type AppSupabaseClient } from '@/shared/lib/supabase';
-import { BookingCompletionError, BookingConflictError } from './bookingErrors';
-import { listIncomingBookings, listOutgoingBookings, updateBookingStatus } from './bookingApi';
+import {
+  BookingCompletionError,
+  BookingConflictError,
+  BookingListingFullError,
+  BookingPetUnavailableError,
+  BookingStartDateError,
+} from './bookingErrors';
+import { createBookingRequest, listIncomingBookings, listOutgoingBookings, updateBookingStatus } from './bookingApi';
 
 // Explicit factory so the real module (and its Vite-only `import.meta.env` usage) never loads under Jest.
 jest.mock('@/shared/lib/supabase', () => ({ getSupabaseClient: jest.fn() }));
@@ -18,8 +24,10 @@ function createQueryBuilder(result: QueryResult) {
     eq: jest.fn(),
     order: jest.fn(),
     update: jest.fn(),
+    insert: jest.fn(),
     single: jest.fn(),
   };
+  builder.insert.mockReturnValue(builder);
   builder.select.mockReturnValue(builder);
   builder.eq.mockReturnValue(builder);
   builder.order.mockResolvedValue(result);
@@ -119,15 +127,16 @@ describe('listIncomingBookings', () => {
 });
 
 describe('updateBookingStatus', () => {
-  it('explains that confirmation failed because another confirmed booking overlaps', async () => {
-    const databaseError = { code: '23P01', message: 'conflicting key violates exclusion constraint' };
+  it('explains that confirmation failed because the listing is full (PBC01)', async () => {
+    const databaseError = { code: 'PBC01', message: 'This listing has no remaining capacity for these dates.' };
     const { builder, from } = mockAuthenticatedClient('owner-1', { data: null, error: databaseError });
 
     const update = updateBookingStatus('booking-1', 'confirmed');
 
-    await expect(update).rejects.toBeInstanceOf(BookingConflictError);
+    await expect(update).rejects.toBeInstanceOf(BookingListingFullError);
+    await expect(update).rejects.toMatchObject({ reason: 'listing_full' });
     await expect(update).rejects.toThrow(
-      'This request overlaps another confirmed booking on this listing. Choose different dates before confirming.',
+      'This listing is full for some of these dates. Confirming this request would exceed its capacity on at least one night.',
     );
 
     expect(from).toHaveBeenCalledWith('bookings');
@@ -135,8 +144,39 @@ describe('updateBookingStatus', () => {
     expect(builder.eq).toHaveBeenCalledWith('id', 'booking-1');
   });
 
-  it('keeps overlap constraint errors unchanged when declining', async () => {
-    const databaseError = { code: '23P01', message: 'conflicting key violates exclusion constraint' };
+  it('explains that confirmation failed because the pet is already booked (PBP01)', async () => {
+    const databaseError = { code: 'PBP01', message: 'This pet already has a confirmed booking for these dates.' };
+    mockAuthenticatedClient('owner-1', { data: null, error: databaseError });
+
+    const update = updateBookingStatus('booking-1', 'confirmed');
+
+    await expect(update).rejects.toBeInstanceOf(BookingPetUnavailableError);
+    await expect(update).rejects.toMatchObject({ reason: 'pet_booked' });
+  });
+
+  it('maps the per-pet exclusion backstop to the pet error without passing on its DETAIL', async () => {
+    const databaseError = {
+      code: '23P01',
+      message: 'conflicting key value violates exclusion constraint "bookings_no_confirmed_pet_overlap"',
+      details: 'Key (pet_id, daterange(start_date, end_date, \'[)\'::text))=(pet-1, [2026-12-01,2026-12-05)) conflicts with existing key',
+    };
+    mockAuthenticatedClient('owner-1', { data: null, error: databaseError });
+
+    const refusal: unknown = await updateBookingStatus('booking-1', 'confirmed').catch((error: unknown) => error);
+
+    expect(refusal).toBeInstanceOf(BookingPetUnavailableError);
+    expect(refusal).not.toHaveProperty('details');
+    expect(refusal).not.toHaveProperty('cause');
+    expect((refusal as Error).message).not.toContain('2026-12-01');
+  });
+
+  it('keeps both refusals catchable as BookingConflictError', async () => {
+    mockAuthenticatedClient('owner-1', { data: null, error: { code: 'PBC01', message: 'full' } });
+    await expect(updateBookingStatus('booking-1', 'confirmed')).rejects.toBeInstanceOf(BookingConflictError);
+  });
+
+  it.each(['PBC01', 'PBP01', '23P01'])('keeps %s errors unchanged when not confirming', async (code) => {
+    const databaseError = { code, message: 'refused' };
     mockAuthenticatedClient('owner-1', { data: null, error: databaseError });
 
     await expect(updateBookingStatus('booking-1', 'declined')).rejects.toBe(databaseError);
@@ -191,5 +231,31 @@ describe('updateBookingStatus completion', () => {
     mockAuthenticatedClient('owner-1', { data: null, error: databaseError });
 
     await expect(updateBookingStatus('booking-1', 'completed')).rejects.toBe(databaseError);
+  });
+});
+
+describe('createBookingRequest', () => {
+  const request = {
+    listing_id: 'listing-1',
+    pet_id: 'pet-1',
+    requester_id: 'requester-1',
+    start_date: '2026-09-13',
+    end_date: '2026-09-15',
+  };
+
+  it('explains that the database UTC day has already passed the start date', async () => {
+    mockAuthenticatedClient('requester-1', {
+      data: null,
+      error: { code: 'P0001', message: 'booking start date cannot be in the past' },
+    });
+
+    await expect(createBookingRequest(request)).rejects.toBeInstanceOf(BookingStartDateError);
+  });
+
+  it('keeps other insert errors unchanged', async () => {
+    const databaseError = { code: 'P0001', message: 'booking pet must belong to requester' };
+    mockAuthenticatedClient('requester-1', { data: null, error: databaseError });
+
+    await expect(createBookingRequest(request)).rejects.toBe(databaseError);
   });
 });

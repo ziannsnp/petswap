@@ -4,8 +4,8 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { BookingsScreen } from './BookingsScreen';
 import { useIncomingBookings, useOutgoingBookings, useUpdateBookingStatus } from '../hooks/useBookings';
-import { BookingCompletionError, BookingConflictError } from '../lib/bookingErrors';
-import { todayIsoDate } from '../lib/bookingRequestForm';
+import { BookingCompletionError, BookingListingFullError, BookingPetUnavailableError } from '../lib/bookingErrors';
+import { utcTodayIsoDate } from '../lib/bookingDates';
 import type { BookingPetSummary, BookingWithDetails } from '../lib/bookingApi';
 
 // Explicit factory so the real hooks module (and its supabase/import.meta.env chain) never loads under Jest.
@@ -305,8 +305,13 @@ it('shows an error on the affected card when a status update fails', async () =>
   expect(await screen.findByRole('alert')).toHaveTextContent(/could not update this booking/i);
 });
 
-it('shows an overlap conflict on the booking card when its owner cannot confirm', async () => {
-  const mutateAsync = jest.fn().mockRejectedValue(new BookingConflictError());
+it.each([
+  ['the listing is full', new BookingListingFullError(),
+    'This listing is full for some of these dates. Confirming this request would exceed its capacity on at least one night.'],
+  ['the pet is already booked elsewhere', new BookingPetUnavailableError(),
+    'This pet already has a confirmed booking for some of these dates, so this request can no longer be confirmed.'],
+])('shows a distinct message on the booking card when it cannot be confirmed because %s', async (_reason, refusal, message) => {
+  const mutateAsync = jest.fn().mockRejectedValue(refusal);
   mockUseUpdateBookingStatus.mockReturnValue({ mutateAsync });
   mockUseOutgoingBookings.mockReturnValue(successResult([]));
   mockUseIncomingBookings.mockReturnValue(successResult([makeBooking({ id: 'in-1', status: 'pending' })]));
@@ -314,9 +319,7 @@ it('shows an overlap conflict on the booking card when its owner cannot confirm'
   render(<BookingsScreen />);
   fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
 
-  expect(await screen.findByRole('alert')).toHaveTextContent(
-    'This request overlaps another confirmed booking on this listing. Choose different dates before confirming.',
-  );
+  expect(await screen.findByRole('alert')).toHaveTextContent(message);
 });
 
 // --- Confirm / decline (listing owner) ---
@@ -358,8 +361,8 @@ it('disables both responses on a card while its update is saving', async () => {
   expect(mutateAsync).toHaveBeenCalledTimes(1);
 });
 
-it('shows an overlap conflict only on the card that failed to confirm', async () => {
-  const mutateAsync = jest.fn().mockRejectedValue(new BookingConflictError());
+it('shows a capacity conflict only on the card that failed to confirm', async () => {
+  const mutateAsync = jest.fn().mockRejectedValue(new BookingListingFullError());
   mockUseUpdateBookingStatus.mockReturnValue({ mutateAsync });
   mockUseOutgoingBookings.mockReturnValue(successResult([]));
   mockUseIncomingBookings.mockReturnValue(successResult([
@@ -417,12 +420,38 @@ it('offers Mark completed on a confirmed incoming booking whose end date has pas
 it('offers Mark completed on the end date itself (check-out day)', () => {
   mockUseOutgoingBookings.mockReturnValue(successResult([]));
   mockUseIncomingBookings.mockReturnValue(successResult([
-    makeBooking({ status: 'confirmed', start_date: '2020-01-05', end_date: todayIsoDate() }),
+    makeBooking({ status: 'confirmed', start_date: '2020-01-05', end_date: utcTodayIsoDate() }),
   ]));
 
   render(<BookingsScreen />);
 
   expect(screen.getByRole('button', { name: 'Mark completed' })).toBeInTheDocument();
+});
+
+describe('completion follows the database UTC day near midnight', () => {
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  function renderEndingOn(endDate: string) {
+    mockUseOutgoingBookings.mockReturnValue(successResult([]));
+    mockUseIncomingBookings.mockReturnValue(successResult([
+      makeBooking({ status: 'confirmed', start_date: '2026-09-10', end_date: endDate }),
+    ]));
+    render(<BookingsScreen />);
+  }
+
+  it('hides Mark completed one minute before the UTC end day, whatever the local day is', () => {
+    jest.useFakeTimers({ now: new Date('2026-09-14T23:59:00Z'), doNotFake: ['setTimeout', 'clearTimeout'] });
+    renderEndingOn('2026-09-15');
+    expect(screen.queryByRole('button', { name: 'Mark completed' })).not.toBeInTheDocument();
+  });
+
+  it('offers Mark completed from 00:00 UTC on the end day', () => {
+    jest.useFakeTimers({ now: new Date('2026-09-15T00:00:00Z'), doNotFake: ['setTimeout', 'clearTimeout'] });
+    renderEndingOn('2026-09-15');
+    expect(screen.getByRole('button', { name: 'Mark completed' })).toBeInTheDocument();
+  });
 });
 
 it('does not offer Mark completed before the end date', () => {

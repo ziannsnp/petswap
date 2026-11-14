@@ -246,6 +246,22 @@ describe('EditListingScreen', () => {
     ]);
   });
 
+  it('clears rejected-photo messages once the listing saves', async () => {
+    const user = userEvent.setup({ applyAccept: false });
+    const mutateAsync = jest.fn().mockResolvedValue(sunnyRoom);
+    mockedUseUpdateListing.mockReturnValue({ isPending: false, isError: false, mutateAsync } as never);
+    mockedUseMyListings.mockReturnValue(listingsQuery({ data: [sunnyRoom] }));
+    renderAt('listing-1');
+
+    await user.upload(screen.getByLabelText(/add photos/i), new File(['notes'], 'notes.txt', { type: 'text/plain' }));
+    expect(screen.getByText(/notes\.txt:/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+
+    expect(await screen.findByText('Changes saved successfully.')).toBeInTheDocument();
+    expect(screen.queryByText(/notes\.txt:/)).not.toBeInTheDocument();
+  });
+
   it('shows an empty photo state for a listing with no photos', () => {
     mockedUseMyListings.mockReturnValue(
       listingsQuery({ data: [{ ...sunnyRoom, listing_images: [], cover_photo_url: null }] }),

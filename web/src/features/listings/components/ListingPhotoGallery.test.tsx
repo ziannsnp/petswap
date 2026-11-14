@@ -54,7 +54,10 @@ describe('ListingPhotoGallery', () => {
 
   it('shows an accessible placeholder when the listing has no photos', () => {
     render(<ListingPhotoGallery listingTitle="Quiet home" photos={[]} />);
-    expect(screen.getByRole('img', { name: 'Quiet home photo unavailable' })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Quiet home has no photos yet' })).toBeInTheDocument();
+    expect(screen.getByText('No photo yet')).toBeInTheDocument();
+    // An empty listing is not an error: the broken-image copy is reserved for failed loads.
+    expect(screen.queryByText('Photo unavailable')).not.toBeInTheDocument();
     expect(screen.queryByRole('tab')).not.toBeInTheDocument();
   });
 

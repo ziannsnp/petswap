@@ -17,10 +17,22 @@ import { useAuth, LogoutConfirmDialog } from '@/features/auth';
 import { useCurrentProfile } from '@/features/profiles';
 import { getInitials } from '@/shared/lib/initials';
 
-const PROTECTED_NAV_ITEMS = [
+// "My listings" owns /listings, /listings/new and /listings/:id/edit, but /listings/:id is the
+// public listing page every visitor opens from search, so it must not highlight My listings.
+function isMyListingsPath(pathname: string): boolean {
+  return pathname === '/listings' || pathname === '/listings/new' || /^\/listings\/[^/]+\/edit$/.test(pathname);
+}
+
+const PROTECTED_NAV_ITEMS: ReadonlyArray<{
+  to: string;
+  label: string;
+  Icon: typeof Search;
+  end: boolean;
+  matches?: (pathname: string) => boolean;
+}> = [
   { to: '/', label: 'Search', Icon: Search, end: true },
   { to: '/bookings', label: 'Bookings', Icon: CalendarDays, end: false },
-  { to: '/listings', label: 'My listings', Icon: Home, end: false },
+  { to: '/listings', label: 'My listings', Icon: Home, end: false, matches: isMyListingsPath },
   { to: '/pets', label: 'Pets', Icon: Heart, end: false },
 ];
 
@@ -114,14 +126,15 @@ export function Navbar() {
         {/* Desktop Navigation Links */}
         <div className="ml-auto hidden h-full min-w-0 items-stretch md:flex">
           {isAuthenticated ? (
-            PROTECTED_NAV_ITEMS.map(({ to, label, Icon, end }) => (
+            PROTECTED_NAV_ITEMS.map(({ to, label, Icon, end, matches }) => (
               <NavLink
                 key={to}
                 to={to}
                 end={end}
+                aria-current={matches ? (matches(pathname) ? 'page' : false) : undefined}
                 className={({ isActive }) =>
                   `flex min-w-12 items-center justify-center gap-2 border-b-2 px-2 text-sm font-medium transition-colors lg:min-w-24 lg:px-3 ${
-                    isActive
+                    (matches ? matches(pathname) : isActive)
                       ? 'border-brand-600 bg-brand-50 text-brand-700'
                       : 'border-transparent text-gray-500 hover:bg-brand-50 hover:text-brand-700'
                   }`
@@ -262,15 +275,16 @@ export function Navbar() {
         <div id="mobile-menu" className="border-b border-gray-200 bg-white px-4 pt-2 pb-4 md:hidden" data-testid="mobile-menu">
           <div className="space-y-1 pb-3">
             {isAuthenticated ? (
-              PROTECTED_NAV_ITEMS.map(({ to, label, Icon, end }) => (
+              PROTECTED_NAV_ITEMS.map(({ to, label, Icon, end, matches }) => (
                 <NavLink
                   key={to}
                   to={to}
                   end={end}
+                  aria-current={matches ? (matches(pathname) ? 'page' : false) : undefined}
                   onClick={() => setMobileMenuOpen(false)}
                   className={({ isActive }) =>
                     `flex items-center gap-3 rounded-lg px-3 py-2.5 text-base font-medium transition-colors ${
-                      isActive
+                      (matches ? matches(pathname) : isActive)
                         ? 'bg-brand-50 text-brand-700 font-semibold'
                         : 'text-gray-700 hover:bg-gray-50'
                     }`

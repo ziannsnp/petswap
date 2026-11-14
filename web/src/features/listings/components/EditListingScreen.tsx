@@ -168,6 +168,9 @@ function EditListingForm({ listing }: EditListingFormProps) {
       setAcceptedPetTypes(savedListing.accepted_pet_types);
       setFacilities(parseFacilities(savedListing.facilities));
       setPhotos(savedListing.listing_images.map((image) => ({ kind: 'existing', image })));
+      // Files rejected by the picker were never part of this save; their messages describe an
+      // earlier selection, so they must not stay next to the success banner.
+      setRejectedPhotos([]);
       previewUrls.current.forEach((url) => URL.revokeObjectURL(url));
       previewUrls.current = [];
       setIsPristine(true);

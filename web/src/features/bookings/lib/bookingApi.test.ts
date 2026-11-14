@@ -1,6 +1,12 @@
 import { getSupabaseClient, type AppSupabaseClient } from '@/shared/lib/supabase';
-import { BookingCompletionError, BookingConflictError } from './bookingErrors';
-import { listIncomingBookings, listOutgoingBookings, updateBookingStatus } from './bookingApi';
+import {
+  BookingCancellationError,
+  BookingCompletionError,
+  BookingConflictError,
+  BookingExpiredError,
+  DuplicateBookingRequestError,
+} from './bookingErrors';
+import { createBookingRequest, listIncomingBookings, listOutgoingBookings, updateBookingStatus } from './bookingApi';
 
 // Explicit factory so the real module (and its Vite-only `import.meta.env` usage) never loads under Jest.
 jest.mock('@/shared/lib/supabase', () => ({ getSupabaseClient: jest.fn() }));
@@ -18,12 +24,14 @@ function createQueryBuilder(result: QueryResult) {
     eq: jest.fn(),
     order: jest.fn(),
     update: jest.fn(),
+    insert: jest.fn(),
     single: jest.fn(),
   };
   builder.select.mockReturnValue(builder);
   builder.eq.mockReturnValue(builder);
   builder.order.mockResolvedValue(result);
   builder.update.mockReturnValue(builder);
+  builder.insert.mockReturnValue(builder);
   builder.single.mockResolvedValue(result);
   return builder;
 }
@@ -191,5 +199,36 @@ describe('updateBookingStatus completion', () => {
     mockAuthenticatedClient('owner-1', { data: null, error: databaseError });
 
     await expect(updateBookingStatus('booking-1', 'completed')).rejects.toBe(databaseError);
+  });
+});
+
+describe('booking rules enforced by guard_booking_change', () => {
+  it('explains that a request past its start date can no longer be confirmed', async () => {
+    const databaseError = { code: 'P0001', message: 'a request whose start date has passed cannot be confirmed' };
+    mockAuthenticatedClient('owner-1', { data: null, error: databaseError });
+
+    await expect(updateBookingStatus('booking-1', 'confirmed')).rejects.toBeInstanceOf(BookingExpiredError);
+  });
+
+  it('explains that a stay which has ended can no longer be cancelled', async () => {
+    const databaseError = { code: 'P0001', message: 'a stay that has ended cannot be cancelled' };
+    mockAuthenticatedClient('requester-1', { data: null, error: databaseError });
+
+    await expect(updateBookingStatus('booking-1', 'cancelled')).rejects.toBeInstanceOf(BookingCancellationError);
+  });
+
+  it('explains a duplicate pending request instead of blaming the connection', async () => {
+    const databaseError = { code: 'P0001', message: 'an identical booking request is already pending' };
+    mockAuthenticatedClient('requester-1', { data: null, error: databaseError });
+
+    await expect(
+      createBookingRequest({
+        listing_id: 'listing-1',
+        pet_id: 'pet-1',
+        requester_id: 'requester-1',
+        start_date: '2026-12-01',
+        end_date: '2026-12-03',
+      }),
+    ).rejects.toBeInstanceOf(DuplicateBookingRequestError);
   });
 });

@@ -51,7 +51,9 @@ async function requestBooking(page: Page, dates: { start: string; end: string })
 // run without a database reset left one on the same dates.
 async function openBookingCard(page: Page, startDate: string) {
   await page.goto(routes.bookings);
-  return page.getByRole('listitem').filter({ hasText: formatBookingDate(startDate) }).first();
+  // Match "<start> –" so a card that only ENDS on this date (e.g. a fixed seed booking whose
+  // end date equals today - 10) is never picked by mistake.
+  return page.getByRole('listitem').filter({ hasText: `${formatBookingDate(startDate)} –` }).first();
 }
 
 test.describe('booking lifecycle after the request', () => {

@@ -58,6 +58,32 @@ export function isValidBookingTransition(from: BookingStatus, to: BookingStatus)
  *   guard repeats the check against its own UTC day.
  * - Actor authorization (listing owner only) is enforced separately.
  */
+/**
+ * Pure confirm check: a host can confirm only a pending request whose start date has not passed.
+ * The database guard repeats this against its UTC day, so a request left pending past its start
+ * can only be declined.
+ */
+export function canConfirmBooking(
+  booking: Pick<ExistingBooking, 'status' | 'startDate'>,
+  today: string,
+): boolean {
+  return isValidBookingTransition(booking.status, 'confirmed') && asUtcDay(booking.startDate) >= asUtcDay(today);
+}
+
+/**
+ * Pure cancel check: a requester can cancel a pending request, or a confirmed stay until its
+ * check-out day (end-exclusive). After that the stay is over and only the host can complete it.
+ */
+export function canCancelBooking(
+  booking: Pick<ExistingBooking, 'status' | 'endDate'>,
+  today: string,
+): boolean {
+  if (!isValidBookingTransition(booking.status, 'cancelled')) {
+    return false;
+  }
+  return booking.status !== 'confirmed' || asUtcDay(today) < asUtcDay(booking.endDate);
+}
+
 export function canCompleteBooking(
   booking: Pick<ExistingBooking, 'status' | 'endDate'>,
   today: string,

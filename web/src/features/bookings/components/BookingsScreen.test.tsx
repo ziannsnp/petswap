@@ -52,8 +52,8 @@ function makeBooking(overrides: Partial<BookingWithDetails> = {}): BookingWithDe
     pet_id: 'pet-1',
     requester_id: 'requester-1',
     status: 'confirmed',
-    start_date: '2026-09-10',
-    end_date: '2026-09-14',
+    start_date: '2099-09-10',
+    end_date: '2099-09-14',
     requester_note: null,
     owner_note: null,
     created_at: '2026-09-01T00:00:00.000Z',
@@ -126,8 +126,8 @@ it('renders outgoing and incoming items with their pet and listing details', () 
   const incomingBooking = makeBooking({
     id: 'in-1',
     status: 'pending',
-    start_date: '2026-10-01',
-    end_date: '2026-10-05',
+    start_date: '2099-10-01',
+    end_date: '2099-10-05',
     pet: { id: 'pet-2', name: 'Bella', species: 'cat', photo_url: null, ...NO_CARE_INFO },
     listing: { id: 'listing-2', title: 'Sunny Deck', location: 'Denver' },
   });
@@ -140,7 +140,7 @@ it('renders outgoing and incoming items with their pet and listing details', () 
   expect(screen.getByText('(Dog)')).toBeInTheDocument();
   expect(screen.getByText(`Cozy Yard ${MIDDOT} Austin`)).toBeInTheDocument();
   expect(
-    screen.getByText(`${formatBookingDate('2026-09-10')} ${EN_DASH} ${formatBookingDate('2026-09-14')}`),
+    screen.getByText(`${formatBookingDate('2099-09-10')} ${EN_DASH} ${formatBookingDate('2099-09-14')}`),
   ).toBeInTheDocument();
   expect(screen.getByText('Confirmed')).toBeInTheDocument();
 
@@ -536,4 +536,17 @@ describe('pet care information on booking requests (FR-2.2)', () => {
     expect(screen.queryByRole('region', { name: 'Care information' })).not.toBeInTheDocument();
     expect(screen.queryByText(/No care information added/)).not.toBeInTheDocument();
   });
+});
+
+it('shows a declined incoming booking whose pet is no longer shared with the host', () => {
+  mockUseOutgoingBookings.mockReturnValue(successResult([]));
+  mockUseIncomingBookings.mockReturnValue(
+    successResult([makeBooking({ id: 'in-declined', status: 'declined', pet: null })]),
+  );
+
+  render(<BookingsScreen />);
+
+  expect(screen.getByText('Pet details are no longer shared')).toBeInTheDocument();
+  expect(screen.queryByText('No care information added.')).not.toBeInTheDocument();
+  expect(screen.getByText('Declined')).toBeInTheDocument();
 });

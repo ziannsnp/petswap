@@ -1,8 +1,20 @@
 import { getSupabaseClient } from '@/shared/lib/supabase';
 import type { Database } from '@/shared/types/database.types';
-import { BookingCompletionError, BookingConflictError } from './bookingErrors';
+import {
+  BookingCancellationError,
+  BookingCompletionError,
+  BookingConflictError,
+  BookingExpiredError,
+  DuplicateBookingRequestError,
+} from './bookingErrors';
 
-export { BookingCompletionError, BookingConflictError };
+export {
+  BookingCancellationError,
+  BookingCompletionError,
+  BookingConflictError,
+  BookingExpiredError,
+  DuplicateBookingRequestError,
+};
 
 export type Booking = Database['public']['Tables']['bookings']['Row'];
 export type BookingInsert = Database['public']['Tables']['bookings']['Insert'];
@@ -95,6 +107,11 @@ export async function createBookingRequest(values: BookingInsert): Promise<Booki
     .single();
 
   if (error) {
+    // guard_booking_change() refuses a second identical pending request (double submit or retry).
+    if (error.code === 'P0001' && error.message.includes('identical booking request')) {
+      throw new DuplicateBookingRequestError();
+    }
+
     throw error;
   }
 
@@ -121,6 +138,16 @@ export async function updateBookingStatus(
     // guard_booking_change() raises P0001 when the stay has not ended or the booking is not confirmed.
     if (status === 'completed' && error.code === 'P0001') {
       throw new BookingCompletionError();
+    }
+
+    // ...when a request is confirmed after its start date has passed.
+    if (status === 'confirmed' && error.code === 'P0001' && error.message.includes('start date has passed')) {
+      throw new BookingExpiredError();
+    }
+
+    // ...and when a confirmed stay is cancelled after it has ended.
+    if (status === 'cancelled' && error.code === 'P0001' && error.message.includes('stay that has ended')) {
+      throw new BookingCancellationError();
     }
 
     throw error;

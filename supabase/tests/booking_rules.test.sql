@@ -1,10 +1,13 @@
--- Behavioural test for the confirmed-booking overlap rule.
+-- Behavioural test for the booking constraints that hold even with triggers off.
 --
--- database_contract.sql checks that the constraint *exists*; this file checks
--- that it *behaves*. The Postgres exclusion constraint is the server-side half of
--- the rule that hasBookingConflict() enforces in the browser (see docs/testing.md
--- "Booking minimum coverage"), so it is covered the same way: overlap, back-to-
--- back, a different listing, and a non-confirmed existing booking.
+-- database_contract.sql checks that the constraints *exist*; this file checks
+-- that they *behave*. Since ADR 0011 listing capacity is enforced by the
+-- hold_booking_availability trigger (booking_capacity.test.sql), so the only
+-- overlap constraint left is the per-pet backstop `bookings_no_confirmed_pet_overlap`:
+-- one pet never has two overlapping confirmed stays, on any listings. This file
+-- covers it the same way hasBookingConflict() is covered in the browser:
+-- overlap, back-to-back, a different pet, and a non-confirmed booking. It also
+-- proves the old listing-wide exclusion is gone.
 --
 -- Run locally after rebuilding the database:
 --   npx supabase db reset
@@ -13,8 +16,8 @@
 --
 -- Everything happens inside one transaction that is rolled back, so the database
 -- is untouched afterwards. session_replication_role = replica disables the
--- app-level guard trigger and foreign-key checks so the test exercises the
--- database constraint directly rather than the trigger in front of it; CHECK and
+-- app-level guard triggers and foreign-key checks so the test exercises the
+-- database constraints directly rather than the triggers in front of them; CHECK and
 -- EXCLUDE constraints stay enforced under replica and are what we assert on.
 
 \set ON_ERROR_STOP on
@@ -37,8 +40,9 @@ values
   ('a0000000-0000-4000-8000-000000000002', 'Contract Requester', 'contract_requester', 'test', now());
 
 insert into public.pets (id, owner_id, name, species)
-values ('b0000000-0000-4000-8000-000000000001',
-        'a0000000-0000-4000-8000-000000000002', 'Contract Pet', 'dog');
+values
+  ('b0000000-0000-4000-8000-000000000001', 'a0000000-0000-4000-8000-000000000002', 'Contract Pet', 'dog'),
+  ('b0000000-0000-4000-8000-000000000002', 'a0000000-0000-4000-8000-000000000002', 'Second Pet', 'dog');
 
 insert into public.listings (id, owner_id, title, location, description, capacity, accepted_pet_types, status, published_at)
 values
@@ -47,41 +51,62 @@ values
   ('c0000000-0000-4000-8000-000000000002', 'a0000000-0000-4000-8000-000000000001',
    'Contract Listing B', 'Test City', 'Second fixture listing.', 1, array['dog']::public.pet_species[], 'published', now());
 
--- Anchor: a confirmed stay on listing A for 1-5 Oct (end-exclusive).
+-- Anchor: Contract Pet confirmed on listing A for 1-5 Oct (end-exclusive).
 insert into public.bookings (listing_id, pet_id, requester_id, status, start_date, end_date)
 values ('c0000000-0000-4000-8000-000000000001', 'b0000000-0000-4000-8000-000000000001',
         'a0000000-0000-4000-8000-000000000002', 'confirmed', date '2026-10-01', date '2026-10-05');
 
+-- The same pet confirmed on another listing for overlapping dates is refused.
+do $$
+begin
+  insert into public.bookings (listing_id, pet_id, requester_id, status, start_date, end_date)
+  values ('c0000000-0000-4000-8000-000000000002', 'b0000000-0000-4000-8000-000000000001',
+          'a0000000-0000-4000-8000-000000000002', 'confirmed', date '2026-10-03', date '2026-10-08');
+  raise exception 'REGRESSION: one pet was confirmed on two listings for overlapping dates';
+exception
+  when exclusion_violation then
+    raise notice 'ok: overlapping confirmed stays for one pet rejected across listings';
+end;
+$$;
+
+-- ...and on the same listing.
 do $$
 begin
   insert into public.bookings (listing_id, pet_id, requester_id, status, start_date, end_date)
   values ('c0000000-0000-4000-8000-000000000001', 'b0000000-0000-4000-8000-000000000001',
-          'a0000000-0000-4000-8000-000000000002', 'confirmed', date '2026-10-03', date '2026-10-08');
-  raise exception 'REGRESSION: a confirmed booking overlapping 1-5 Oct on listing A was accepted';
+          'a0000000-0000-4000-8000-000000000002', 'confirmed', date '2026-10-04', date '2026-10-06');
+  raise exception 'REGRESSION: one pet was confirmed twice on one listing for overlapping dates';
 exception
   when exclusion_violation then
-    raise notice 'ok: overlapping confirmed booking rejected';
+    raise notice 'ok: overlapping confirmed stays for one pet rejected on one listing';
 end;
 $$;
 
--- Back-to-back: a stay starting the day the anchor ends must be allowed.
-insert into public.bookings (listing_id, pet_id, requester_id, status, start_date, end_date)
-values ('c0000000-0000-4000-8000-000000000001', 'b0000000-0000-4000-8000-000000000001',
-        'a0000000-0000-4000-8000-000000000002', 'confirmed', date '2026-10-05', date '2026-10-09');
-\echo 'ok: back-to-back confirmed booking allowed'
-
--- A non-confirmed booking overlapping the anchor must be allowed (the constraint
--- is partial: WHERE status = 'confirmed').
-insert into public.bookings (listing_id, pet_id, requester_id, status, start_date, end_date)
-values ('c0000000-0000-4000-8000-000000000001', 'b0000000-0000-4000-8000-000000000001',
-        'a0000000-0000-4000-8000-000000000002', 'pending', date '2026-10-02', date '2026-10-06');
-\echo 'ok: pending booking overlapping a confirmed stay allowed'
-
--- A confirmed booking on a different listing for the same dates must be allowed.
+-- Back-to-back: the pet may start a stay elsewhere on the day the anchor ends.
 insert into public.bookings (listing_id, pet_id, requester_id, status, start_date, end_date)
 values ('c0000000-0000-4000-8000-000000000002', 'b0000000-0000-4000-8000-000000000001',
+        'a0000000-0000-4000-8000-000000000002', 'confirmed', date '2026-10-05', date '2026-10-09');
+\echo 'ok: back-to-back confirmed stays for one pet allowed'
+
+-- Non-confirmed bookings never block, even for the same pet (the constraint is
+-- partial: WHERE status = 'confirmed').
+insert into public.bookings (listing_id, pet_id, requester_id, status, start_date, end_date)
+values
+  ('c0000000-0000-4000-8000-000000000002', 'b0000000-0000-4000-8000-000000000001',
+   'a0000000-0000-4000-8000-000000000002', 'pending', date '2026-10-02', date '2026-10-06'),
+  ('c0000000-0000-4000-8000-000000000002', 'b0000000-0000-4000-8000-000000000001',
+   'a0000000-0000-4000-8000-000000000002', 'cancelled', date '2026-10-02', date '2026-10-06'),
+  ('c0000000-0000-4000-8000-000000000002', 'b0000000-0000-4000-8000-000000000001',
+   'a0000000-0000-4000-8000-000000000002', 'completed', date '2026-10-02', date '2026-10-06');
+\echo 'ok: pending, cancelled and completed stays for the same pet allowed'
+
+-- A different pet on the same listing and dates is no longer blocked by a
+-- constraint: the listing-wide exclusion is gone, and capacity (2 here) is the
+-- trigger's job.
+insert into public.bookings (listing_id, pet_id, requester_id, status, start_date, end_date)
+values ('c0000000-0000-4000-8000-000000000001', 'b0000000-0000-4000-8000-000000000002',
         'a0000000-0000-4000-8000-000000000002', 'confirmed', date '2026-10-01', date '2026-10-05');
-\echo 'ok: confirmed booking on a different listing allowed'
+\echo 'ok: a different pet on the same listing and dates is not blocked by a constraint'
 
 do $$
 begin

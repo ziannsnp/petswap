@@ -6,7 +6,8 @@
 -- canCompleteBooking() apply in the browser:
 --
 --   - only the listing owner confirms or declines, and only a pending request
---   - confirming is refused when it would overlap another confirmed booking
+--   - confirming is refused when the listing has no remaining capacity (ADR 0011;
+--     booking_capacity.test.sql covers capacity and pet overlap in depth)
 --   - only the requester cancels, and only a pending or confirmed booking
 --   - only the listing owner completes, only a confirmed booking, and only on or
 --     after its end date (end-exclusive: check-out day counts)
@@ -28,7 +29,15 @@ begin;
 -- stranger to it, and Casey (...003) requests every booking with Rocket (...004).
 -- Dates are relative to current_date so the past/future cases never go stale.
 -- Triggers are off for the load so each booking can start in its final status.
+-- Rocket already has a confirmed seed stays near today, and a pet may not hold
+-- two overlapping confirmed stays (ADR 0011), so Casey's second fixture pet,
+-- Comet (...405), takes the confirmed cases that could overlap Rocket's seed stays,
+-- plus the request that tests listing capacity (a different pet, so the refusal is
+-- about the listing, not the pet).
 set local session_replication_role = replica;
+
+insert into public.pets (id, owner_id, name, species)
+values ('20000000-0000-4000-8000-000000000405', '10000000-0000-4000-8000-000000000003', 'Comet', 'dog');
 
 insert into public.listings (
   id, owner_id, title, location, description, capacity, accepted_pet_types,
@@ -44,25 +53,25 @@ insert into public.bookings (
   confirmed_at, declined_at, cancelled_at
 )
 select
-  b.id, '30000000-0000-4000-8000-000000000401', '20000000-0000-4000-8000-000000000004',
+  b.id, '30000000-0000-4000-8000-000000000401', b.pet_id,
   '10000000-0000-4000-8000-000000000003', b.status,
   current_date + b.start_offset, current_date + b.end_offset,
   case when b.status = 'confirmed' then now() end,
   case when b.status = 'declined' then now() end,
   case when b.status = 'cancelled' then now() end
 from (values
-  ('40000000-0000-4000-8000-000000000401'::uuid, 'pending'::public.booking_status,   30,  34), -- owner confirms
-  ('40000000-0000-4000-8000-000000000402'::uuid, 'pending'::public.booking_status,   40,  44), -- owner declines
-  ('40000000-0000-4000-8000-000000000403'::uuid, 'pending'::public.booking_status,   32,  36), -- overlaps ...401 once confirmed
-  ('40000000-0000-4000-8000-000000000404'::uuid, 'pending'::public.booking_status,   50,  54), -- requester cancels
-  ('40000000-0000-4000-8000-000000000405'::uuid, 'confirmed'::public.booking_status, 60,  64), -- requester cancels
-  ('40000000-0000-4000-8000-000000000406'::uuid, 'declined'::public.booking_status,  70,  74), -- terminal
-  ('40000000-0000-4000-8000-000000000407'::uuid, 'confirmed'::public.booking_status, -10, -6), -- finished: owner completes
-  ('40000000-0000-4000-8000-000000000408'::uuid, 'confirmed'::public.booking_status, -3,   0), -- ends today: owner completes
-  ('40000000-0000-4000-8000-000000000409'::uuid, 'confirmed'::public.booking_status, 80,  84), -- not finished yet
-  ('40000000-0000-4000-8000-000000000410'::uuid, 'pending'::public.booking_status,   -10, -6), -- past but never confirmed
-  ('40000000-0000-4000-8000-000000000411'::uuid, 'cancelled'::public.booking_status, -20, -16) -- terminal
-) as b(id, status, start_offset, end_offset);
+  ('40000000-0000-4000-8000-000000000401'::uuid, '20000000-0000-4000-8000-000000000004'::uuid, 'pending'::public.booking_status,   30,  34), -- owner confirms
+  ('40000000-0000-4000-8000-000000000402'::uuid, '20000000-0000-4000-8000-000000000004'::uuid, 'pending'::public.booking_status,   40,  44), -- owner declines
+  ('40000000-0000-4000-8000-000000000403'::uuid, '20000000-0000-4000-8000-000000000405'::uuid, 'pending'::public.booking_status,   32,  36), -- overlaps ...401 once confirmed
+  ('40000000-0000-4000-8000-000000000404'::uuid, '20000000-0000-4000-8000-000000000004'::uuid, 'pending'::public.booking_status,   50,  54), -- requester cancels
+  ('40000000-0000-4000-8000-000000000405'::uuid, '20000000-0000-4000-8000-000000000004'::uuid, 'confirmed'::public.booking_status, 60,  64), -- requester cancels
+  ('40000000-0000-4000-8000-000000000406'::uuid, '20000000-0000-4000-8000-000000000004'::uuid, 'declined'::public.booking_status,  70,  74), -- terminal
+  ('40000000-0000-4000-8000-000000000407'::uuid, '20000000-0000-4000-8000-000000000405'::uuid, 'confirmed'::public.booking_status, -10, -6), -- finished: owner completes
+  ('40000000-0000-4000-8000-000000000408'::uuid, '20000000-0000-4000-8000-000000000405'::uuid, 'confirmed'::public.booking_status, -3,   0), -- ends today: owner completes
+  ('40000000-0000-4000-8000-000000000409'::uuid, '20000000-0000-4000-8000-000000000004'::uuid, 'confirmed'::public.booking_status, 80,  84), -- not finished yet
+  ('40000000-0000-4000-8000-000000000410'::uuid, '20000000-0000-4000-8000-000000000004'::uuid, 'pending'::public.booking_status,   -10, -6), -- past but never confirmed
+  ('40000000-0000-4000-8000-000000000411'::uuid, '20000000-0000-4000-8000-000000000004'::uuid, 'cancelled'::public.booking_status, -20, -16) -- terminal
+) as b(id, pet_id, status, start_offset, end_offset);
 
 set local session_replication_role = origin;
 
@@ -159,12 +168,12 @@ do $$
 begin
   update public.bookings set status = 'confirmed'
   where id = '40000000-0000-4000-8000-000000000403';
-  raise exception 'booking lifecycle: the owner confirmed a request overlapping a confirmed booking';
+  raise exception 'booking lifecycle: the owner confirmed a request beyond the listing capacity';
 exception
-  when exclusion_violation then null;
+  when sqlstate 'PBC01' then null;
 end;
 $$;
-\echo 'ok: confirming an overlapping request is refused'
+\echo 'ok: confirming a request beyond the listing capacity is refused'
 
 do $$
 declare

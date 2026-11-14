@@ -50,7 +50,12 @@ $$;
 \echo 'ok: the booking guard reads the UTC booking day'
 
 -- Fixtures from seed.sql: Alex (...001) owns the listing, Casey (...003) requests with Rocket (...004).
+-- Rocket already has a confirmed seed stay ten days ago and a pet may not hold two
+-- overlapping confirmed stays (ADR 0011), so the confirmed fixture stays use Casey's fixture pet Nova (...605).
 set local session_replication_role = replica;
+
+insert into public.pets (id, owner_id, name, species)
+values ('20000000-0000-4000-8000-000000000605', '10000000-0000-4000-8000-000000000003', 'Nova', 'dog');
 
 insert into public.listings (
   id, owner_id, title, location, description, capacity, accepted_pet_types, status, published_at
@@ -63,10 +68,10 @@ values
 insert into public.bookings (id, listing_id, pet_id, requester_id, status, start_date, end_date, confirmed_at)
 values
   ('40000000-0000-4000-8000-000000000601', '30000000-0000-4000-8000-000000000601',
-   '20000000-0000-4000-8000-000000000004', '10000000-0000-4000-8000-000000000003',
+   '20000000-0000-4000-8000-000000000605', '10000000-0000-4000-8000-000000000003',
    'confirmed', public.booking_today(), public.booking_today() + 1, now()),
   ('40000000-0000-4000-8000-000000000602', '30000000-0000-4000-8000-000000000601',
-   '20000000-0000-4000-8000-000000000004', '10000000-0000-4000-8000-000000000003',
+   '20000000-0000-4000-8000-000000000605', '10000000-0000-4000-8000-000000000003',
    'confirmed', public.booking_today() - 10, public.booking_today(), now());
 
 set local session_replication_role = origin;

@@ -30,13 +30,44 @@ create temporary table _contract (
 
 insert into _contract (check_name, passed) values
   (
-    'confirmed bookings use end-exclusive overlap protection',
-    exists (
+    'confirmed bookings are limited by listing capacity, not a listing-wide overlap (ADR 0011)',
+    not exists (
       select 1 from pg_constraint
       where conname = 'bookings_no_confirmed_overlap'
         and conrelid = 'public.bookings'::regclass
+    )
+    and exists (
+      select 1 from pg_trigger
+      where tgrelid = 'public.bookings'::regclass
+        and tgname = 'hold_booking_availability'
+        and tgfoid = 'public.guard_booking_availability()'::regprocedure
+        and not tgisinternal
+    )
+    and exists (
+      select 1 from pg_trigger
+      where tgrelid = 'public.listings'::regclass
+        and tgname = 'guard_listing_capacity'
+        and tgfoid = 'public.guard_listing_capacity()'::regprocedure
+    )
+  ),
+  (
+    'a pet cannot hold overlapping confirmed bookings on any listings (end-exclusive)',
+    exists (
+      select 1 from pg_constraint
+      where conname = 'bookings_no_confirmed_pet_overlap'
+        and conrelid = 'public.bookings'::regclass
         and contype = 'x'
     )
+  ),
+  (
+    'booking capacity helpers cannot be called directly by API roles',
+    not has_function_privilege('anon', 'public.confirmed_booking_peak(uuid, date, date, uuid)', 'EXECUTE')
+      and not has_function_privilege('authenticated', 'public.confirmed_booking_peak(uuid, date, date, uuid)', 'EXECUTE')
+      and not has_function_privilege('service_role', 'public.confirmed_booking_peak(uuid, date, date, uuid)', 'EXECUTE')
+      and not has_function_privilege('anon', 'public.assert_booking_capacity_invariants()', 'EXECUTE')
+      and not has_function_privilege('authenticated', 'public.assert_booking_capacity_invariants()', 'EXECUTE')
+      and not has_function_privilege('authenticated', 'public.guard_booking_availability()', 'EXECUTE')
+      and not has_function_privilege('authenticated', 'public.guard_listing_capacity()', 'EXECUTE')
   ),
   (
     'bookings reject a window whose end is not after its start',

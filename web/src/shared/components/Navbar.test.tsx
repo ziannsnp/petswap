@@ -127,6 +127,24 @@ describe('Navbar Component', () => {
       expect(screen.getByRole('link', { name: /^pets$/i })).toBeInTheDocument();
     });
 
+    it.each([
+      ['/listings', 'page'],
+      ['/listings/new', 'page'],
+      ['/listings/listing-1/edit', 'page'],
+    ])('marks My listings as the current page on %s', (path, expected) => {
+      renderNavbar([path]);
+
+      expect(screen.getByRole('link', { name: /my listings/i })).toHaveAttribute('aria-current', expected);
+    });
+
+    it("does not mark My listings as current on another host's public listing page", () => {
+      renderNavbar(['/listings/listing-1']);
+
+      const myListings = screen.getByRole('link', { name: /my listings/i });
+      expect(myListings).not.toHaveAttribute('aria-current', 'page');
+      expect(myListings.className).not.toContain('border-brand-600');
+    });
+
     it('renders an account menu button and no visible profile/logout links by default', () => {
       renderNavbar();
 

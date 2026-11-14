@@ -195,6 +195,9 @@ export function SearchForm({ criteria, page, onSearch }: SearchFormProps) {
               aria-invalid={dateError?.field === 'startDate'}
               aria-describedby={dateError?.field === 'startDate' ? 'search-date-error' : undefined}
             />
+            {dateError?.field === 'startDate' && (
+              <p className="form-error" id="search-date-error" role="alert">{dateError.message}</p>
+            )}
           </div>
           <div>
             <label className="form-label" htmlFor="search-end-date">End date</label>
@@ -209,9 +212,11 @@ export function SearchForm({ criteria, page, onSearch }: SearchFormProps) {
               aria-invalid={dateError?.field === 'endDate'}
               aria-describedby={dateError?.field === 'endDate' ? 'search-date-error' : undefined}
             />
+            {dateError?.field === 'endDate' && (
+              <p className="form-error" id="search-date-error" role="alert">{dateError.message}</p>
+            )}
           </div>
         </div>
-        {dateError && <p className="form-error" id="search-date-error" role="alert">{dateError.message}</p>}
       </fieldset>
 
       <div className="flex flex-col gap-3 md:flex-row md:justify-end">

@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { signIn } from '../lib/authApi';
-import { authKeys } from './useAuth';
+import { setSessionCache } from '../lib/sessionCache';
 
 // Sibling of useSignUp: the adapter returns the fresh session, so seed it into the
 // auth cache directly rather than invalidating and making AuthProvider re-fetch a
@@ -11,7 +11,7 @@ export function useSignIn() {
   return useMutation({
     mutationFn: signIn,
     onSuccess: ({ session }) => {
-      queryClient.setQueryData(authKeys.session(), session);
+      setSessionCache(queryClient, session);
     },
   });
 }

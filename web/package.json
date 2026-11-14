@@ -11,6 +11,7 @@
     "typecheck": "tsc -b --noEmit",
     "supabase:types": "supabase gen types typescript --local --schema public > src/shared/types/database.types.ts",
     "test": "jest",
+    "test:coverage": "jest --coverage",
     "test:e2e": "playwright test"
   },
   "dependencies": {

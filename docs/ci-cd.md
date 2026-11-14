@@ -11,7 +11,7 @@ npm test -- --runInBand
 npm run build
 ```
 
-Its `docs-links` job verifies that Markdown links under docs resolve. No pull request should merge into `main` while this gate is failing. Tonpai owns investigating CI/environment failures; the feature author owns failures introduced by their change.
+Its `docs-links` job verifies that Markdown links under docs resolve, and its `repo-checks` job runs the repository checks listed under [Security and static analysis](#security-and-static-analysis). No pull request should merge into `main` while this gate is failing. Tonpai owns investigating CI/environment failures; the feature author owns failures introduced by their change.
 
 ## Database contract workflow
 
@@ -37,6 +37,23 @@ To upgrade the CLI, bump `supabase` in `web/package.json` and let CI pick it up 
 `.github/workflows/compose-health.yml` builds and starts the self-contained `docker-compose.yml` stack ([Docker Compose stack](environments.md#docker-compose-stack)) and runs `scripts/stack-health.sh` against it. It runs on pull requests that touch `docker-compose.yml`, `docker/**`, `.env.example`, or either `scripts/stack-*.sh` script, weekly on a schedule, and on demand.
 
 It is not a required check, for the same reason as `db-contract` and `e2e-smoke`: it builds images and starts containers, which is slower than the required gate. Its purpose is narrower than those two — it exists so the documented Compose setup path cannot silently rot between the times someone actually runs it by hand. A red run means a service, image, or `.env.example` change broke the stack; the change author owns the fix.
+
+## Security and static analysis
+
+These checks apply the DevSecOps and design-for-security topics from the course. All are free for this public repository, and none is a required check yet: promote each after a few weeks of green runs, using the job-level `if:` approach in [Proposed required checks](#proposed-required-checks).
+
+| Check | Workflow | Catches | Runs |
+| --- | --- | --- | --- |
+| CodeQL (`javascript-typescript`, `security-extended`) | `codeql.yml` | XSS sinks, unsafe redirects, injection, hard-coded credentials, regex denial of service in the app and the Edge Function. Results are under Security, Code scanning. | Pull requests, `main`, weekly |
+| Dependency review | `dependency-review.yml` | A pull request that adds a dependency with a known high-severity vulnerability | Pull requests |
+| Dependabot | `.github/dependabot.yml` | Outdated or vulnerable npm packages and GitHub Actions, as weekly grouped pull requests. The Supabase CLI major version is excluded because it is upgraded deliberately. | Weekly |
+| Database lint | `db-contract.yml` (`supabase db lint --level error`) | Errors in database functions such as bad references and unsafe constructs. Warnings are not failing yet. | Supabase changes, weekly |
+| Type-aware ESLint | `quality.yml` (`web-quality`) | `no-floating-promises` and `no-misused-promises` (dropped or swallowed async errors), cross-feature imports that skip `index.ts` | Every pull request |
+| Repository checks | `quality.yml` (`repo-checks`) | Acceptance scenarios without a test, e2e specs no workflow runs, an invalid OpenAPI file | Every pull request |
+
+Settings a repository admin must switch on, which cannot be done from a workflow file: **secret scanning** and **push protection** (Settings, Code security), and, when the team agrees, **code scanning as a required check** and **Require review from Code Owners** in the `main` ruleset.
+
+What these do not catch, and what does: access-control bugs such as a host keeping pet access after a booking is declined are business-logic bugs that scanners cannot see. They are caught by the actor-based SQL tests in `supabase/tests/`, which `db-contract.yml` now runs for every `*.test.sql` file by glob, so a new test file can no longer be forgotten. For the same reason, `scripts/check-test-wiring.sh` fails the build when a Playwright spec exists that no workflow runs. Coverage is printed to each `web-quality` job summary as a report, not a gate: see [testing.md](testing.md).
 
 ## Main branch protection
 

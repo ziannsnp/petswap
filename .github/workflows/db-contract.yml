@@ -56,53 +56,27 @@ jobs:
       - name: Rebuild database from migrations and seed
         run: supabase db reset
 
-      - name: Schema contract checks
-        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/database_contract.sql
+      # Run every SQL check under supabase/tests/ instead of naming each file, so a new
+      # *.test.sql can never be left out of CI by forgetting to add a step. The schema
+      # contract goes first, then the rest in name order. Every file runs even if an
+      # earlier one fails, so one red run lists all failures; the step fails at the end.
+      - name: Run every SQL contract and behaviour check
+        run: |
+          failed=0
+          for file in supabase/tests/database_contract.sql $(ls supabase/tests/*.test.sql | sort); do
+            echo "::group::$file"
+            if ! psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$file"; then
+              echo "::error file=$file::SQL check failed"
+              failed=1
+            fi
+            echo "::endgroup::"
+          done
+          exit $failed
 
-      - name: Booking rules behavioural checks
-        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/booking_rules.test.sql
-
-      - name: Booking lifecycle behavioural checks
-        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/booking_lifecycle.test.sql
-
-      - name: Booking transition rules behavioural checks
-        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/booking_transition_rules.test.sql
-
-      - name: Listing rules behavioural checks
-        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/listing_rules.test.sql
-
-      - name: Listing facility migration checks
-        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/listing_facility_migration.test.sql
-
-      - name: Listing photo access behavioural checks
-        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/listing_photo_access.test.sql
-
-      - name: Listing host access behavioural checks
-        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/listing_host_access.test.sql
-
-      - name: Listing edit behavioural checks
-        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/listing_edit_rules.test.sql
-
-      - name: Listing deletion behavioural checks
-        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/listing_deletion.test.sql
-
-      - name: Listing search and pagination checks
-        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/listing_search.test.sql
-
-      - name: Listing filters and availability privacy checks
-        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/listing_search_filters.test.sql
-
-      - name: Avatar storage access behavioural checks
-        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/avatar_storage_access.test.sql
-
-      - name: Pet photo access behavioural checks
-        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/pet_photo_access.test.sql
-
-      - name: Profile rules behavioural checks
-        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/profile_rules.test.sql
-
-      - name: Pet rules behavioural checks
-        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/pet_rules.test.sql
+      # Static checks of the database functions. `--level error` keeps this from failing on
+      # advisory warnings in existing code; tighten to `warning` once the baseline is clean.
+      - name: Lint database functions
+        run: supabase db lint --level error
 
       - name: Stop local Supabase stack
         if: always()

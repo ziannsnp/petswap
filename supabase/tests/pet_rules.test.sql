@@ -714,7 +714,7 @@ insert into storage.objects (id, bucket_id, name)
 values (
   '50000000-0000-4000-8000-000000000102',
   'pet-photos',
-  '20000000-0000-4000-8000-000000000104/leftover.jpg'
+  '20000000-0000-4000-8000-000000000105/leftover.jpg'
 );
 
 select set_config(
@@ -729,7 +729,7 @@ begin
   if exists (
     select 1 from storage.objects
     where bucket_id = 'pet-photos'
-      and name = '20000000-0000-4000-8000-000000000104/leftover.jpg'
+      and name = '20000000-0000-4000-8000-000000000105/leftover.jpg'
   ) then
     raise exception 'pet deletion: the past host can still read a deleted pet photo';
   end if;
@@ -752,7 +752,7 @@ begin
   if not exists (
     select 1 from storage.objects
     where bucket_id = 'pet-photos'
-      and name = '20000000-0000-4000-8000-000000000104/leftover.jpg'
+      and name = '20000000-0000-4000-8000-000000000105/leftover.jpg'
   ) then
     raise exception 'pet deletion: the owner can no longer read a deleted pet photo, so it cannot be removed';
   end if;
@@ -760,7 +760,7 @@ begin
   update storage.objects
   set metadata = '{"replaced": true}'::jsonb
   where bucket_id = 'pet-photos'
-    and name = '20000000-0000-4000-8000-000000000104/leftover.jpg';
+    and name = '20000000-0000-4000-8000-000000000105/leftover.jpg';
   get diagnostics changed_rows = row_count;
   if changed_rows <> 0 then
     raise exception 'pet deletion: the owner replaced a deleted pet photo';
@@ -768,7 +768,7 @@ begin
 
   begin
     insert into storage.objects (bucket_id, name)
-    values ('pet-photos', '20000000-0000-4000-8000-000000000104/new.jpg');
+    values ('pet-photos', '20000000-0000-4000-8000-000000000105/new.jpg');
   exception
     when insufficient_privilege then rejected := true;
   end;

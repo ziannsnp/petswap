@@ -4,7 +4,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { BookingsScreen } from './BookingsScreen';
 import { useIncomingBookings, useOutgoingBookings, useUpdateBookingStatus } from '../hooks/useBookings';
-import { BookingCompletionError, BookingConflictError } from '../lib/bookingErrors';
+import { BookingCompletionError, BookingListingFullError, BookingPetUnavailableError } from '../lib/bookingErrors';
 import { utcTodayIsoDate } from '../lib/bookingDates';
 import type { BookingPetSummary, BookingWithDetails } from '../lib/bookingApi';
 
@@ -305,8 +305,13 @@ it('shows an error on the affected card when a status update fails', async () =>
   expect(await screen.findByRole('alert')).toHaveTextContent(/could not update this booking/i);
 });
 
-it('shows an overlap conflict on the booking card when its owner cannot confirm', async () => {
-  const mutateAsync = jest.fn().mockRejectedValue(new BookingConflictError());
+it.each([
+  ['the listing is full', new BookingListingFullError(),
+    'This listing is full for some of these dates. Confirming this request would exceed its capacity on at least one night.'],
+  ['the pet is already booked elsewhere', new BookingPetUnavailableError(),
+    'This pet already has a confirmed booking for some of these dates, so this request can no longer be confirmed.'],
+])('shows a distinct message on the booking card when it cannot be confirmed because %s', async (_reason, refusal, message) => {
+  const mutateAsync = jest.fn().mockRejectedValue(refusal);
   mockUseUpdateBookingStatus.mockReturnValue({ mutateAsync });
   mockUseOutgoingBookings.mockReturnValue(successResult([]));
   mockUseIncomingBookings.mockReturnValue(successResult([makeBooking({ id: 'in-1', status: 'pending' })]));
@@ -314,9 +319,7 @@ it('shows an overlap conflict on the booking card when its owner cannot confirm'
   render(<BookingsScreen />);
   fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
 
-  expect(await screen.findByRole('alert')).toHaveTextContent(
-    'This request overlaps another confirmed booking on this listing. Choose different dates before confirming.',
-  );
+  expect(await screen.findByRole('alert')).toHaveTextContent(message);
 });
 
 // --- Confirm / decline (listing owner) ---
@@ -358,8 +361,8 @@ it('disables both responses on a card while its update is saving', async () => {
   expect(mutateAsync).toHaveBeenCalledTimes(1);
 });
 
-it('shows an overlap conflict only on the card that failed to confirm', async () => {
-  const mutateAsync = jest.fn().mockRejectedValue(new BookingConflictError());
+it('shows a capacity conflict only on the card that failed to confirm', async () => {
+  const mutateAsync = jest.fn().mockRejectedValue(new BookingListingFullError());
   mockUseUpdateBookingStatus.mockReturnValue({ mutateAsync });
   mockUseOutgoingBookings.mockReturnValue(successResult([]));
   mockUseIncomingBookings.mockReturnValue(successResult([

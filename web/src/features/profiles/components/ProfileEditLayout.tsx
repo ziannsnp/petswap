@@ -163,16 +163,8 @@ export function ProfileEditLayout({
         return;
       }
     } else if (removePhoto) {
-      if (profile.photo_url) {
-        try {
-          await deleteAvatarMutation.mutateAsync();
-        } catch (err) {
-          // Storage cleanup failing shouldn't block clearing photo_url on the
-          // profile row - the object is orphaned either way if this fails,
-          // but the user's own "remove photo" intent still needs to save.
-          console.error('Failed to remove the avatar from storage:', err);
-        }
-      }
+      // Only the row changes here. The stored file is deleted after the save below, so a failed
+      // save cannot leave photo_url pointing at an avatar that no longer exists.
       photoUrl = null;
     }
 
@@ -183,10 +175,22 @@ export function ProfileEditLayout({
         location: result.sanitizedValues.location,
         photo_url: photoUrl,
       });
-      onSave?.();
     } catch {
       // Surfaced below via updateProfileMutation.error.
+      return;
     }
+
+    if (removePhoto && !avatarFile && profile.photo_url) {
+      try {
+        await deleteAvatarMutation.mutateAsync();
+      } catch (err) {
+        // The profile no longer references the file, so a failed cleanup only leaves an unused
+        // object in storage; it must not turn a saved profile into an error.
+        console.error('Failed to remove the avatar from storage:', err);
+      }
+    }
+
+    onSave?.();
   }
 
   const rawErrorMessage =

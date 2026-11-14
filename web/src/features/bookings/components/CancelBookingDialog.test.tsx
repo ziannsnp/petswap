@@ -36,6 +36,17 @@ const booking = {
   listing: { id: 'listing-1', title: 'Cozy Yard', location: 'Austin' },
 } as BookingWithDetails;
 
+const dateFormatter = new Intl.DateTimeFormat(undefined, {
+  month: 'short',
+  day: 'numeric',
+  year: 'numeric',
+  timeZone: 'UTC',
+});
+
+function formatBookingDate(date: string): string {
+  return dateFormatter.format(new Date(`${date}T00:00:00.000Z`));
+}
+
 function renderDialog({
   isOpen = true,
   onClose = jest.fn(),
@@ -70,8 +81,9 @@ it('shows booking details and focuses the safe action first', () => {
 
   const dialog = screen.getByRole('alertdialog', { name: 'Cancel booking for Milo?' });
   expect(dialog).toHaveTextContent('Cozy Yard');
-  expect(dialog).toHaveTextContent(/10 \w+ 2026/);
-  expect(dialog).toHaveTextContent(/14 \w+ 2026/);
+  expect(dialog).toHaveTextContent(
+    `${formatBookingDate(booking.start_date)} – ${formatBookingDate(booking.end_date)}`,
+  );
   expect(within(dialog).getByRole('button', { name: 'Keep booking' })).toHaveFocus();
 });
 

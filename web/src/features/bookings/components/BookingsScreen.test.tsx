@@ -1,6 +1,6 @@
 /** @jest-environment jsdom */
 import '@testing-library/jest-dom';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { BookingsScreen } from './BookingsScreen';
 import { useIncomingBookings, useOutgoingBookings, useUpdateBookingStatus } from '../hooks/useBookings';
@@ -257,6 +257,8 @@ it.each(['pending', 'confirmed'] as const)('lets the requester cancel a %s outgo
 
   render(<BookingsScreen />);
   fireEvent.click(screen.getByRole('button', { name: 'Cancel booking' }));
+  const dialog = screen.getByRole('alertdialog', { name: 'Cancel booking for Milo?' });
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel booking' }));
 
   await waitFor(() => expect(mutateAsync).toHaveBeenCalledWith({ bookingId: 'out-1', status: 'cancelled' }));
 });
@@ -394,6 +396,8 @@ it('shows an error on the outgoing card when a cancellation fails', async () => 
 
   render(<BookingsScreen />);
   fireEvent.click(screen.getByRole('button', { name: 'Cancel booking' }));
+  const dialog = screen.getByRole('alertdialog', { name: 'Cancel booking for Milo?' });
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel booking' }));
 
   expect(await screen.findByRole('alert')).toHaveTextContent(/could not update this booking/i);
 });

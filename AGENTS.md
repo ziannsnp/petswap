@@ -42,6 +42,7 @@ Before changing code, identify the relevant requirement and read only the docume
 
 - Only confirmed bookings on the same listing block overlapping dates.
 - Date ranges are end-exclusive: back-to-back bookings are valid.
+- A booking's pet must be a species the listing accepts; an identical pending request cannot be sent twice; a request whose start date has passed can be declined but not confirmed; a confirmed stay cannot be cancelled from its check-out day on. `guard_booking_change()` enforces all four.
 - Keep `hasBookingConflict()` and `isValidBookingTransition()` pure and Jest-tested.
 - Browser validation is not authorization. When Supabase is added, enforce ownership and conflict rules through RLS/database constraints as well.
 

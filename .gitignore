@@ -3,6 +3,7 @@ node_modules/
 dist/
 coverage/
 playwright-report/
+playwright-report-navbar/
 test-results/
 
 # Environment files

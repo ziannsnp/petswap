@@ -1,8 +1,9 @@
 name: E2E booking
 
 # Runs the Playwright booking journeys (e2e/booking-flow.spec.ts and
-# e2e/booking-lifecycle.spec.ts) against a local Supabase stack started on the runner,
-# so nobody needs Docker on their own machine and the shared hosted project is never
+# e2e/booking-lifecycle.spec.ts), then the navbar logout journeys
+# (e2e/navbar-account-menu.spec.ts), against a local Supabase stack started on the
+# runner, so nobody needs Docker on their own machine and the shared hosted project is never
 # touched. Like E2E smoke, it boots containers and a browser, so it is informational
 # rather than part of the required Quality gate. A red run means a booking journey
 # regressed and the change author owns the fix.
@@ -13,6 +14,7 @@ on:
     paths:
       - 'web/src/features/bookings/**'
       - 'web/src/features/auth/**'
+      - 'web/src/shared/components/Navbar*'
       - 'web/e2e/**'
       - 'web/playwright.config.ts'
       - 'supabase/migrations/**'
@@ -71,11 +73,25 @@ jobs:
         working-directory: web
         run: npx playwright test e2e/booking-flow.spec.ts e2e/booking-lifecycle.spec.ts
 
+      # Logging out ends every session for that account, not just the one in this
+      # browser, and the booking journeys sign in as the same seeded user. Run the
+      # logout spec after them, one test at a time, so it never signs out a test
+      # that is still running. `!cancelled()` keeps it running when a booking
+      # journey failed, so one red run reports both.
+      - name: Run navbar logout journeys
+        if: ${{ !cancelled() }}
+        working-directory: web
+        env:
+          PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-report-navbar
+        run: npx playwright test e2e/navbar-account-menu.spec.ts --workers=1
+
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
           name: playwright-booking-report
-          path: web/playwright-report
+          path: |
+            web/playwright-report
+            web/playwright-report-navbar
           retention-days: 7
           if-no-files-found: ignore
 

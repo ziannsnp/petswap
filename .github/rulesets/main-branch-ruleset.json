@@ -1,0 +1,45 @@
+{
+  "name": "main branch ruleset",
+  "target": "branch",
+  "enforcement": "active",
+  "bypass_actors": [],
+  "conditions": {
+    "ref_name": {
+      "include": ["~DEFAULT_BRANCH"],
+      "exclude": []
+    }
+  },
+  "rules": [
+    { "type": "deletion" },
+    { "type": "non_fast_forward" },
+    {
+      "type": "pull_request",
+      "parameters": {
+        "required_approving_review_count": 1,
+        "dismiss_stale_reviews_on_push": false,
+        "required_reviewers": [],
+        "require_code_owner_review": false,
+        "require_last_push_approval": false,
+        "required_review_thread_resolution": true,
+        "require_extra_approval_for_unattributed_changes": true,
+        "allowed_merge_methods": ["merge", "squash", "rebase"]
+      }
+    },
+    {
+      "type": "required_status_checks",
+      "parameters": {
+        "strict_required_status_checks_policy": true,
+        "do_not_enforce_on_create": false,
+        "required_status_checks": [
+          { "context": "web-quality", "integration_id": 15368 },
+          { "context": "docs-links", "integration_id": 15368 },
+          { "context": "repo-checks", "integration_id": 15368 },
+          { "context": "Reset local database and run contract checks", "integration_id": 15368 },
+          { "context": "Public route smoke (desktop + mobile)", "integration_id": 15368 },
+          { "context": "Analyze (javascript-typescript)", "integration_id": 15368 },
+          { "context": "dependency-review", "integration_id": 15368 }
+        ]
+      }
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { signUp } from '../lib/authApi';
-import { authKeys } from './useAuth';
+import { setSessionCache } from '../lib/sessionCache';
 
 export function useSignUp() {
   const queryClient = useQueryClient();
@@ -8,7 +8,7 @@ export function useSignUp() {
   return useMutation({
     mutationFn: signUp,
     onSuccess: ({ session }) => {
-      queryClient.setQueryData(authKeys.session(), session);
+      setSessionCache(queryClient, session);
     },
   });
 }

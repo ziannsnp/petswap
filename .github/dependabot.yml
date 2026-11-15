@@ -1,0 +1,44 @@
+version: 2
+
+# Weekly, grouped update pull requests so the team gets at most a few small PRs a week
+# instead of one per package. Security updates are raised immediately by GitHub regardless
+# of this schedule. Every update goes through the normal Quality gate and review.
+updates:
+  - package-ecosystem: npm
+    directory: /web
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+    labels: [dependencies]
+    ignore:
+      # The Supabase CLI major is upgraded deliberately (see docs/ci-cd.md, "Supabase CLI version").
+      - dependency-name: supabase
+        update-types: [version-update:semver-major]
+      # Held until after the course presentation (17 Nov 2026); each needs its own migration PR.
+      # TypeScript 7: ts-jest and typescript-eslint do not accept it yet, so `npm ci` fails (#122).
+      - dependency-name: typescript
+        update-types: [version-update:semver-major]
+      # @vitejs/plugin-react 6 requires Vite 8, so the two move together in one PR (#120).
+      - dependency-name: '@vitejs/plugin-react'
+        update-types: [version-update:semver-major]
+      - dependency-name: vite
+        update-types: [version-update:semver-major]
+      # eslint-plugin-react-hooks 7 adds React Compiler rules that flag 10 existing errors
+      # (setState in effects, refs read during render) to refactor first (#119).
+      - dependency-name: eslint-plugin-react-hooks
+        update-types: [version-update:semver-major]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    groups:
+      actions:
+        patterns: ['*']
+    labels: [dependencies]

@@ -10,6 +10,7 @@ import { routes } from './support/routes';
 // web/.env.local. Run with `npm run test:e2e -- booking-lifecycle.spec.ts`.
 
 const LISTING_ID = '30000000-0000-4000-8000-000000000001'; // "Sunny garden room", owned by alex.
+const FINISHED_STAY_LISTING = 'Countryside cottage'; // Blair's listing holding the seeded finished stay.
 const PASSWORD = 'petswap-local-dev';
 
 // All projects run in parallel against one database, so each gets its own month of
@@ -49,9 +50,17 @@ async function requestBooking(page: Page, dates: { start: string; end: string })
 
 // Lists are newest first, so .first() is the booking this run created even if an earlier
 // run without a database reset left one on the same dates.
-async function openBookingCard(page: Page, startDate: string) {
+async function openBookingCard(page: Page, startDate: string, listingTitle?: string) {
   await page.goto(routes.bookings);
-  return page.getByRole('listitem').filter({ hasText: formatBookingDate(startDate) }).first();
+  // Match "<start> –" so a card that only ENDS on this date (e.g. a fixed seed booking whose
+  // end date equals today - 10) is never picked by mistake.
+  let cards = page.getByRole('listitem').filter({ hasText: `${formatBookingDate(startDate)} –` });
+  // Pass the listing title when a date relative to today can land on a fixed seed date: on
+  // 15 Nov 2026, today - 10 is also the start of the seeded declined booking at another listing.
+  if (listingTitle) {
+    cards = cards.filter({ hasText: listingTitle });
+  }
+  return cards.first();
 }
 
 test.describe('booking lifecycle after the request', () => {
@@ -144,11 +153,11 @@ test.describe('booking lifecycle after the request', () => {
     const requester = await signIn(browser, 'casey@petswap.test');
 
     try {
-      const incomingCard = await openBookingCard(owner, startDate);
+      const incomingCard = await openBookingCard(owner, startDate, FINISHED_STAY_LISTING);
       await expect(incomingCard.getByText('Confirmed', { exact: true })).toBeVisible();
 
       // The requester sees the same finished stay but cannot complete it themselves.
-      const outgoingCard = await openBookingCard(requester, startDate);
+      const outgoingCard = await openBookingCard(requester, startDate, FINISHED_STAY_LISTING);
       await expect(outgoingCard.getByText('Confirmed', { exact: true })).toBeVisible();
       await expect(outgoingCard.getByRole('button', { name: 'Mark completed' })).toHaveCount(0);
 
@@ -157,7 +166,7 @@ test.describe('booking lifecycle after the request', () => {
       await expect(incomingCard.getByRole('button')).toHaveCount(0);
 
       // Completed is final: the requester can no longer cancel it.
-      const finishedCard = await openBookingCard(requester, startDate);
+      const finishedCard = await openBookingCard(requester, startDate, FINISHED_STAY_LISTING);
       await expect(finishedCard.getByText('Completed', { exact: true })).toBeVisible();
       await expect(finishedCard.getByRole('button', { name: 'Cancel booking' })).toHaveCount(0);
     } finally {

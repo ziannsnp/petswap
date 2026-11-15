@@ -82,6 +82,8 @@ npx supabase start
 npx supabase db reset
 ```
 
+On Windows with Docker Desktop or Hyper-V, `supabase start` can fail with `ports are not available ... bind: An attempt was made to access a socket in a way forbidden by its access permissions`. Windows NAT reserves dynamic port ranges, and they can cover every default CLI port (54320–54324). Check with `netsh int ipv4 show excludedportrange protocol=tcp`. Instead of changing system settings, use the [Docker Compose stack](#docker-compose-stack): its ports come from `.env`, so you can move them out of the reserved range. Change `WEB_PORT`, `API_PORT` and `DB_PORT`, and update `SITE_URL`, `API_EXTERNAL_URL` and `SIGN_IN_ALLOWED_ORIGINS` to match. Then point `web/.env.local` at the new API port, using `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` (the `ANON_KEY` from `.env`).
+
 For the shared hosted project, first ask a project owner to add you to the Supabase organization/project. Then copy the committed example into the Vite app and fill in the URL and publishable key from Supabase Project Settings:
 
 ```bash

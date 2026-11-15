@@ -115,37 +115,60 @@ def race(name, first_action, second_action, expected_error=None, second_actor=ow
                 process.kill()
                 process.wait(timeout=10)
 
-def assert_state(statuses, capacity):
-    actual = sql(f"select string_agg(status::text,',' order by id) from public.bookings where id in ('{booking[0]}','{booking[1]}'); select capacity from public.listings where id='{listing[0]}';").stdout.strip().splitlines()
-    assert actual == [statuses, str(capacity)], actual
+def assert_state(statuses, capacity, occupied):
+    """Racing statuses, Race A's capacity, and how many confirmed stays Race A holds.
+
+    `occupied` counts every confirmed stay on Race A, including the pre-existing one,
+    so a race that let both sessions through would show up even if the two racing
+    rows looked right on their own.
+    """
+    actual = sql(f"""select string_agg(status::text,',' order by id) from public.bookings where id in ('{booking[0]}','{booking[1]}');
+        select capacity from public.listings where id='{listing[0]}';
+        select count(*) from public.bookings where listing_id='{listing[0]}' and status='confirmed';""").stdout.strip().splitlines()
+    assert actual == [statuses, str(capacity), str(occupied)], actual
+
+def assert_pet_confirmed(n):
+    actual = sql(f"select count(*) from public.bookings where pet_id='{pet[0]}' and status='confirmed';").stdout.strip()
+    assert actual == str(n), f'Race pet 1 has {actual} confirmed stays, expected {n}'
 
 try:
+    # Competing confirmations for different pets. A rejected request must stay Pending.
     fixtures(1)
-    race('one remaining place', confirm(0), confirm(1), 'PBC01')
-    assert_state('confirmed,pending', 1)
+    race('one place on an empty listing: exactly one of two succeeds', confirm(0), confirm(1), 'PBC01')
+    assert_state('confirmed,pending', 1, 1)
+
+    fixtures(2, existing=True)
+    race('one remaining place (one of two taken): exactly one of two succeeds', confirm(0), confirm(1), 'PBC01')
+    assert_state('confirmed,pending', 2, 2)
 
     fixtures(2)
-    race('two places accept both different pets', confirm(0), confirm(1))
-    assert_state('confirmed,confirmed', 2)
+    race('two places on an empty listing accept both different pets', confirm(0), confirm(1))
+    assert_state('confirmed,confirmed', 2, 2)
 
+    fixtures(3, existing=True)
+    race('two remaining places (one of three taken) accept both different pets', confirm(0), confirm(1))
+    assert_state('confirmed,confirmed', 3, 3)
+
+    # Both listings have room, so only the pet rule can refuse the second host.
     fixtures(2, same_pet=True)
-    race('same pet across two hosts', confirm(0), confirm(1), 'PBP01', other_owner)
-    assert_state('confirmed,pending', 2)
+    race('same pet at two hosts: at most one stay is confirmed', confirm(0), confirm(1), 'PBP01', other_owner)
+    assert_state('confirmed,pending', 2, 1)
+    assert_pet_confirmed(1)
 
     fixtures(2, existing=True)
     race('confirmation wins over capacity reduction', confirm(0), reduce(), 'PBC01')
-    assert_state('confirmed,pending', 2)
+    assert_state('confirmed,pending', 2, 2)
 
     fixtures(2, existing=True)
     race('capacity reduction wins over confirmation', reduce(), confirm(0), 'PBC01')
-    assert_state('pending,pending', 1)
+    assert_state('pending,pending', 1, 1)
 
     fixtures(2, existing=True)
     for isolation in ('repeatable read', 'serializable'):
         for action in (confirm(0), reduce()):
             rejected = sql(f'begin isolation level {isolation}; ' + identity(owner) + action + ' commit;', check=False)
             assert rejected.returncode != 0 and '0A000' in rejected.stderr, rejected.stderr
-    assert_state('pending,pending', 2)
+    assert_state('pending,pending', 2, 1)
     print('PASS stale-snapshot isolation levels fail closed', flush=True)
 finally:
     cleanup()

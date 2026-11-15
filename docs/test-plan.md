@@ -5,7 +5,7 @@ Test plan for **PetSwap** (Don't Like My Pets), prepared for the Software Engine
 ## 1. Objectives
 
 - Show that every functional requirement in [requirements.md](requirements.md) has at least one automated check at the lowest layer that exercises the whole risk.
-- Protect the two rules that, if broken, break the product: no overlapping confirmed bookings, and a user may only read or change what they own or are party to.
+- Protect the two rules that, if broken, break the product: confirmed stays never exceed a listing's capacity and no pet is confirmed in two places at once, and a user may only read or change what they own or are party to.
 - Make the result visible: every pull request shows green or red checks, and every release candidate gets a recorded regression pass.
 
 ## 2. Scope

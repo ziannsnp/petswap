@@ -66,7 +66,7 @@ flowchart TD
     G -- yes --> H[Booking is Pending]
     H --> I{Host decides}
     I -- decline --> J[Declined]
-    I -- confirm --> K{Overlaps a confirmed<br/>booking on this listing?}
+    I -- confirm --> K{Listing full for those dates,<br/>or pet confirmed elsewhere?}
     K -- yes --> L[Database rejects confirm<br/>host sees an error]
     K -- no --> M[Confirmed]
     H --> N{Requester cancels?}
@@ -215,7 +215,8 @@ Design patterns in use: the **adapter** (each feature's `lib/*Api.ts` hides Supa
 Key constraints that are part of the design, not implementation detail:
 
 - `bookings_valid_window_check`: `start_date < end_date`.
-- `bookings_no_confirmed_overlap`: a Postgres exclusion constraint (`gist`, `daterange(start_date, end_date, '[)')`) on confirmed bookings of the same listing. This is the double-booking rule, enforced even if the browser is bypassed.
+- Listing capacity: confirmed stays may overlap while the number of pets staying at once never exceeds the listing's capacity. The `zz_guard_booking_availability` trigger checks this on every confirmation under a row lock, so two hosts confirming at the same moment cannot overbook, and `guard_listing_capacity` stops capacity being lowered below confirmed stays that have not ended ([ADR 0011](decisions/0011-booking-capacity-and-pet-exclusion.md)).
+- `bookings_no_confirmed_pet_overlap`: a Postgres exclusion constraint (`gist`, `daterange(start_date, end_date, '[)')`) so the same pet cannot have overlapping confirmed stays at any listings. The trigger checks this first, with a message that does not reveal the other host's dates; the constraint is the backstop. Both rules hold even if the browser is bypassed.
 - `pets.id` is referenced with `on delete restrict`, and pets are soft-deleted so past bookings still show them.
 
 ## 5. Behavioural model
@@ -294,15 +295,15 @@ sequenceDiagram
     UI->>API: updateBookingStatus(id, confirmed)
     API->>DB: UPDATE bookings SET status = confirmed
     DB->>DB: trigger: actor is listing owner, transition allowed
-    DB->>DB: exclusion constraint: no confirmed overlap on listing
-    alt no overlap
+    DB->>DB: availability trigger: lock listing and pet, check pet and capacity
+    alt room on the listing and the pet is free
         DB-->>API: updated row, confirmed_at set
         API-->>UI: ok
         UI-->>Host: shown as Confirmed
-    else overlap with another confirmed booking
-        DB-->>API: constraint violation
-        API-->>UI: mapped error
-        UI-->>Host: "dates already taken"
+    else listing full (PBC01) or pet confirmed elsewhere (PBP01)
+        DB-->>API: error code, booking stays Pending
+        API-->>UI: BookingConflictError
+        UI-->>Host: "no remaining capacity" or "pet already booked"
     end
 ```
 
@@ -401,7 +402,7 @@ Decisions: Cloudflare Git integration deploys the web app and GitHub Actions dep
 | High cohesion | Everything a feature needs (UI, hooks, pure rules, API adapter, types) sits in one folder | `web/src/features/*`, [ADR 0001](decisions/0001-web-spa-feature-architecture.md) |
 | Low coupling | Cross-feature imports only via `index.ts`; Supabase calls only in adapters, never in components | [architecture.md](architecture.md), lint-enforced (see section 9) |
 | Information hiding | Pure business rules (`hasBookingConflict`, `isValidBookingTransition`) are tiny, dependency-free functions | `bookingRules.ts` |
-| Defence in depth | Browser validation gives feedback; the database enforces ownership and overlap | RLS, trigger, exclusion constraint |
+| Defence in depth | Browser validation gives feedback; the database enforces ownership, capacity, and pet availability | RLS, triggers, exclusion constraint |
 | Least privilege | `security definer` search RPC with an empty search path, no booking details returned | [ADR 0010](decisions/0010-listing-search-availability-privacy.md) |
 | Expand/contract changes | Forward-only migrations so a Worker rollback still works | [ci-cd.md](ci-cd.md#rollback) |
 

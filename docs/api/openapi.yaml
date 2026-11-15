@@ -323,9 +323,11 @@ paths:
       description: |
         Allowed transitions: pending to confirmed or declined (listing owner), pending or
         confirmed to cancelled (requester), confirmed to completed (listing owner, on or after the
-        end date). Confirming fails with a conflict if it would overlap another confirmed
-        booking on the same listing (exclusion constraint `bookings_no_confirmed_overlap`).
-        Listing, pet, requester, and dates cannot be changed after the request.
+        end date). Confirming fails, and the booking stays pending, if the listing would hold
+        more pets at once than its capacity (code `PBC01`) or the pet already has an overlapping
+        confirmed stay at any listing (code `PBP01`). Neither error reveals the other booking.
+        Listing, pet, requester, and dates cannot be changed after the request. Design
+        reasoning: ADR 0011.
       x-rls: Actor and transition checked by the `guard_booking_change` trigger.
       security:
         - userJwt: []
@@ -349,9 +351,17 @@ paths:
               schema:
                 type: array
                 items: { $ref: '#/components/schemas/Booking' }
-        '400': { $ref: '#/components/responses/DatabaseError' }
+        '400':
+          description: >-
+            Invalid transition, or the confirmation does not fit: `PBC01` (listing full for
+            those dates) or `PBP01` (pet already confirmed elsewhere).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DatabaseError' }
         '409':
-          description: Would overlap another confirmed booking.
+          description: >-
+            Backstop only: the pet exclusion constraint (`23P01`) caught an overlapping
+            confirmed stay for the same pet that the trigger did not.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/DatabaseError' }

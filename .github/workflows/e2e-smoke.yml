@@ -1,16 +1,16 @@
 name: E2E smoke
 
 # Runs the public-route Playwright smoke suite (e2e/smoke.spec.ts) on desktop and
-# mobile Chromium. Separate from the required Quality gate: it installs a browser
-# and starts the dev server, so it is informational for now. A red run still
-# means the app shell or router regressed.
+# mobile Chromium, and desktop Firefox. Its job is a required status check on main
+# (US-D.5, docs/ci-cd.md#required-checks), so the workflow starts on EVERY pull
+# request: a required check whose workflow never starts leaves the PR stuck on
+# "Expected" forever. The first steps decide whether web/** changed; if not, the
+# browser install and test run are skipped and the job still finishes green. Keep
+# the job `name:` unchanged: the ruleset requires it by that exact string.
 
 on:
   pull_request:
     branches: [main]
-    paths:
-      - 'web/**'
-      - '.github/workflows/e2e-smoke.yml'
   workflow_dispatch:
 
 concurrency:
@@ -21,21 +21,54 @@ jobs:
   smoke:
     name: Public route smoke (desktop + mobile)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read # paths-filter lists the PR's files through the API
     defaults:
       run:
         working-directory: web
     steps:
       - uses: actions/checkout@v7
+
+      # Path filtering lives here, not under `on:`, so the required check always
+      # reports. Manual runs always run in full.
+      - name: Detect web changes
+        id: filter
+        if: github.event_name == 'pull_request'
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        with:
+          filters: |
+            relevant:
+              - 'web/**'
+              - '.github/workflows/e2e-smoke.yml'
+
+      - name: Decide whether to run the smoke suite
+        id: gate
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          RELEVANT: ${{ steps.filter.outputs.relevant }}
+        run: |
+          if [ "$EVENT_NAME" != pull_request ] || [ "$RELEVANT" = true ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "No web files changed: smoke suite skipped, required check reports success." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - uses: actions/setup-node@v7
+        if: steps.gate.outputs.run == 'true'
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: web/package-lock.json
-      - run: npm ci
-      - run: npx playwright install --with-deps chromium firefox
-      - run: npx playwright test e2e/smoke.spec.ts
+      - if: steps.gate.outputs.run == 'true'
+        run: npm ci
+      - if: steps.gate.outputs.run == 'true'
+        run: npx playwright install --with-deps chromium firefox
+      - if: steps.gate.outputs.run == 'true'
+        run: npx playwright test e2e/smoke.spec.ts
       - uses: actions/upload-artifact@v7
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.gate.outputs.run == 'true' }}
         with:
           name: playwright-report
           path: web/playwright-report

@@ -28,16 +28,38 @@ Feature: Booking requests and their lifecycle
       | the pet is not mine                      |
 
   # Requirement: FR-5.2
-  # Verified by: supabase/tests/booking_rules.test.sql
-  # Verified by: web/src/features/bookings/lib/bookingRules.test.ts
-  Scenario: Confirmed bookings cannot overlap
-    Given a listing has a confirmed booking from 1 to 5 February
-    And another booking for the same listing is pending from 3 to 7 February
-    When the host confirms the second booking
-    Then the confirmation is rejected
+  # Verified by: web/e2e/booking-conflict-and-capacity.spec.ts
+  # Verified by: supabase/tests/booking_capacity.test.sql
+  # Verified by: supabase/tests/booking_concurrency.test.py
+  Scenario: Confirmed stays cannot exceed the listing's capacity
+    Given a listing with capacity 2 has a confirmed booking from 1 to 5 February
+    And two other pets have pending bookings for the same listing from 3 to 7 February
+    When the host confirms both pending bookings, even at the same moment
+    Then exactly one of them is confirmed
+    And the other stays "pending" with a message that the listing is full
+
+  # Requirement: FR-5.2
+  # Verified by: web/e2e/booking-conflict-and-capacity.spec.ts
+  # Verified by: supabase/tests/booking_capacity.test.sql
+  # Verified by: supabase/tests/booking_concurrency.test.py
+  Scenario: A pet cannot be confirmed at two listings for the same nights
+    Given my pet has a confirmed booking at one listing from 1 to 5 February
+    And my pet has a pending booking at another listing from 3 to 7 February
+    When the second host confirms it
+    Then the confirmation is rejected without revealing the other booking
     And the second booking stays "pending"
 
   # Requirement: FR-5.2
+  # Verified by: supabase/tests/booking_cancellation_release.test.sql
+  Scenario: Cancelling a confirmed stay frees its place and its pet
+    Given a listing with capacity 1 has a confirmed booking from 1 to 5 February
+    And another pet has a pending booking for the same listing from 3 to 7 February
+    When the requester of the confirmed booking cancels it
+    And the host confirms the pending booking
+    Then it is confirmed
+
+  # Requirement: FR-5.2
+  # Verified by: web/e2e/booking-conflict-and-capacity.spec.ts
   # Verified by: supabase/tests/booking_rules.test.sql
   Scenario: Back-to-back stays are allowed
     Given a listing has a confirmed booking from 1 to 5 February
@@ -50,6 +72,46 @@ Feature: Booking requests and their lifecycle
     Given a booking between a requester and a host
     When an unrelated signed-in user lists bookings
     Then the booking is not in the result
+
+  # Requirement: FR-5.3
+  # Verified by: supabase/tests/booking_detail.test.sql
+  # Verified by: web/src/features/bookings/components/BookingDetailScreen.test.tsx
+  # Verified by: web/e2e/booking-detail-journey.spec.ts
+  Scenario: Both people in a booking can open its details
+    Given a booking between a requester and a host
+    When either of them opens the booking from their list
+    Then they see its ID, dates, status, notes, listing, pet and the other person's display name, photo and location
+    And the requester sees the host while the host sees the requester
+    And neither sees an email address or phone number
+
+  # Requirement: FR-5.3
+  # Verified by: supabase/tests/booking_detail.test.sql
+  # Verified by: web/e2e/booking-detail-journey.spec.ts
+  Scenario: Nobody else can open a booking's details
+    Given a booking between a requester and a host
+    When an unrelated signed-in user opens its address, or a signed-out visitor calls the booking detail
+    Then they get the same answer as for a booking that does not exist
+    And nothing about the booking, its pet or its people is shown
+
+  # Requirement: FR-5.3
+  # Verified by: supabase/tests/booking_detail.test.sql
+  # Verified by: web/src/features/bookings/components/BookingDetailScreen.test.tsx
+  Scenario: A booking keeps its history
+    Given a booking at a listing that was later unpublished or deleted, or for a pet that was later removed
+    When a participant opens the booking
+    Then the booking, its listing title and its pet are still shown
+    And the host no longer sees the pet after the booking was declined or cancelled
+
+  # Requirement: FR-5.4
+  # Verified by: web/src/features/bookings/hooks/useBookings.test.tsx
+  # Verified by: web/src/features/bookings/hooks/useBookingStatusChange.test.tsx
+  # Verified by: web/e2e/booking-detail-journey.spec.ts
+  Scenario: An action on a stale screen is refused and the screen refreshes
+    Given the host has a pending request on screen
+    And the requester cancels it in another session
+    When the host confirms it
+    Then the host is told the booking was changed by someone else
+    And the lists and the detail show "cancelled" with no action left to take
 
   # Requirement: FR-5.4
   # Verified by: web/e2e/booking-lifecycle.spec.ts

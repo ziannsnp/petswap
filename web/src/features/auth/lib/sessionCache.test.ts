@@ -60,3 +60,30 @@ describe('setSessionCache', () => {
     expect(queryClient.getQueryData(['search', 'listings'])).toEqual(['public listing']);
   });
 });
+
+describe('setSessionCache and booking details', () => {
+  const detailKey = ['bookings', 'detail', 'booking-1'] as const;
+  const incomingKey = ['bookings', 'incoming'] as const;
+
+  it('never shows one user\'s booking detail or incoming list to the next user in the same tab', () => {
+    const queryClient = new QueryClient();
+    setSessionCache(queryClient, sessionFor('alex'));
+    queryClient.setQueryData(detailKey, { id: 'booking-1', peer: { displayName: 'Casey' } });
+    queryClient.setQueryData(incomingKey, [{ id: 'booking-1' }]);
+
+    setSessionCache(queryClient, sessionFor('blair'));
+
+    expect(queryClient.getQueryData(detailKey)).toBeUndefined();
+    expect(queryClient.getQueryData(incomingKey)).toBeUndefined();
+  });
+
+  it('keeps a booking detail when the same user\'s token is refreshed', () => {
+    const queryClient = new QueryClient();
+    setSessionCache(queryClient, sessionFor('alex'));
+    queryClient.setQueryData(detailKey, { id: 'booking-1' });
+
+    setSessionCache(queryClient, { ...sessionFor('alex'), access_token: 'refreshed' });
+
+    expect(queryClient.getQueryData(detailKey)).toEqual({ id: 'booking-1' });
+  });
+});

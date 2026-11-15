@@ -5,11 +5,19 @@ import {
   BookingConflictError,
   BookingExpiredError,
   BookingListingFullError,
+  BookingNotFoundError,
   BookingPetUnavailableError,
   BookingStartDateError,
+  BookingStatusChangedError,
   DuplicateBookingRequestError,
 } from './bookingErrors';
-import { createBookingRequest, listIncomingBookings, listOutgoingBookings, updateBookingStatus } from './bookingApi';
+import {
+  createBookingRequest,
+  getBookingDetail,
+  listIncomingBookings,
+  listOutgoingBookings,
+  updateBookingStatus,
+} from './bookingApi';
 
 // Explicit factory so the real module (and its Vite-only `import.meta.env` usage) never loads under Jest.
 jest.mock('@/shared/lib/supabase', () => ({ getSupabaseClient: jest.fn() }));
@@ -202,8 +210,8 @@ describe('updateBookingStatus status changes', () => {
     },
   );
 
-  it('passes through the error when the database refuses a cancellation', async () => {
-    const databaseError = { code: 'P0001', message: 'invalid booking status transition' };
+  it('passes through an error it has no safe words for', async () => {
+    const databaseError = { code: 'P0001', message: 'booking ownership, pet, listing, and dates are immutable after request' };
     mockAuthenticatedClient('stranger-1', { data: null, error: databaseError });
 
     await expect(updateBookingStatus('booking-1', 'cancelled')).rejects.toBe(databaseError);
@@ -272,6 +280,23 @@ describe('booking rules enforced by guard_booking_change', () => {
     await expect(updateBookingStatus('booking-1', 'confirmed')).rejects.toBeInstanceOf(BookingExpiredError);
   });
 
+  it.each(['confirmed', 'declined', 'cancelled'] as const)(
+    'tells the user a booking changed underneath them when %s is refused as an invalid transition',
+    async (status) => {
+      const databaseError = { code: 'P0001', message: 'invalid booking status transition' };
+      mockAuthenticatedClient('user-1', { data: null, error: databaseError });
+
+      await expect(updateBookingStatus('booking-1', status)).rejects.toBeInstanceOf(BookingStatusChangedError);
+    },
+  );
+
+  it('keeps the completion message when completing is refused, since that raise also means "not ended yet"', async () => {
+    const databaseError = { code: 'P0001', message: 'invalid booking status transition' };
+    mockAuthenticatedClient('owner-1', { data: null, error: databaseError });
+
+    await expect(updateBookingStatus('booking-1', 'completed')).rejects.toBeInstanceOf(BookingCompletionError);
+  });
+
   it('explains that a stay which has ended can no longer be cancelled', async () => {
     const databaseError = { code: 'P0001', message: 'a stay that has ended cannot be cancelled' };
     mockAuthenticatedClient('requester-1', { data: null, error: databaseError });
@@ -292,5 +317,112 @@ describe('booking rules enforced by guard_booking_change', () => {
         end_date: '2026-12-03',
       }),
     ).rejects.toBeInstanceOf(DuplicateBookingRequestError);
+  });
+});
+
+describe('getBookingDetail', () => {
+  const DETAIL_ROW = {
+    id: 'booking-1',
+    status: 'confirmed',
+    start_date: '2027-03-01',
+    end_date: '2027-03-04',
+    requester_note: 'Please keep him off the sofa.',
+    owner_note: null,
+    created_at: '2027-02-01T10:00:00.000Z',
+    confirmed_at: '2027-02-02T10:00:00.000Z',
+    declined_at: null,
+    cancelled_at: null,
+    completed_at: null,
+    viewer_role: 'owner',
+    listing_id: 'listing-1',
+    listing_title: 'Detail garden',
+    listing_location: 'Chiang Mai',
+    listing_status: 'published',
+    pet_id: 'pet-1',
+    pet_name: 'Milo',
+    pet_species: 'dog',
+    pet_breed: 'Corgi',
+    pet_age_year: 4,
+    pet_photo_url: 'pet-1/photo.jpg',
+    pet_description: null,
+    pet_feeding_instruction: 'two meals a day',
+    pet_medical_note: null,
+    pet_behavior_note: null,
+    pet_allergies: null,
+    pet_vaccination_info: null,
+    pet_special_requirement: null,
+    pet_deleted: false,
+    peer_id: 'requester-1',
+    peer_display_name: 'Casey Ito',
+    peer_photo_url: null,
+    peer_location: 'Nonthaburi',
+  };
+
+  function mockRpc(result: QueryResult) {
+    const rpc = jest.fn().mockResolvedValue(result);
+    mockGetSupabaseClient.mockReturnValue({ rpc } as unknown as AppSupabaseClient);
+    return rpc;
+  }
+
+  it('asks the database for one booking and maps the row', async () => {
+    const rpc = mockRpc({ data: [DETAIL_ROW], error: null });
+
+    const detail = await getBookingDetail('booking-1');
+
+    expect(rpc).toHaveBeenCalledWith('get_booking_detail', { target_booking_id: 'booking-1' });
+    expect(detail).toMatchObject({
+      id: 'booking-1',
+      status: 'confirmed',
+      startDate: '2027-03-01',
+      endDate: '2027-03-04',
+      requesterNote: 'Please keep him off the sofa.',
+      viewerRole: 'owner',
+      listing: { id: 'listing-1', title: 'Detail garden', location: 'Chiang Mai', status: 'published' },
+      peer: { id: 'requester-1', displayName: 'Casey Ito', photoUrl: null, location: 'Nonthaburi' },
+    });
+    expect(detail.pet).toMatchObject({ id: 'pet-1', name: 'Milo', species: 'dog', feeding_instruction: 'two meals a day', isDeleted: false });
+  });
+
+  it('never carries an email address or phone number', async () => {
+    mockRpc({ data: [DETAIL_ROW], error: null });
+
+    const detail = await getBookingDetail('booking-1');
+
+    expect(Object.keys(detail.peer).sort()).toEqual(['displayName', 'id', 'location', 'photoUrl']);
+    expect(JSON.stringify(detail)).not.toMatch(/phone|email/i);
+  });
+
+  it('maps a pet that is not shared with the viewer to null', async () => {
+    mockRpc({
+      data: [{ ...DETAIL_ROW, status: 'declined', pet_id: null, pet_name: null, pet_species: null, pet_deleted: null }],
+      error: null,
+    });
+
+    const detail = await getBookingDetail('booking-1');
+
+    expect(detail.pet).toBeNull();
+  });
+
+  it('marks a soft-deleted pet and keeps a draft listing', async () => {
+    mockRpc({ data: [{ ...DETAIL_ROW, viewer_role: 'requester', pet_deleted: true, listing_status: 'draft' }], error: null });
+
+    const detail = await getBookingDetail('booking-1');
+
+    expect(detail.viewerRole).toBe('requester');
+    expect(detail.pet?.isDeleted).toBe(true);
+    expect(detail.listing.status).toBe('draft');
+  });
+
+  it('treats no row as not found, whether the booking is missing or belongs to someone else', async () => {
+    mockRpc({ data: [], error: null });
+
+    await expect(getBookingDetail('someone-elses-booking')).rejects.toBeInstanceOf(BookingNotFoundError);
+  });
+
+  it('rethrows a database error unchanged', async () => {
+    const failure = { code: '42501', message: 'permission denied for function get_booking_detail' };
+    mockRpc({ data: null, error: failure });
+
+    await expect(getBookingDetail('booking-1')).rejects.toBe(failure);
   });
 });

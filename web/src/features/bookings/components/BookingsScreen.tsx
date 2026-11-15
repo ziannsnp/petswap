@@ -1,39 +1,17 @@
 import { useState } from 'react';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { PetCareInfo, hasPetCareInfo } from '@/features/pets';
-import { useIncomingBookings, useOutgoingBookings, useUpdateBookingStatus } from '../hooks/useBookings';
-import { BookingCompletionError, BookingConflictError } from '../lib/bookingErrors';
+import { Link } from 'react-router-dom';
+import { useBookingStatusChange } from '../hooks/useBookingStatusChange';
+import { useIncomingBookings, useOutgoingBookings } from '../hooks/useBookings';
 import { utcTodayIsoDate } from '../lib/bookingDates';
+import { STATUS_LABELS, formatBookingDate, formatSpecies } from '../lib/bookingDisplay';
 import { canCancelBooking, canCompleteBooking, canConfirmBooking } from '../lib/bookingRules';
 import type { BookingWithDetails } from '../lib/bookingApi';
-import type { Database } from '@/shared/types/database.types';
+import { BookingStatusBadge } from './BookingStatusBadge';
 import { CancelBookingDialog } from './CancelBookingDialog';
 
-type BookingStatus = Database['public']['Enums']['booking_status'];
-
-const STATUS_LABELS: Record<BookingStatus, string> = {
-  pending: 'Pending',
-  confirmed: 'Confirmed',
-  declined: 'Declined',
-  cancelled: 'Cancelled',
-  completed: 'Completed',
-};
-
 const SKELETON_ROWS = [0, 1] as const;
-
-const dateFormatter = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
-
-function formatBookingDate(date: string): string {
-  return dateFormatter.format(new Date(`${date}T00:00:00.000Z`));
-}
-
-function formatSpecies(species: string): string {
-  return species.replace(/_/g, ' ').replace(/^\w/, (letter) => letter.toUpperCase());
-}
-
-function BookingStatusBadge({ status }: { readonly status: BookingStatus }) {
-  return <span className={`booking-status booking-status--${status}`}>{STATUS_LABELS[status]}</span>;
-}
 
 interface BookingCardProps {
   readonly booking: BookingWithDetails;
@@ -141,13 +119,22 @@ function BookingCard({
               {isResponding ? 'Saving...' : 'Mark completed'}
             </button>
           )}
-          {responseError && (
-            <p className="booking-card__error" role="alert">
-              {responseError}
-            </p>
-          )}
         </div>
       )}
+      {/* Outside the actions: a refusal refetches the booking, which may leave no action to show,
+          and the reason must stay readable. */}
+      {responseError && (
+        <p className="booking-card__error mt-3" role="alert">
+          {responseError}
+        </p>
+      )}
+      <Link
+        to={`/bookings/${booking.id}`}
+        className="mt-3 inline-block text-sm font-semibold text-brand-700 underline-offset-2 hover:underline"
+        aria-label={`View details for ${booking.pet?.name ?? 'booking'} at ${booking.listing.title}, ${STATUS_LABELS[booking.status]}`}
+      >
+        View details
+      </Link>
     </li>
   );
 }
@@ -254,30 +241,13 @@ function BookingSection({
 export function BookingsScreen() {
   const outgoing = useOutgoingBookings();
   const incoming = useIncomingBookings();
-  const updateStatus = useUpdateBookingStatus();
-  const [respondingId, setRespondingId] = useState<string | null>(null);
-  const [responseError, setResponseError] = useState<{ bookingId: string; message: string } | null>(null);
+  const { changeStatus, respondingId, responseError } = useBookingStatusChange();
   // Completion follows the database's UTC day so the button never offers a refused action (ADR 0011).
   const today = utcTodayIsoDate();
   const [cancellationBooking, setCancellationBooking] = useState<BookingWithDetails | null>(null);
 
   const noRelatedBookings =
     outgoing.isSuccess && incoming.isSuccess && outgoing.data.length === 0 && incoming.data.length === 0;
-
-  async function changeStatus(bookingId: string, status: BookingStatus) {
-    setRespondingId(bookingId);
-    setResponseError(null);
-    try {
-      await updateStatus.mutateAsync({ bookingId, status });
-    } catch (error) {
-      const message = error instanceof BookingConflictError || error instanceof BookingCompletionError
-        ? error.message
-        : 'Could not update this booking. Please try again.';
-      setResponseError({ bookingId, message });
-    } finally {
-      setRespondingId(null);
-    }
-  }
 
   return (
     <main className="bookings-screen">
@@ -318,7 +288,9 @@ export function BookingsScreen() {
           booking={cancellationBooking}
           isOpen
           onClose={() => setCancellationBooking(null)}
-          onConfirm={() => changeStatus(cancellationBooking.id, 'cancelled')}
+          onConfirm={async () => {
+            await changeStatus(cancellationBooking.id, 'cancelled');
+          }}
         />
       )}
     </main>

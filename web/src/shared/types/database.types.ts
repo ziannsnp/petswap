@@ -263,6 +263,45 @@ export type Database = {
         Args: { candidate_username: string };
         Returns: boolean;
       };
+      get_booking_detail: {
+        Args: { target_booking_id: string };
+        Returns: {
+          id: string;
+          status: Database['public']['Enums']['booking_status'];
+          start_date: string;
+          end_date: string;
+          requester_note: string | null;
+          owner_note: string | null;
+          created_at: string;
+          confirmed_at: string | null;
+          declined_at: string | null;
+          cancelled_at: string | null;
+          completed_at: string | null;
+          viewer_role: string;
+          listing_id: string;
+          listing_title: string;
+          listing_location: string;
+          listing_status: Database['public']['Enums']['listing_status'];
+          pet_id: string | null;
+          pet_name: string | null;
+          pet_species: Database['public']['Enums']['pet_species'] | null;
+          pet_breed: string | null;
+          pet_age_year: number | null;
+          pet_photo_url: string | null;
+          pet_description: string | null;
+          pet_feeding_instruction: string | null;
+          pet_medical_note: string | null;
+          pet_behavior_note: string | null;
+          pet_allergies: string | null;
+          pet_vaccination_info: string | null;
+          pet_special_requirement: string | null;
+          pet_deleted: boolean | null;
+          peer_id: string;
+          peer_display_name: string;
+          peer_photo_url: string | null;
+          peer_location: string | null;
+        }[];
+      };
       get_listing_host: {
         Args: { target_listing_id: string };
         Returns: {

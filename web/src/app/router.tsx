@@ -1,6 +1,6 @@
 import { createBrowserRouter } from 'react-router-dom';
 import { AuthScreen, CheckEmailScreen, ProtectedRoute, RegisterScreen } from '@/features/auth';
-import { BookingsScreen } from '@/features/bookings';
+import { BookingDetailScreen, BookingsScreen } from '@/features/bookings';
 import { CreateListingScreen, EditListingScreen, ListingDetailScreen, ListingsScreen } from '@/features/listings';
 import { PrivacyNoticeScreen, TermsOfServiceScreen } from '@/features/consent';
 import { CreatePetScreen, EditPetScreen, PetsScreen } from '@/features/pets';
@@ -36,6 +36,7 @@ export const router = createBrowserRouter([
           { path: '/listings/new', Component: CreateListingScreen },
           { path: '/listings/:listingId/edit', Component: EditListingScreen },
           { path: '/bookings', Component: BookingsScreen },
+          { path: '/bookings/:bookingId', Component: BookingDetailScreen },
         ],
       },
 

@@ -1,9 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { BookingWithDetails } from '../lib/bookingApi';
+/** What the dialog names: satisfied by a list row (BookingWithDetails) and by the detail screen. */
+export interface CancelBookingSummary {
+  readonly pet: { readonly name: string } | null;
+  readonly listing: { readonly title: string };
+  readonly start_date: string;
+  readonly end_date: string;
+}
 
 interface CancelBookingDialogProps {
-  readonly booking: BookingWithDetails;
+  readonly booking: CancelBookingSummary;
   readonly isOpen: boolean;
   readonly onClose: () => void;
   readonly onConfirm: () => Promise<void>;

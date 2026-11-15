@@ -177,6 +177,17 @@ test.describe('booking lifecycle after the request', () => {
       const finishedCard = await openBookingCard(requester, startDate, FINISHED_STAY_LISTING);
       await expect(finishedCard.getByText('Completed', { exact: true })).toBeVisible();
       await expect(finishedCard.getByRole('button', { name: 'Cancel booking' })).toHaveCount(0);
+
+      // The detail screens tell the same story: completed, with no action left to take.
+      const actions = /^(confirm|decline|cancel booking|mark completed)$/i;
+      await finishedCard.getByRole('link', { name: /view details/i }).click();
+      await expect(requester.getByRole('heading', { name: 'Booking details' })).toBeVisible();
+      await expect(requester.locator('.booking-status--completed')).toBeVisible();
+      await expect(requester.getByRole('button', { name: actions })).toHaveCount(0);
+
+      await (await openBookingCard(owner, startDate, FINISHED_STAY_LISTING)).getByRole('link', { name: /view details/i }).click();
+      await expect(owner.locator('.booking-status--completed')).toBeVisible();
+      await expect(owner.getByRole('button', { name: actions })).toHaveCount(0);
     } finally {
       await owner.context().close();
       await requester.context().close();

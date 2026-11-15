@@ -49,10 +49,13 @@ export default tseslint.config(
   {
     // Components must not call the Supabase client directly (docs/architecture.md, Data flow).
     // A warning, because AuthProvider predates the rule; new code should use a hook or adapter.
+    // This uses the typescript-eslint copy of the rule on purpose: a second
+    // `no-restricted-imports` here would replace the base one for components, turning the
+    // cross-feature import error above into this warning exactly where those imports happen.
     files: ['src/features/*/components/**/*.{ts,tsx}'],
     ignores: ['**/*.test.{ts,tsx}'],
     rules: {
-      'no-restricted-imports': [
+      '@typescript-eslint/no-restricted-imports': [
         'warn',
         {
           paths: [
@@ -61,7 +64,6 @@ export default tseslint.config(
               message: 'UI components must not call the Supabase client; use a feature hook or API adapter.',
             },
           ],
-          patterns: [{ group: ['@/features/*/*'], message: 'Import another feature through its index.ts.' }],
         },
       ],
     },

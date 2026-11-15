@@ -5,7 +5,7 @@ on:
   # to be required status checks, and GitHub leaves a required check stuck on
   # "Expected" forever when its workflow never starts. Every PR to main must
   # therefore get both jobs, even one that only touches docker/** or another
-  # workflow. See docs/ci-cd.md#proposed-required-checks.
+  # workflow. See docs/ci-cd.md#required-checks.
   pull_request:
     branches: [main]
   push:
@@ -18,6 +18,8 @@ on:
       - 'AGENTS.md'
       - '.github/pull_request_template.md'
       - '.github/workflows/quality.yml'
+      - '.github/rulesets/**'
+      - 'scripts/release_gate.py'
 
 concurrency:
   group: quality-${{ github.workflow }}-${{ github.ref }}
@@ -102,6 +104,59 @@ jobs:
           pip install --quiet openapi-spec-validator==0.7.1
           openapi-spec-validator docs/api/openapi.yaml
 
+  # Release gate (US-D.5). On every push to main that Quality runs for, read the
+  # conclusion of each required check on the pull request that produced the commit,
+  # write a release record (job summary + JSON artifact), and fail when any required
+  # check did not pass. `Supabase DB Push` needs this job, so a failed gate blocks
+  # the only publish GitHub Actions performs. The web app is published by
+  # Cloudflare's Git integration (ADR 0005), which does not wait for this job; its
+  # gate is the required checks on pull requests to protected main. See
+  # docs/ci-cd.md#release-gate.
+  release-gate:
+    name: Release gate
+    runs-on: ubuntu-latest
+    needs: [web-quality, docs-links, repo-checks]
+    # Runs even when a Quality job failed on the pushed commit, so the record is
+    # still written; the last step then fails the gate.
+    if: github.event_name == 'push' && !cancelled()
+    permissions:
+      contents: read
+      checks: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check the required checks of the merged pull request and write the release record
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 scripts/release_gate.py --record release-record.json
+      - name: Check Quality passed on the pushed commit
+        env:
+          WEB_QUALITY: ${{ needs.web-quality.result }}
+          DOCS_LINKS: ${{ needs.docs-links.result }}
+          REPO_CHECKS: ${{ needs.repo-checks.result }}
+        run: |
+          {
+            echo
+            echo '| Quality on the pushed commit | Result |'
+            echo '| --- | --- |'
+            echo "| web-quality | $WEB_QUALITY |"
+            echo "| docs-links | $DOCS_LINKS |"
+            echo "| repo-checks | $REPO_CHECKS |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          for result in "$WEB_QUALITY" "$DOCS_LINKS" "$REPO_CHECKS"; do
+            if [ "$result" != success ]; then
+              echo "::error::Release blocked: a Quality job did not pass on the pushed commit."
+              exit 1
+            fi
+          done
+      - uses: actions/upload-artifact@v7
+        if: ${{ !cancelled() }}
+        with:
+          name: release-record-${{ github.sha }}
+          path: release-record.json
+          retention-days: 90
+          if-no-files-found: ignore
+
 # CD Pipeline for Supabase DB Push
   changes:
     name: Detect changed paths
@@ -121,7 +176,9 @@ jobs:
   supabase-migration:
     name: Supabase DB Push
     runs-on: ubuntu-latest
-    needs: changes
+    # Needs the release gate: when any required check failed, `release-gate` fails
+    # and this job is skipped, so nothing is pushed to the hosted database.
+    needs: [changes, release-gate]
     # The workflow-level `push.paths` filter above also matches docs/**, README.md,
     # and AGENTS.md, so a documentation-only push to main still triggers this job
     # unless it re-checks that supabase/** actually changed. Without this guard,

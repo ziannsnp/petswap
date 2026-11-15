@@ -1,21 +1,17 @@
 name: Database contract
 
 # Spins up a local Supabase stack, rebuilds it from migrations + seed, and runs
-# the SQL contract checks in supabase/tests/. This is deliberately NOT part of the
-# required Quality gate (see docs/testing.md): it boots containers and is slower,
-# so it runs only when something under supabase/ changes, on a weekly schedule,
-# and on demand. Treat a red result as a blocker for merging a schema change even
-# though branch protection does not enforce it yet.
+# the SQL contract checks in supabase/tests/. Its job is a required status check
+# on main (US-D.5, docs/ci-cd.md#required-checks), so the workflow starts on
+# EVERY pull request: a required check whose workflow never starts leaves the PR
+# stuck on "Expected" forever. The first steps decide whether anything the
+# database checks cover changed; if not, the expensive steps are skipped and the
+# job still finishes green. Keep the job `name:` unchanged: the ruleset requires
+# it by that exact string.
 
 on:
   pull_request:
     branches: [main]
-    paths:
-      - 'supabase/migrations/**'
-      - 'supabase/seed.sql'
-      - 'supabase/config.toml'
-      - 'supabase/tests/**'
-      - '.github/workflows/db-contract.yml'
   workflow_dispatch:
   schedule:
     - cron: '17 6 * * 1' # Mondays 06:17 UTC, before the week's work starts
@@ -28,14 +24,46 @@ jobs:
   contract:
     name: Reset local database and run contract checks
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read # paths-filter lists the PR's files through the API
     env:
       DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
     steps:
       - uses: actions/checkout@v7
 
+      # Path filtering lives here, not under `on:`, so the required check always
+      # reports. Scheduled and manual runs always run in full.
+      - name: Detect database changes
+        id: filter
+        if: github.event_name == 'pull_request'
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        with:
+          filters: |
+            relevant:
+              - 'supabase/migrations/**'
+              - 'supabase/seed.sql'
+              - 'supabase/config.toml'
+              - 'supabase/tests/**'
+              - '.github/workflows/db-contract.yml'
+
+      - name: Decide whether to run the contract checks
+        id: gate
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          RELEVANT: ${{ steps.filter.outputs.relevant }}
+        run: |
+          if [ "$EVENT_NAME" != pull_request ] || [ "$RELEVANT" = true ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "No database files changed: contract checks skipped, required check reports success." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       # Use the CLI version that local `npx supabase` gets from web/package-lock.json,
       # so CI only moves to a new release (such as v3) when the team upgrades it.
       - name: Read the Supabase CLI version from web/package-lock.json
+        if: steps.gate.outputs.run == 'true'
         id: supabase-cli
         run: |
           version=$(jq -r '.packages["node_modules/supabase"].version' web/package-lock.json)
@@ -46,14 +74,17 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Set up Supabase CLI
+        if: steps.gate.outputs.run == 'true'
         uses: supabase/setup-cli@v3
         with:
           version: ${{ steps.supabase-cli.outputs.version }}
 
       - name: Start local Supabase stack
+        if: steps.gate.outputs.run == 'true'
         run: supabase start
 
       - name: Rebuild database from migrations and seed
+        if: steps.gate.outputs.run == 'true'
         run: supabase db reset
 
       # Run every SQL check under supabase/tests/ instead of naming each file, so a new
@@ -61,6 +92,7 @@ jobs:
       # contract goes first, then the rest in name order. Every file runs even if an
       # earlier one fails, so one red run lists all failures; the step fails at the end.
       - name: Run every SQL contract and behaviour check
+        if: steps.gate.outputs.run == 'true'
         run: |
           failed=0
           for file in supabase/tests/database_contract.sql $(ls supabase/tests/*.test.sql | sort); do
@@ -76,13 +108,15 @@ jobs:
       # Two real database sessions race confirmations and capacity edits (ADR 0011); a single
       # psql session cannot reproduce that, so it is a script rather than a *.test.sql file.
       - name: Concurrent confirmations and capacity edits
+        if: steps.gate.outputs.run == 'true'
         run: python3 supabase/tests/booking_concurrency.test.py --database-url "$DATABASE_URL"
 
       # Static checks of the database functions. `--level error` keeps this from failing on
       # advisory warnings in existing code; tighten to `warning` once the baseline is clean.
       - name: Lint database functions
+        if: steps.gate.outputs.run == 'true'
         run: supabase db lint --level error
 
       - name: Stop local Supabase stack
-        if: always()
+        if: always() && steps.gate.outputs.run == 'true'
         run: supabase stop || true

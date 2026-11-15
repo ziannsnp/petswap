@@ -1,7 +1,8 @@
 name: E2E booking
 
 # Runs the Playwright booking journeys (e2e/booking-flow.spec.ts,
-# e2e/booking-lifecycle.spec.ts, and e2e/booking-conflict-and-capacity.spec.ts),
+# e2e/booking-lifecycle.spec.ts, e2e/booking-conflict-and-capacity.spec.ts, and
+# e2e/booking-detail-journey.spec.ts),
 # then the navbar logout journeys
 # (e2e/navbar-account-menu.spec.ts), against a local Supabase stack started on the
 # runner, so nobody needs Docker on their own machine and the shared hosted project is never
@@ -72,7 +73,7 @@ jobs:
 
       - name: Run booking journeys
         working-directory: web
-        run: npx playwright test e2e/booking-flow.spec.ts e2e/booking-lifecycle.spec.ts e2e/booking-conflict-and-capacity.spec.ts
+        run: npx playwright test e2e/booking-flow.spec.ts e2e/booking-lifecycle.spec.ts e2e/booking-conflict-and-capacity.spec.ts e2e/booking-detail-journey.spec.ts
 
       # Logging out ends every session for that account, not just the one in this
       # browser, and the booking journeys sign in as the same seeded user. Run the

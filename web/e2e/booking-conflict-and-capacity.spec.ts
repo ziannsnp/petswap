@@ -17,10 +17,12 @@ const COUNTRYSIDE_COTTAGE_ID = '30000000-0000-4000-8000-000000000003'; // Blair'
 const COUNTRYSIDE_COTTAGE_TITLE = 'Countryside cottage';
 const PASSWORD = 'petswap-local-dev';
 
+// The fixed copy of BookingListingFullError / BookingPetUnavailableError (bookingErrors.ts); neither names
+// another booking, its dates, its listing or its requester.
 const CAPACITY_CONFLICT_MESSAGE =
-  'This listing has no remaining capacity for these dates. Choose different dates before confirming.';
+  'This listing is full for some of these dates. Confirming this request would exceed its capacity on at least one night.';
 const PET_CONFLICT_MESSAGE =
-  'This pet already has a confirmed booking for these dates. Choose different dates before confirming.';
+  'This pet already has a confirmed booking for some of these dates, so this request can no longer be confirmed.';
 
 // All projects run in parallel against one database, so each gets its own month of
 // 2029 - clear of booking-flow.spec.ts (2027) and booking-lifecycle.spec.ts (2028) -

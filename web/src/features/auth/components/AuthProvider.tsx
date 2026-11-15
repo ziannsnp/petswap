@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getSupabaseClient, isSupabaseConfigured } from '@/shared/lib/supabase';
 import { getCurrentSession, signOut as apiSignOut } from '../lib/authApi';
+import { setSessionCache } from '../lib/sessionCache';
 import { AuthContext, authKeys, type AuthContextValue } from '../context/authContext';
 
 export interface AuthProviderProps {
@@ -31,7 +32,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const {
       data: { subscription },
     } = getSupabaseClient().auth.onAuthStateChange((_event, newSession) => {
-      queryClient.setQueryData(authKeys.session(), newSession ?? null);
+      setSessionCache(queryClient, newSession ?? null);
     });
 
     return () => {
@@ -45,7 +46,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         await apiSignOut();
       }
     } finally {
-      queryClient.setQueryData(authKeys.session(), null);
+      setSessionCache(queryClient, null);
     }
   }, [configured, queryClient]);
 

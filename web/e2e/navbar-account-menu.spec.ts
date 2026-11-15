@@ -5,7 +5,8 @@ import { routes } from './support/routes';
 // avatar dropdown (View profile + Log out) and the mobile menu's Log out
 // button, which used to close the menu without ever calling signOut().
 //
-// Needs the local Supabase stack and a seeded account (supabase/seed.sql):
+// Runs in CI in the E2E booking workflow, which starts and seeds a local Supabase stack.
+// Locally it needs the same stack and a seeded account (supabase/seed.sql):
 //   1. supabase start   (or: npx supabase start)
 //   2. point web/.env.local at the local project (see docs/getting-started.md)
 //   3. npm run test:e2e -- navbar-account-menu.spec.ts
@@ -66,6 +67,8 @@ test.describe('mobile menu logout', () => {
     // menu without calling signOut(), so the visitor stayed authenticated.
     await expect(page).toHaveURL(new RegExp(`${routes.login}$`));
     await page.goto(routes.search);
+    // At 390px the nav links live behind the collapsed menu, so open it first.
+    await page.getByRole('button', { name: /toggle main menu/i }).click();
     await expect(page.getByRole('link', { name: /^log in$/i })).toBeVisible();
   });
 });

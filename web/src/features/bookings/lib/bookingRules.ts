@@ -1,8 +1,15 @@
 import type { BookingStatus, BookingWindow, ExistingBooking } from '../types';
 
+const CALENDAR_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Midnight UTC of a `YYYY-MM-DD` calendar day. V8 rolls an impossible day such as 2026-02-30 over
+ * to 2026-03-02 instead of rejecting it, so the parsed value is formatted back and must match;
+ * the same round trip guards search dates (searchCriteria.ts).
+ */
 export function asUtcDay(date: string): number {
-  const timestamp = Date.parse(`${date}T00:00:00.000Z`);
-  if (Number.isNaN(timestamp)) {
+  const timestamp = CALENDAR_DATE_PATTERN.test(date) ? Date.parse(`${date}T00:00:00.000Z`) : Number.NaN;
+  if (Number.isNaN(timestamp) || new Date(timestamp).toISOString().slice(0, 10) !== date) {
     throw new RangeError(`Invalid booking date: ${date}`);
   }
   return timestamp;
@@ -58,6 +65,32 @@ export function isValidBookingTransition(from: BookingStatus, to: BookingStatus)
  *   guard repeats the check against its own UTC day.
  * - Actor authorization (listing owner only) is enforced separately.
  */
+/**
+ * Pure confirm check: a host can confirm only a pending request whose start date has not passed.
+ * The database guard repeats this against its UTC day, so a request left pending past its start
+ * can only be declined.
+ */
+export function canConfirmBooking(
+  booking: Pick<ExistingBooking, 'status' | 'startDate'>,
+  today: string,
+): boolean {
+  return isValidBookingTransition(booking.status, 'confirmed') && asUtcDay(booking.startDate) >= asUtcDay(today);
+}
+
+/**
+ * Pure cancel check: a requester can cancel a pending request, or a confirmed stay until its
+ * check-out day (end-exclusive). After that the stay is over and only the host can complete it.
+ */
+export function canCancelBooking(
+  booking: Pick<ExistingBooking, 'status' | 'endDate'>,
+  today: string,
+): boolean {
+  if (!isValidBookingTransition(booking.status, 'cancelled')) {
+    return false;
+  }
+  return booking.status !== 'confirmed' || asUtcDay(today) < asUtcDay(booking.endDate);
+}
+
 export function canCompleteBooking(
   booking: Pick<ExistingBooking, 'status' | 'endDate'>,
   today: string,

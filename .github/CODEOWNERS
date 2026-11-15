@@ -1,0 +1,20 @@
+# Code owners are requested for review automatically on pull requests that touch these paths.
+# GitHub only *requires* their approval if the main ruleset turns on "Require review from
+# Code Owners" (repository admin; see docs/ci-cd.md). Until then this routes review.
+#
+# Team D (QA / Infra) owns the quality standard, CI, scripts, and the test harnesses.
+# Feature squads own and review their own feature folders; add their handles here when the
+# squads confirm who should be requested, for example:
+#   /web/src/features/bookings/   @squad-c-handle
+/.github/                 @tonpia
+/scripts/                 @tonpia
+/docker/                  @tonpia
+/docker-compose.yml       @tonpia
+/web/e2e/                 @tonpia
+/web/jest.config.cjs      @tonpia
+/web/eslint.config.js     @tonpia
+/supabase/tests/          @tonpia
+/docs/testing.md          @tonpia
+/docs/ci-cd.md            @tonpia
+/docs/test-plan.md        @tonpia
+/docs/sqa-scm-plan.md     @tonpia

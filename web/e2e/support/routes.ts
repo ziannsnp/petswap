@@ -8,6 +8,7 @@ export const routes = {
   terms: '/terms',
   profile: '/profile',
   pets: '/pets',
+  newPet: '/pets/new',
   listings: '/listings',
   newListing: '/listings/new',
   bookings: '/bookings',

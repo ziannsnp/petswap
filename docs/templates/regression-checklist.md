@@ -85,7 +85,7 @@ fill the result columns, and link it from the release-readiness PR.
 | 24 | An unrelated user cannot open a booking they are not part of | | | |
 | 25 | Owner confirms a pending request; requester then sees `Confirmed` | | | |
 | 26 | Owner declines a pending request; requester cancels a pending/confirmed request | | | |
-| 27 | A second confirmed booking overlapping an existing one on the same listing is blocked; back-to-back dates are allowed | | | |
+| 27 | Overlapping confirmed bookings within listing capacity are allowed; confirming beyond capacity or for a pet already confirmed at another listing is blocked with a safe message; back-to-back dates are allowed | | | |
 | 28 | Owner completes a confirmed booking after its end date | | | |
 
 ## Sign-off

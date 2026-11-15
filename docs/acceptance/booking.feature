@@ -28,16 +28,38 @@ Feature: Booking requests and their lifecycle
       | the pet is not mine                      |
 
   # Requirement: FR-5.2
-  # Verified by: supabase/tests/booking_rules.test.sql
-  # Verified by: web/src/features/bookings/lib/bookingRules.test.ts
-  Scenario: Confirmed bookings cannot overlap
-    Given a listing has a confirmed booking from 1 to 5 February
-    And another booking for the same listing is pending from 3 to 7 February
-    When the host confirms the second booking
-    Then the confirmation is rejected
+  # Verified by: web/e2e/booking-conflict-and-capacity.spec.ts
+  # Verified by: supabase/tests/booking_capacity.test.sql
+  # Verified by: supabase/tests/booking_concurrency.test.py
+  Scenario: Confirmed stays cannot exceed the listing's capacity
+    Given a listing with capacity 2 has a confirmed booking from 1 to 5 February
+    And two other pets have pending bookings for the same listing from 3 to 7 February
+    When the host confirms both pending bookings, even at the same moment
+    Then exactly one of them is confirmed
+    And the other stays "pending" with a message that the listing is full
+
+  # Requirement: FR-5.2
+  # Verified by: web/e2e/booking-conflict-and-capacity.spec.ts
+  # Verified by: supabase/tests/booking_capacity.test.sql
+  # Verified by: supabase/tests/booking_concurrency.test.py
+  Scenario: A pet cannot be confirmed at two listings for the same nights
+    Given my pet has a confirmed booking at one listing from 1 to 5 February
+    And my pet has a pending booking at another listing from 3 to 7 February
+    When the second host confirms it
+    Then the confirmation is rejected without revealing the other booking
     And the second booking stays "pending"
 
   # Requirement: FR-5.2
+  # Verified by: supabase/tests/booking_cancellation_release.test.sql
+  Scenario: Cancelling a confirmed stay frees its place and its pet
+    Given a listing with capacity 1 has a confirmed booking from 1 to 5 February
+    And another pet has a pending booking for the same listing from 3 to 7 February
+    When the requester of the confirmed booking cancels it
+    And the host confirms the pending booking
+    Then it is confirmed
+
+  # Requirement: FR-5.2
+  # Verified by: web/e2e/booking-conflict-and-capacity.spec.ts
   # Verified by: supabase/tests/booking_rules.test.sql
   Scenario: Back-to-back stays are allowed
     Given a listing has a confirmed booking from 1 to 5 February

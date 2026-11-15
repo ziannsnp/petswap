@@ -52,6 +52,17 @@ export class BookingExpiredError extends Error {
   }
 }
 
+/**
+ * The booking is no longer in the state the screen showed (the other participant, or another tab, changed
+ * it first), so the action no longer applies. The bookings are refetched when this is shown.
+ */
+export class BookingStatusChangedError extends Error {
+  constructor() {
+    super('This booking was changed by someone else, so that action no longer applies. It has been refreshed.');
+    this.name = 'BookingStatusChangedError';
+  }
+}
+
 export class BookingCancellationError extends Error {
   constructor() {
     super('This stay has already ended and can no longer be cancelled.');

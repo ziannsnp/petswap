@@ -8,6 +8,7 @@ import {
   BookingNotFoundError,
   BookingPetUnavailableError,
   BookingStartDateError,
+  BookingStatusChangedError,
   DuplicateBookingRequestError,
 } from './bookingErrors';
 import {
@@ -209,8 +210,8 @@ describe('updateBookingStatus status changes', () => {
     },
   );
 
-  it('passes through the error when the database refuses a cancellation', async () => {
-    const databaseError = { code: 'P0001', message: 'invalid booking status transition' };
+  it('passes through an error it has no safe words for', async () => {
+    const databaseError = { code: 'P0001', message: 'booking ownership, pet, listing, and dates are immutable after request' };
     mockAuthenticatedClient('stranger-1', { data: null, error: databaseError });
 
     await expect(updateBookingStatus('booking-1', 'cancelled')).rejects.toBe(databaseError);
@@ -277,6 +278,23 @@ describe('booking rules enforced by guard_booking_change', () => {
     mockAuthenticatedClient('owner-1', { data: null, error: databaseError });
 
     await expect(updateBookingStatus('booking-1', 'confirmed')).rejects.toBeInstanceOf(BookingExpiredError);
+  });
+
+  it.each(['confirmed', 'declined', 'cancelled'] as const)(
+    'tells the user a booking changed underneath them when %s is refused as an invalid transition',
+    async (status) => {
+      const databaseError = { code: 'P0001', message: 'invalid booking status transition' };
+      mockAuthenticatedClient('user-1', { data: null, error: databaseError });
+
+      await expect(updateBookingStatus('booking-1', status)).rejects.toBeInstanceOf(BookingStatusChangedError);
+    },
+  );
+
+  it('keeps the completion message when completing is refused, since that raise also means "not ended yet"', async () => {
+    const databaseError = { code: 'P0001', message: 'invalid booking status transition' };
+    mockAuthenticatedClient('owner-1', { data: null, error: databaseError });
+
+    await expect(updateBookingStatus('booking-1', 'completed')).rejects.toBeInstanceOf(BookingCompletionError);
   });
 
   it('explains that a stay which has ended can no longer be cancelled', async () => {

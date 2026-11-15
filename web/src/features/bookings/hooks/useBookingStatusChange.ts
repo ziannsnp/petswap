@@ -4,6 +4,7 @@ import {
   BookingCompletionError,
   BookingConflictError,
   BookingExpiredError,
+  BookingStatusChangedError,
 } from '../lib/bookingErrors';
 import type { BookingStatus } from '../lib/bookingDisplay';
 import { useUpdateBookingStatus } from './useBookings';
@@ -20,6 +21,7 @@ export function describeStatusChangeError(error: unknown): string {
     || error instanceof BookingCompletionError
     || error instanceof BookingExpiredError
     || error instanceof BookingCancellationError
+    || error instanceof BookingStatusChangedError
   ) {
     return error.message;
   }

@@ -9,6 +9,7 @@ import {
   BookingNotFoundError,
   BookingPetUnavailableError,
   BookingStartDateError,
+  BookingStatusChangedError,
   DuplicateBookingRequestError,
 } from './bookingErrors';
 
@@ -21,6 +22,7 @@ export {
   BookingNotFoundError,
   BookingPetUnavailableError,
   BookingStartDateError,
+  BookingStatusChangedError,
   DuplicateBookingRequestError,
 };
 
@@ -171,6 +173,13 @@ export async function updateBookingStatus(
     // ...and when a confirmed stay is cancelled after it has ended.
     if (status === 'cancelled' && error.code === 'P0001' && error.message.includes('stay that has ended')) {
       throw new BookingCancellationError();
+    }
+
+    // ...and for any other change the booking has already moved past (the requester cancelled while
+    // the host was looking at it, a second tab already declined it). Completion shares this raise with
+    // "the stay has not ended", so it keeps its own message above.
+    if (status !== 'completed' && error.code === 'P0001' && error.message.includes('invalid booking status transition')) {
+      throw new BookingStatusChangedError();
     }
 
     throw error;

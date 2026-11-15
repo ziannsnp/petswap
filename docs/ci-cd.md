@@ -200,7 +200,7 @@ Only the Platform Account Owner can run this, because it needs the Cloudflare da
 | Date | Run by | Rolled back from → to (version IDs) | Restored? | Minutes to roll back | Evidence |
 | --- | --- | --- | --- | --- | --- |
 | 22 Aug 2026 | Platform Account Owner | Previous version promoted, then current promoted back | Yes | Not recorded | Sprint 1 record; no screenshots in the repository |
-| Sprint 3 (pending) | | | | | |
+| 15 Nov 2026 | Zian (`ziannsnp`), Platform Account Owner | Previous version promoted, checked, then current promoted back (version IDs not recorded) | Yes | Not recorded | Reported to Team D by the owner; no screenshots provided |
 
 ### Failure handling
 

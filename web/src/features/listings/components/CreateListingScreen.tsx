@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { ChangeEvent, FormEvent } from 'react';
 import { ArrowLeft, ImagePlus, LoaderCircle, Plus, X } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
-import { validateListingForm } from '../lib/listingForm';
+import { LISTING_CAPACITY_MAX, validateListingForm } from '../lib/listingForm';
 import type { ListingFormErrors } from '../lib/listingForm';
 import { useCreateListing } from '../hooks/useCreateListing';
 import { FACILITY_OPTIONS } from '../lib/listingOptions';
@@ -173,6 +173,7 @@ export function CreateListingScreen() {
               id="listing-capacity"
               type="number"
               min="1"
+              max={LISTING_CAPACITY_MAX}
               step="1"
               value={capacity}
               onChange={(event) => {

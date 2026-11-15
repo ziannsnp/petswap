@@ -85,3 +85,9 @@ it('treats the past check as local, not UTC', () => {
     todayIsoDate(localMidnightish),
   )).toEqual({});
 });
+
+it('rejects a date that is not a calendar day instead of reading it as the next month', () => {
+  expect(validate({ startDate: '2027-02-30', endDate: '2027-03-05' })).toEqual({
+    endDate: 'Enter valid dates.',
+  });
+});

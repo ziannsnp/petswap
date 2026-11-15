@@ -1,0 +1,38 @@
+name: CodeQL
+
+# Static application security testing (SAST) for the TypeScript app and the Edge Function.
+# Free for public repositories. Not a required check: it is informational until a few
+# weeks of runs show the alert rate is low. Alerts appear under Security > Code scanning.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  schedule:
+    - cron: '41 5 * * 1' # Mondays 05:41 UTC, catches newly published query packs
+  workflow_dispatch:
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze (javascript-typescript)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          build-mode: none
+          queries: security-extended
+
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: /language:javascript-typescript

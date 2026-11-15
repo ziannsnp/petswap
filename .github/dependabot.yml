@@ -1,0 +1,31 @@
+version: 2
+
+# Weekly, grouped update pull requests so the team gets at most a few small PRs a week
+# instead of one per package. Security updates are raised immediately by GitHub regardless
+# of this schedule. Every update goes through the normal Quality gate and review.
+updates:
+  - package-ecosystem: npm
+    directory: /web
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+    labels: [dependencies]
+    ignore:
+      # The Supabase CLI major is upgraded deliberately (see docs/ci-cd.md, "Supabase CLI version").
+      - dependency-name: supabase
+        update-types: [version-update:semver-major]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    groups:
+      actions:
+        patterns: ['*']
+    labels: [dependencies]

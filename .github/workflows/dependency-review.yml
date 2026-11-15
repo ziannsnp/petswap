@@ -1,0 +1,22 @@
+name: Dependency review
+
+# Blocks a pull request that adds a dependency with a known high-severity vulnerability.
+# Uses the GitHub dependency graph, free for public repositories. Not a required check yet.
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  dependency-review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Needs the repository's Dependency graph (Settings > Code security), which is on. If it
+      # is ever turned off, this step fails with "not supported" on every pull request.
+      - uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high

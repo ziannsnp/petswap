@@ -39,7 +39,17 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run typecheck
-      - run: npm test -- --runInBand
+      - run: npm run test:coverage -- --runInBand
+      - name: Show coverage in the job summary
+        if: ${{ !cancelled() }}
+        run: |
+          {
+            echo '### Jest coverage (report only, no gate yet)'
+            echo
+            echo '| Metric | Covered | Total | % |'
+            echo '| --- | --- | --- | --- |'
+            node -e "const t=require('./coverage/coverage-summary.json').total;for(const k of ['lines','statements','functions','branches'])console.log('| '+k+' | '+t[k].covered+' | '+t[k].total+' | '+t[k].pct+' |')"
+          } >> "$GITHUB_STEP_SUMMARY"
       - run: npm run build
 
   docs-links:
@@ -76,6 +86,21 @@ jobs:
               print('Broken documentation links:')
               print('\n'.join(failures))
               sys.exit(1)
+
+  # Repository-level checks that need no Node install: they keep documentation, the API
+  # description, and test wiring honest. Cheap, so it runs on every pull request.
+  repo-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Every acceptance scenario names an existing test
+        run: bash scripts/check-acceptance-traceability.sh
+      - name: Every e2e spec is run by a workflow, and SQL tests run by glob
+        run: bash scripts/check-test-wiring.sh
+      - name: OpenAPI description is valid
+        run: |
+          pip install --quiet openapi-spec-validator==0.7.1
+          openapi-spec-validator docs/api/openapi.yaml
 
 # CD Pipeline for Supabase DB Push
   changes:

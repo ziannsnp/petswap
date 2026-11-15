@@ -12,6 +12,14 @@ export class BookingCompletionError extends Error {
   }
 }
 
+/** The database's UTC day has already passed the requested start day (ADR 0011). */
+export class BookingStartDateError extends Error {
+  constructor() {
+    super('That start date has already passed for bookings (the booking day changes at midnight UTC). Choose a later start date.');
+    this.name = 'BookingStartDateError';
+  }
+}
+
 export class BookingExpiredError extends Error {
   constructor() {
     super("This request's start date has passed, so it can no longer be confirmed. Decline it to close the request.");

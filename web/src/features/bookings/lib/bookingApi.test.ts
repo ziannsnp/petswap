@@ -4,6 +4,7 @@ import {
   BookingCompletionError,
   BookingConflictError,
   BookingExpiredError,
+  BookingStartDateError,
   DuplicateBookingRequestError,
 } from './bookingErrors';
 import { createBookingRequest, listIncomingBookings, listOutgoingBookings, updateBookingStatus } from './bookingApi';
@@ -27,6 +28,7 @@ function createQueryBuilder(result: QueryResult) {
     insert: jest.fn(),
     single: jest.fn(),
   };
+  builder.insert.mockReturnValue(builder);
   builder.select.mockReturnValue(builder);
   builder.eq.mockReturnValue(builder);
   builder.order.mockResolvedValue(result);
@@ -199,6 +201,32 @@ describe('updateBookingStatus completion', () => {
     mockAuthenticatedClient('owner-1', { data: null, error: databaseError });
 
     await expect(updateBookingStatus('booking-1', 'completed')).rejects.toBe(databaseError);
+  });
+});
+
+describe('createBookingRequest', () => {
+  const request = {
+    listing_id: 'listing-1',
+    pet_id: 'pet-1',
+    requester_id: 'requester-1',
+    start_date: '2026-09-13',
+    end_date: '2026-09-15',
+  };
+
+  it('explains that the database UTC day has already passed the start date', async () => {
+    mockAuthenticatedClient('requester-1', {
+      data: null,
+      error: { code: 'P0001', message: 'booking start date cannot be in the past' },
+    });
+
+    await expect(createBookingRequest(request)).rejects.toBeInstanceOf(BookingStartDateError);
+  });
+
+  it('keeps other insert errors unchanged', async () => {
+    const databaseError = { code: 'P0001', message: 'booking pet must belong to requester' };
+    mockAuthenticatedClient('requester-1', { data: null, error: databaseError });
+
+    await expect(createBookingRequest(request)).rejects.toBe(databaseError);
   });
 });
 

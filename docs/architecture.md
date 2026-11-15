@@ -52,17 +52,19 @@ UI components must not call `getSupabaseClient()` directly. Add feature-specific
 
 - One account can own pets, host listings, and request bookings.
 - There are no fixed user roles, payments, messaging, identity verification, availability toggles, or ratings.
-- A confirmed booking blocks only overlapping confirmed bookings for the same listing. Back-to-back bookings are valid.
+- One booking is one pet. Confirmed bookings on a listing may not exceed its capacity on any night (peak occupancy), and a pet may not have overlapping confirmed bookings on any listings. Date ranges are end-exclusive, so back-to-back bookings are valid. The database enforces both atomically; the browser only previews them.
+- The booking day is the UTC calendar day (`public.booking_today()`). New requests may start from the later of the local and UTC day; completion opens on the UTC end day. Browser helpers live in `features/bookings/lib/bookingDates.ts`.
 
-See [ADR 0001](decisions/0001-web-spa-feature-architecture.md), [ADR 0003](decisions/0003-booking-rules-and-scope.md), [ADR 0004](decisions/0004-supabase-mvp-foundation.md).
+See [ADR 0001](decisions/0001-web-spa-feature-architecture.md), [ADR 0003](decisions/0003-booking-rules-and-scope.md), [ADR 0004](decisions/0004-supabase-mvp-foundation.md), [ADR 0011](decisions/0011-capacity-based-booking-availability.md).
 
 ## Published listing search
 
 `search_published_listings` accepts optional `p_pet_type`, `p_min_capacity`,
 `p_start_date`, and `p_end_date` after the existing search, page, and sort arguments.
 Omitted or null filters are unset. Capacity is an inclusive positive minimum;
-the date range must have two finite dates with end later than start. Only a confirmed
-booking on the same listing blocks the end-exclusive range. Filtering precedes the
+the date range must have two finite dates with end later than start. Availability follows
+ADR 0011: a listing is available when it has remaining capacity on every night of the
+end-exclusive range (until P-05 lands, any confirmed booking on the listing blocks it). Filtering precedes the
 total count, page clamp, ordering, and page slice.
 
 The RPC is a restricted security-definer read with an empty search path and explicit

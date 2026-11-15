@@ -4,7 +4,7 @@
 
 Don't Like My Pets is a community pet-sitting marketplace connecting pet owners with people who offer in-home pet care. A user may own pets, create a place listing, and request pet-sitting services—there are no fixed user roles.
 
-The platform focuses on discovering sitters, creating booking requests, and preventing overlapping confirmed bookings. It does not handle payments, identity-document verification, messaging, availability toggles, or ratings.
+The platform focuses on discovering sitters, creating booking requests, and preventing confirmed bookings beyond a listing's capacity or for a pet that is already booked. It does not handle payments, identity-document verification, messaging, availability toggles, or ratings.
 
 ## Accounts and profiles
 
@@ -42,32 +42,32 @@ Users can search published listings by location or keyword. An empty search disp
 
 ### FR-4.2 Filter listings
 
-Users can combine accepted pet type, capacity, and requested-date filters. Results exclude listings with insufficient capacity or a confirmed booking overlapping the requested dates.
+Users can combine accepted pet type, capacity, and requested-date filters. Results exclude listings with insufficient capacity, or with no remaining capacity on some night of the requested dates (capacity minus the peak number of confirmed bookings). Search shows only whether a listing is available, never other users' bookings.
 
 ## Booking management
 
 ### FR-5.1 Create a booking request
 
-Users can request a booking for one of their pets at another user's listing with a start and end date. End date must be later than start date, required fields must be present, and new requests are `Pending`.
+Users can request a booking for one of their pets at another user's listing with a start and end date. Each booking is for exactly one pet. End date must be later than start date, required fields must be present, and new requests are `Pending`. The start date cannot be before the booking day: the later of the user's local date and the UTC date, because the database judges dates by the UTC day.
 
 ### FR-5.2 Prevent double bookings
 
-Confirmed bookings for the same listing cannot overlap. Pending, declined, and cancelled requests do not block dates; back-to-back bookings are allowed.
+On every night, a listing's confirmed bookings cannot exceed its capacity (peak nightly occupancy, not a count of overlapping bookings). A pet cannot have two overlapping confirmed bookings on any listings. Pending, declined, cancelled, and completed bookings do not block dates; date ranges are end-exclusive, so back-to-back bookings are allowed. A refused confirmation says whether the listing is full or the pet is already booked, without revealing the other booking. Hosts cannot reduce capacity below the confirmed peak of any current or future night.
 
 ### FR-5.3 View booking requests
 
-Users can view outgoing bookings for their pets and incoming bookings for their listings. Each shows pet, listing, dates, and status. Unrelated users cannot access a booking.
+Users can view outgoing bookings for their pets and incoming bookings for their listings. Each shows pet, listing, dates, and status. Opening a booking shows its ID, dates, status, notes, listing, pet and care information, and the other participant's display name, photo, and location (never email or phone), even after the listing is unpublished or deleted or the pet is deleted. Unrelated users cannot access a booking.
 
 ### FR-5.4 Manage booking status
 
-Listing owners can confirm or decline pending requests. Requesters can cancel their pending or confirmed bookings. Listing owners can complete confirmed bookings after the end date. Valid transitions are:
+Listing owners can confirm or decline pending requests. Requesters can cancel their pending or confirmed bookings. Listing owners can complete confirmed bookings from the end date (UTC day) onwards. Valid transitions are:
 
 ```
 Pending   → Confirmed | Declined | Cancelled
 Confirmed → Completed | Cancelled
 ```
 
-Confirming a booking repeats the double-booking check.
+Confirming a booking repeats the capacity and pet-overlap checks atomically, so concurrent confirmations cannot overbook.
 
 ## Out of scope
 

@@ -5,6 +5,7 @@ import {
   BookingCompletionError,
   BookingConflictError,
   BookingExpiredError,
+  BookingStartDateError,
   DuplicateBookingRequestError,
 } from './bookingErrors';
 
@@ -13,6 +14,7 @@ export {
   BookingCompletionError,
   BookingConflictError,
   BookingExpiredError,
+  BookingStartDateError,
   DuplicateBookingRequestError,
 };
 
@@ -112,6 +114,11 @@ export async function createBookingRequest(values: BookingInsert): Promise<Booki
     .single();
 
   if (error) {
+    // guard_booking_change() judges the start day against the database's UTC day.
+    if (error.code === 'P0001' && error.message.includes('start date cannot be in the past')) {
+      throw new BookingStartDateError();
+    }
+
     // guard_booking_change() refuses a second identical pending request (double submit or retry).
     if (error.code === 'P0001' && error.message.includes('identical booking request')) {
       throw new DuplicateBookingRequestError();

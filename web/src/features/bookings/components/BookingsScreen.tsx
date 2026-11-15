@@ -3,7 +3,7 @@ import type { UseQueryResult } from '@tanstack/react-query';
 import { PetCareInfo, hasPetCareInfo } from '@/features/pets';
 import { useIncomingBookings, useOutgoingBookings, useUpdateBookingStatus } from '../hooks/useBookings';
 import { BookingCompletionError, BookingConflictError } from '../lib/bookingErrors';
-import { todayIsoDate } from '../lib/bookingRequestForm';
+import { utcTodayIsoDate } from '../lib/bookingDates';
 import { canCancelBooking, canCompleteBooking, canConfirmBooking } from '../lib/bookingRules';
 import type { BookingWithDetails } from '../lib/bookingApi';
 import type { Database } from '@/shared/types/database.types';
@@ -257,8 +257,9 @@ export function BookingsScreen() {
   const updateStatus = useUpdateBookingStatus();
   const [respondingId, setRespondingId] = useState<string | null>(null);
   const [responseError, setResponseError] = useState<{ bookingId: string; message: string } | null>(null);
+  // Completion follows the database's UTC day so the button never offers a refused action (ADR 0011).
+  const today = utcTodayIsoDate();
   const [cancellationBooking, setCancellationBooking] = useState<BookingWithDetails | null>(null);
-  const today = todayIsoDate();
 
   const noRelatedBookings =
     outgoing.isSuccess && incoming.isSuccess && outgoing.data.length === 0 && incoming.data.length === 0;

@@ -86,6 +86,25 @@ it('treats the past check as local, not UTC', () => {
   )).toEqual({});
 });
 
+it('explains a start day that is still today locally but already past in UTC', () => {
+  // New York at 21:30 on the 13th: local today is the 13th, UTC (database) today is the 14th.
+  expect(validateBookingRequestForm(
+    values({ startDate: '2026-09-13', endDate: '2026-09-18' }),
+    '2026-09-14',
+    '2026-09-13',
+  )).toEqual({
+    startDate: 'Bookings can start from 2026-09-14: the booking day changes at midnight UTC.',
+  });
+});
+
+it('keeps the plain past-date message for days before local today', () => {
+  expect(validateBookingRequestForm(
+    values({ startDate: '2026-09-12', endDate: '2026-09-18' }),
+    '2026-09-14',
+    '2026-09-13',
+  )).toEqual({ startDate: 'Start date cannot be in the past.' });
+});
+
 it('rejects a date that is not a calendar day instead of reading it as the next month', () => {
   expect(validate({ startDate: '2027-02-30', endDate: '2027-03-05' })).toEqual({
     endDate: 'Enter valid dates.',

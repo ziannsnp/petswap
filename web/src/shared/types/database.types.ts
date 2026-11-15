@@ -225,6 +225,10 @@ export type Database = {
     };
     Views: Record<string, never>;
     Functions: {
+      booking_today: {
+        Args: Record<string, never>;
+        Returns: string;
+      };
       search_published_listings: {
         Args: {
           p_location: string;

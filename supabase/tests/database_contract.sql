@@ -240,6 +240,18 @@ insert into _contract (check_name, passed) values
     and has_function_privilege('authenticated', 'public.delete_pet_with_active_booking_check(uuid)', 'EXECUTE')
   ),
   (
+    'booking detail is a pinned-search-path security definer RPC for signed-in users only, with no contact column',
+    exists (
+      select 1 from pg_proc
+      where oid = 'public.get_booking_detail(uuid)'::regprocedure
+        and prosecdef
+        and proconfig @> array['search_path=""']
+        and pg_get_function_result(oid) !~* '(phone|email)'
+    )
+    and not has_function_privilege('anon', 'public.get_booking_detail(uuid)', 'EXECUTE')
+    and has_function_privilege('authenticated', 'public.get_booking_detail(uuid)', 'EXECUTE')
+  ),
+  (
     'direct pet updates cannot change, restore, or soft-delete a pet',
     exists (
       select 1 from pg_policies

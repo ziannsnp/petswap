@@ -7,7 +7,8 @@
 --
 --   - only the listing owner confirms or declines, and only a pending request
 --   - confirming is refused when it would overlap another confirmed booking
---   - only the requester cancels, and only a pending or confirmed booking
+--   - only the requester cancels, and only a pending or confirmed booking; the
+--     listing owner is refused for both
 --   - only the listing owner completes, only a confirmed booking, and only on or
 --     after its end date (end-exclusive: check-out day counts)
 --   - strangers and anonymous callers change nothing
@@ -61,7 +62,9 @@ from (values
   ('40000000-0000-4000-8000-000000000408'::uuid, 'confirmed'::public.booking_status, -3,   0), -- ends today: owner completes
   ('40000000-0000-4000-8000-000000000409'::uuid, 'confirmed'::public.booking_status, 80,  84), -- not finished yet
   ('40000000-0000-4000-8000-000000000410'::uuid, 'pending'::public.booking_status,   -10, -6), -- past but never confirmed
-  ('40000000-0000-4000-8000-000000000411'::uuid, 'cancelled'::public.booking_status, -20, -16) -- terminal
+  ('40000000-0000-4000-8000-000000000411'::uuid, 'cancelled'::public.booking_status, -20, -16), -- terminal
+  ('40000000-0000-4000-8000-000000000412'::uuid, 'pending'::public.booking_status,   90,  94), -- owner tries to cancel
+  ('40000000-0000-4000-8000-000000000413'::uuid, 'confirmed'::public.booking_status, 100, 104) -- owner tries to cancel
 ) as b(id, status, start_offset, end_offset);
 
 set local session_replication_role = origin;
@@ -173,8 +176,6 @@ declare
 begin
   for attempt in
     select * from (values
-      ('40000000-0000-4000-8000-000000000404'::uuid, 'cancelled'::public.booking_status, 'cancel a pending booking'),
-      ('40000000-0000-4000-8000-000000000405'::uuid, 'cancelled'::public.booking_status, 'cancel a confirmed booking'),
       ('40000000-0000-4000-8000-000000000409'::uuid, 'completed'::public.booking_status, 'complete a booking before its end date'),
       ('40000000-0000-4000-8000-000000000410'::uuid, 'completed'::public.booking_status, 'complete a pending booking'),
       ('40000000-0000-4000-8000-000000000411'::uuid, 'completed'::public.booking_status, 'complete a cancelled booking'),
@@ -197,7 +198,53 @@ begin
   end loop;
 end;
 $$;
-\echo 'ok: the owner cannot cancel, complete early, or leave a terminal status'
+\echo 'ok: the owner cannot complete early, respond twice, or leave a terminal status'
+
+-- Only the requester cancels. Bookings ...412 (pending) and ...413 (confirmed) are
+-- touched by nobody else, so the final state check also proves the refusal stuck.
+do $$
+declare
+  attempt record;
+  refused boolean;
+  seen_status public.booking_status;
+  seen_cancelled_at timestamptz;
+begin
+  for attempt in
+    select * from (values
+      ('40000000-0000-4000-8000-000000000412'::uuid, 'pending'::public.booking_status),
+      ('40000000-0000-4000-8000-000000000413'::uuid, 'confirmed'::public.booking_status)
+    ) as a(booking_id, from_status)
+  loop
+    -- The owner can read the booking, so the refusal below comes from the guard and
+    -- RLS rules, not from the row being invisible.
+    select status into seen_status from public.bookings where id = attempt.booking_id;
+    if seen_status is distinct from attempt.from_status then
+      raise exception 'booking lifecycle: the owner could not see % booking % (saw %)',
+        attempt.from_status, attempt.booking_id, coalesce(seen_status::text, 'nothing');
+    end if;
+
+    refused := false;
+    begin
+      update public.bookings set status = 'cancelled' where id = attempt.booking_id;
+    exception
+      when raise_exception or insufficient_privilege then refused := true;
+    end;
+
+    if not refused then
+      raise exception 'booking lifecycle: the listing owner was allowed to cancel % booking %',
+        attempt.from_status, attempt.booking_id;
+    end if;
+
+    select status, cancelled_at into seen_status, seen_cancelled_at
+    from public.bookings where id = attempt.booking_id;
+    if seen_status is distinct from attempt.from_status or seen_cancelled_at is not null then
+      raise exception 'booking lifecycle: a refused owner cancellation changed % booking % to % (cancelled_at %)',
+        attempt.from_status, attempt.booking_id, seen_status, seen_cancelled_at;
+    end if;
+  end loop;
+end;
+$$;
+\echo 'ok: the listing owner cannot cancel a pending or confirmed booking'
 
 -- Casey, the requester.
 reset role;
@@ -305,7 +352,9 @@ begin
       ('40000000-0000-4000-8000-000000000408'::uuid, 'completed'::public.booking_status),
       ('40000000-0000-4000-8000-000000000409'::uuid, 'confirmed'::public.booking_status),
       ('40000000-0000-4000-8000-000000000410'::uuid, 'pending'::public.booking_status),
-      ('40000000-0000-4000-8000-000000000411'::uuid, 'cancelled'::public.booking_status)
+      ('40000000-0000-4000-8000-000000000411'::uuid, 'cancelled'::public.booking_status),
+      ('40000000-0000-4000-8000-000000000412'::uuid, 'pending'::public.booking_status),
+      ('40000000-0000-4000-8000-000000000413'::uuid, 'confirmed'::public.booking_status)
     ) as expected(booking_id, status)
     left join public.bookings as actual on actual.id = expected.booking_id
     where actual.status is distinct from expected.status

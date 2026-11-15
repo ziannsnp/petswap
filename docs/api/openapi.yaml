@@ -113,10 +113,11 @@ paths:
       operationId: searchPublishedListings
       summary: Search published listings with filters, sorting, and pagination
       description: |
-        Filtering happens before counting, page clamping, ordering, and slicing. Only a
-        **confirmed** booking on the same listing removes it from a date-filtered search; the
-        date range is end-exclusive, so back-to-back stays are allowed. The result carries no
-        booking details. Design reasoning: ADR 0010.
+        Filtering happens before counting, page clamping, ordering, and slicing. A
+        date-filtered search keeps a listing while its peak number of **confirmed** bookings on
+        any night of the range is below its capacity; pending and terminal bookings never count.
+        The date range is end-exclusive, so back-to-back stays are allowed. The result carries no
+        booking details, dates, or counts. Design reasoning: ADR 0010 and ADR 0011.
       x-rls: Public. Runs as a restricted security-definer read with an empty search path and explicit published and not-deleted checks.
       requestBody:
         required: true
@@ -323,8 +324,10 @@ paths:
       description: |
         Allowed transitions: pending to confirmed or declined (listing owner), pending or
         confirmed to cancelled (requester), confirmed to completed (listing owner, on or after the
-        end date). Confirming fails with a conflict if it would overlap another confirmed
-        booking on the same listing (exclusion constraint `bookings_no_confirmed_overlap`).
+        end date). Confirming is refused with SQLSTATE `PBC01` when the listing would exceed its
+        capacity on some night (peak occupancy, not overlap count), and with `PBP01` when the
+        pet already has a confirmed booking for those dates on any listing (ADR 0011). The
+        messages never name another booking.
         Listing, pet, requester, and dates cannot be changed after the request.
       x-rls: Actor and transition checked by the `guard_booking_change` trigger.
       security:
@@ -351,7 +354,7 @@ paths:
                 items: { $ref: '#/components/schemas/Booking' }
         '400': { $ref: '#/components/responses/DatabaseError' }
         '409':
-          description: Would overlap another confirmed booking.
+          description: Would overlap another confirmed booking (legacy exclusion-constraint path; the capacity and pet-overlap refusals are the 400 `PBC01` and `PBP01` above).
           content:
             application/json:
               schema: { $ref: '#/components/schemas/DatabaseError' }

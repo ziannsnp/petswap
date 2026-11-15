@@ -6,7 +6,7 @@ import { useMyListings } from '../hooks/useListings';
 import { useUpdateListing } from '../hooks/useUpdateListing';
 import type { Listing } from '../lib/listingApi';
 import { ListingError } from '../lib/listingErrors';
-import { validateListingForm } from '../lib/listingForm';
+import { LISTING_CAPACITY_MAX, validateListingForm } from '../lib/listingForm';
 import type { ListingFormErrors } from '../lib/listingForm';
 import { FACILITY_OPTIONS, parseFacilities } from '../lib/listingOptions';
 import { PET_SPECIES_OPTIONS, petSpeciesLabel } from '@/shared/lib/petSpecies';
@@ -169,6 +169,9 @@ function EditListingForm({ listing }: EditListingFormProps) {
       setAcceptedPetTypes(savedListing.accepted_pet_types);
       setFacilities(parseFacilities(savedListing.facilities));
       setPhotos(savedListing.listing_images.map((image) => ({ kind: 'existing', image })));
+      // Files rejected by the picker were never part of this save; their messages describe an
+      // earlier selection, so they must not stay next to the success banner.
+      setRejectedPhotos([]);
       previewUrls.current.forEach((url) => URL.revokeObjectURL(url));
       previewUrls.current = [];
       setIsPristine(true);
@@ -227,6 +230,7 @@ function EditListingForm({ listing }: EditListingFormProps) {
           id="listing-capacity"
           type="number"
           min="1"
+          max={LISTING_CAPACITY_MAX}
           step="1"
           value={capacity}
           onChange={(event) => editCapacity(event.target.value === '' ? '' : Number(event.target.value))}

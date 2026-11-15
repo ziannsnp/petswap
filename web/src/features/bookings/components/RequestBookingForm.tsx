@@ -6,6 +6,7 @@ import { earliestRequestStartDate, todayIsoDate, validateBookingRequestForm } fr
 import { BookingStartDateError } from '../lib/bookingErrors';
 import type { BookingRequestFormErrors } from '../lib/bookingRequestForm';
 import { useCreateBookingRequest } from '../hooks/useBookings';
+import { DuplicateBookingRequestError } from '../lib/bookingErrors';
 
 function formatSpecies(species: string): string {
   return species.replace(/_/g, ' ').replace(/^\w/, (letter) => letter.toUpperCase());
@@ -98,9 +99,28 @@ export function RequestBookingForm({ listingId, listingOwnerId, acceptedPetTypes
 
       {myPetsQuery.isLoading && <p className="mt-2 text-sm text-gray-500">Loading your pets&hellip;</p>}
 
-      {myPetsQuery.isSuccess && eligiblePets.length === 0 && (
+      {myPetsQuery.isError && (
+        <div className="mt-2 border-l-4 border-red-600 bg-red-50 px-4 py-3 text-sm text-red-700" role="alert">
+          <p>We could not load your pets, so you cannot request a booking yet.</p>
+          <button
+            type="button"
+            className="mt-2 font-medium text-red-800 underline hover:no-underline"
+            onClick={() => void myPetsQuery.refetch()}
+          >
+            Try again
+          </button>
+        </div>
+      )}
+
+      {myPetsQuery.isSuccess && (myPetsQuery.data?.length ?? 0) === 0 && (
         <p className="mt-2 text-sm text-gray-600">
-          None of your pets match what this listing accepts. <Link className="font-medium text-brand-600 hover:underline" to="/pets">Add a pet</Link> to request a booking.
+          You have not added any pets yet. <Link className="font-medium text-brand-600 hover:underline" to="/pets/new">Add your first pet</Link> to request a booking.
+        </p>
+      )}
+
+      {myPetsQuery.isSuccess && (myPetsQuery.data?.length ?? 0) > 0 && eligiblePets.length === 0 && (
+        <p className="mt-2 text-sm text-gray-600">
+          None of your pets match what this listing accepts. <Link className="font-medium text-brand-600 hover:underline" to="/pets/new">Add a pet</Link> to request a booking.
         </p>
       )}
 
@@ -168,7 +188,8 @@ export function RequestBookingForm({ listingId, listingOwnerId, acceptedPetTypes
 
             {createBookingRequestMutation.isError && (
               <p className="border-l-4 border-red-600 bg-red-50 px-4 py-3 text-sm text-red-700" role="alert">
-                {createBookingRequestMutation.error instanceof BookingStartDateError
+                {(createBookingRequestMutation.error instanceof BookingStartDateError
+                  || createBookingRequestMutation.error instanceof DuplicateBookingRequestError)
                   ? createBookingRequestMutation.error.message
                   : 'We could not send your booking request. Check your connection and try again.'}
               </p>

@@ -104,3 +104,9 @@ it('keeps the plain past-date message for days before local today', () => {
     '2026-09-13',
   )).toEqual({ startDate: 'Start date cannot be in the past.' });
 });
+
+it('rejects a date that is not a calendar day instead of reading it as the next month', () => {
+  expect(validate({ startDate: '2027-02-30', endDate: '2027-03-05' })).toEqual({
+    endDate: 'Enter valid dates.',
+  });
+});

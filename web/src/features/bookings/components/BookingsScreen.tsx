@@ -4,7 +4,7 @@ import { PetCareInfo, hasPetCareInfo } from '@/features/pets';
 import { useIncomingBookings, useOutgoingBookings, useUpdateBookingStatus } from '../hooks/useBookings';
 import { BookingCompletionError, BookingConflictError } from '../lib/bookingErrors';
 import { utcTodayIsoDate } from '../lib/bookingDates';
-import { canCompleteBooking } from '../lib/bookingRules';
+import { canCancelBooking, canCompleteBooking, canConfirmBooking } from '../lib/bookingRules';
 import type { BookingWithDetails } from '../lib/bookingApi';
 import type { Database } from '@/shared/types/database.types';
 
@@ -58,7 +58,10 @@ function BookingCard({
   responseError,
 }: BookingCardProps) {
   const canRespond = variant === 'incoming' && booking.status === 'pending';
-  const canCancel = variant === 'outgoing' && (booking.status === 'pending' || booking.status === 'confirmed');
+  // A request still pending after its start date can only be declined (the database refuses it too).
+  const canConfirm = canRespond && canConfirmBooking({ status: booking.status, startDate: booking.start_date }, today);
+  const canCancel = variant === 'outgoing'
+    && canCancelBooking({ status: booking.status, endDate: booking.end_date }, today);
   const canComplete = variant === 'incoming'
     && canCompleteBooking({ status: booking.status, endDate: booking.end_date }, today);
 
@@ -66,7 +69,13 @@ function BookingCard({
     <li className="booking-card">
       <div className="booking-card__row">
         <span className="booking-card__pet">
-          {booking.pet.name} <span className="booking-card__species">({formatSpecies(booking.pet.species)})</span>
+          {booking.pet ? (
+            <>
+              {booking.pet.name} <span className="booking-card__species">({formatSpecies(booking.pet.species)})</span>
+            </>
+          ) : (
+            <span className="booking-card__species">Pet details are no longer shared</span>
+          )}
         </span>
         <BookingStatusBadge status={booking.status} />
       </div>
@@ -78,7 +87,7 @@ function BookingCard({
       </p>
       {/* FR-2.2: the host sees the pet's care notes on the request; the requester owns the pet
           and already sees them on My Pets. */}
-      {variant === 'incoming' && (hasPetCareInfo(booking.pet) ? (
+      {variant === 'incoming' && booking.pet && (hasPetCareInfo(booking.pet) ? (
         <PetCareInfo pet={booking.pet} className="mt-3 border-t border-gray-100 pt-3" />
       ) : (
         <p className="mt-3 text-sm text-gray-500">No care information added.</p>
@@ -87,14 +96,20 @@ function BookingCard({
         <div className="booking-card__actions">
           {canRespond && (
             <>
-              <button
-                type="button"
-                className="btn-primary"
-                onClick={() => onConfirm?.(booking.id)}
-                disabled={isResponding}
-              >
-                {isResponding ? 'Saving...' : 'Confirm'}
-              </button>
+              {canConfirm ? (
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={() => onConfirm?.(booking.id)}
+                  disabled={isResponding}
+                >
+                  {isResponding ? 'Saving...' : 'Confirm'}
+                </button>
+              ) : (
+                <p className="w-full text-sm text-gray-600">
+                  The start date has passed, so this request can no longer be confirmed. Decline it to close it.
+                </p>
+              )}
               <button
                 type="button"
                 className="btn-secondary"

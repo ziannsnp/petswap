@@ -98,6 +98,13 @@ Run `npm run test:e2e` when the changed journey is testable against the configur
 
 The CI gate runs lint, typecheck, Jest, and production build for every relevant pull request; see [ci-cd.md](ci-cd.md).
 
+## Coverage, acceptance scenarios, and the wiring guard
+
+- **Coverage** is measured by `npm run test:coverage` (Jest) and shown in the `web-quality` job summary. It is a report to decide where to test next, not a gate: the strategy above chooses tests by risk, and a global percentage invites tests written to move a number. Baseline on 14 November 2026: 91.3% statements, 88.3% branches, 75.0% functions, 92.4% lines across 1,008 tests. Add a floor only after the team agrees one.
+- **Acceptance scenarios** in [acceptance/](acceptance/README.md) are Gherkin descriptions of the key behaviours. Each names the Jest, SQL, or Playwright test that proves it, and CI fails if a scenario names no test or a missing one.
+- **Wiring guard:** `db-contract.yml` runs every `supabase/tests/*.test.sql` by glob, and `scripts/check-test-wiring.sh` fails if a `web/e2e/*.spec.ts` file is run by no workflow. A test that CI never runs gives false confidence; one 14 November spec was in that state until this guard.
+- **Test plan:** the plan-level view (levels, entry and exit criteria, risks, traceability from requirement to test) is [test-plan.md](test-plan.md).
+
 ## Booking minimum coverage
 
 `hasBookingConflict()` / `getBookingConflict()` must cover overlap, non-overlap, back-to-back bookings, a different listing, and non-confirmed existing bookings, plus (ADR 0011) peak occupancy versus overlap count (capacity 2 with A `[1,3)`, B `[3,5)`, C `[1,5)` all valid, and a fourth stay refused on a full night), a cancellation releasing a place, and the same pet overlapping on another listing (`'pet_booked'`, reported before `'listing_full'`, like the database).

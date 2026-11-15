@@ -1,12 +1,16 @@
 -- Pin the booking calendar day to UTC (ADR 0011, US-6.1 / US-6.6).
 --
--- guard_booking_change() compared dates with `current_date`, which follows the
+-- guard_booking_change() compares dates with `current_date`, which follows the
 -- session's TimeZone setting. Hosted Supabase defaults that to UTC, but a client
--- or role could change it and silently move the past-start and completion
--- boundaries. booking_today() names the rule once: the booking day is the UTC
--- calendar day. The web app mirrors it (bookingDates.ts): new requests start no
--- earlier than the later of the visitor's local day and this day, and
+-- or role could change it and silently move the past-start, expiry, late-cancel
+-- and completion boundaries. booking_today() names the rule once: the booking day
+-- is the UTC calendar day. The web app mirrors it (bookingDates.ts): new requests
+-- start no earlier than the later of the visitor's local day and this day, and
 -- completion is offered from this day onwards.
+--
+-- The guard below is 20261114000000_tighten_booking_transitions.sql with every
+-- `current_date` replaced by booking_today(); this migration sorts after it so the
+-- pin is not undone by that migration's `create or replace`.
 
 create or replace function public.booking_today()
 returns date
@@ -56,12 +60,35 @@ begin
       raise exception 'booking listing must be published';
     end if;
 
+    if not exists (
+      select 1
+      from public.pets p
+      join public.listings l on l.id = new.listing_id
+      where p.id = new.pet_id
+        and p.species = any (l.accepted_pet_types)
+    ) then
+      raise exception 'booking pet species is not accepted by this listing';
+    end if;
+
     if new.start_date < public.booking_today() then
       raise exception 'booking start date cannot be in the past';
     end if;
 
     if new.status <> 'pending' then
       raise exception 'new bookings must start pending';
+    end if;
+
+    perform pg_advisory_xact_lock(hashtextextended('booking-request:' || new.pet_id::text, 0));
+
+    if exists (
+      select 1 from public.bookings
+      where pet_id = new.pet_id
+        and listing_id = new.listing_id
+        and start_date = new.start_date
+        and end_date = new.end_date
+        and status = 'pending'
+    ) then
+      raise exception 'an identical booking request is already pending';
     end if;
 
     return new;
@@ -80,19 +107,28 @@ begin
   end if;
 
   if old.status = 'pending'
-    and new.status in ('confirmed', 'declined')
+    and new.status = 'confirmed'
     and actor = listing_owner then
-    if new.status = 'confirmed' then
-      new.confirmed_at = now();
-    else
-      new.declined_at = now();
+    if old.start_date < public.booking_today() then
+      raise exception 'a request whose start date has passed cannot be confirmed';
     end if;
+    new.confirmed_at = now();
+    return new;
+  end if;
+
+  if old.status = 'pending'
+    and new.status = 'declined'
+    and actor = listing_owner then
+    new.declined_at = now();
     return new;
   end if;
 
   if old.status in ('pending', 'confirmed')
     and new.status = 'cancelled'
     and actor = old.requester_id then
+    if old.status = 'confirmed' and public.booking_today() >= old.end_date then
+      raise exception 'a stay that has ended cannot be cancelled';
+    end if;
     new.cancelled_at = now();
     return new;
   end if;

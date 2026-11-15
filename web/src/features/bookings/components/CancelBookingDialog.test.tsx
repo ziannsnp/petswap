@@ -48,10 +48,12 @@ function formatBookingDate(date: string): string {
 }
 
 function renderDialog({
+  booking: dialogBooking = booking,
   isOpen = true,
   onClose = jest.fn(),
   onConfirm = jest.fn().mockResolvedValue(undefined),
 }: {
+  booking?: BookingWithDetails;
   isOpen?: boolean;
   onClose?: jest.Mock;
   onConfirm?: jest.Mock;
@@ -59,7 +61,7 @@ function renderDialog({
   const ui = (open: boolean) => (
     <>
       <button type="button">Open cancellation dialog</button>
-      <CancelBookingDialog booking={booking} isOpen={open} onClose={onClose} onConfirm={onConfirm} />
+      <CancelBookingDialog booking={dialogBooking} isOpen={open} onClose={onClose} onConfirm={onConfirm} />
     </>
   );
   const view = render(ui(isOpen));
@@ -76,7 +78,7 @@ it('renders nothing when closed', () => {
   expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
 });
 
-it('shows booking details and focuses the safe action first', () => {
+it('names the pet on the dialog', () => {
   renderDialog();
 
   const dialog = screen.getByRole('alertdialog', { name: 'Cancel booking for Milo?' });
@@ -84,6 +86,15 @@ it('shows booking details and focuses the safe action first', () => {
   expect(dialog).toHaveTextContent(
     `${formatBookingDate(booking.start_date)} – ${formatBookingDate(booking.end_date)}`,
   );
+  expect(within(dialog).getByRole('button', { name: 'Keep booking' })).toHaveFocus();
+});
+
+it('falls back to a generic pet label when pet details are no longer shared', () => {
+  const bookingWithoutPet = { ...booking, pet: null };
+  renderDialog({ booking: bookingWithoutPet });
+
+  const dialog = screen.getByRole('alertdialog', { name: 'Cancel booking for your pet?' });
+  expect(dialog).toHaveTextContent('Cozy Yard');
   expect(within(dialog).getByRole('button', { name: 'Keep booking' })).toHaveFocus();
 });
 

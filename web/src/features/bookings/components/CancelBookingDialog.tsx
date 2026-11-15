@@ -101,6 +101,7 @@ export function CancelBookingDialog({
     }
   }
 
+  const petName = booking.pet?.name ?? 'your pet';
   const dateRange = `${formatBookingDate(booking.start_date)} – ${formatBookingDate(booking.end_date)}`;
 
   return createPortal(
@@ -119,8 +120,8 @@ export function CancelBookingDialog({
         tabIndex={-1}
         className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl"
       >
-        <h2 id="cancel-booking-dialog-title" className="text-lg font-semibold text-gray-900">
-          Cancel booking for {booking.pet.name}?
+        <h2 id="cancel-booking-dialog-title" className="text-lg font-semibold text-gray-900 break-words">
+          Cancel booking for {petName}?
         </h2>
         <p id="cancel-booking-dialog-description" className="mt-3 text-sm text-gray-600">
           This will cancel your request at {booking.listing.title} for {dateRange}. This action can’t be undone.

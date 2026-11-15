@@ -297,7 +297,7 @@ select public.assert_booking_capacity_invariants();
 reset role;
 set local session_replication_role = replica;
 
-do $
+do $$
 declare
   got_message text;
 begin

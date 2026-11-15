@@ -221,6 +221,16 @@ export const invalidListingFormCases: readonly InvalidListingFormCase[] = [
     expectedErrors: { capacity: 'Capacity must be at least 1.' },
   },
   {
+    name: 'capacity above the maximum',
+    values: { ...validListingFormValues, capacity: 51 },
+    expectedErrors: { capacity: 'Capacity must be 50 or fewer.' },
+  },
+  {
+    name: 'capacity beyond the database integer range',
+    values: { ...validListingFormValues, capacity: 3_000_000_000 },
+    expectedErrors: { capacity: 'Capacity must be 50 or fewer.' },
+  },
+  {
     name: 'fractional capacity',
     values: { ...validListingFormValues, capacity: 1.5 },
     expectedErrors: { capacity: 'Capacity must be a whole number.' },

@@ -63,6 +63,12 @@ async function openBookingCard(page: Page, startDate: string, listingTitle?: str
   return cards.first();
 }
 
+async function confirmCancellation(page: Page): Promise<void> {
+  const dialog = page.getByRole('alertdialog', { name: /cancel booking for/i });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('button', { name: 'Cancel booking' }).click();
+}
+
 test.describe('booking lifecycle after the request', () => {
   test('a listing owner declines a pending request', async ({ browser }, testInfo) => {
     const dates = projectDates(testInfo.project.name, 1);
@@ -99,6 +105,7 @@ test.describe('booking lifecycle after the request', () => {
       const outgoingCard = await openBookingCard(requester, dates.start);
       await expect(outgoingCard.getByText('Pending', { exact: true })).toBeVisible();
       await outgoingCard.getByRole('button', { name: 'Cancel booking' }).click();
+      await confirmCancellation(requester);
       await expect(outgoingCard.getByText('Cancelled', { exact: true })).toBeVisible();
       await expect(outgoingCard.getByRole('button')).toHaveCount(0);
 
@@ -129,6 +136,7 @@ test.describe('booking lifecycle after the request', () => {
       const outgoingCard = await openBookingCard(requester, dates.start);
       await expect(outgoingCard.getByText('Confirmed', { exact: true })).toBeVisible();
       await outgoingCard.getByRole('button', { name: 'Cancel booking' }).click();
+      await confirmCancellation(requester);
       await expect(outgoingCard.getByText('Cancelled', { exact: true })).toBeVisible();
 
       const ownerView = await openBookingCard(owner, dates.start);

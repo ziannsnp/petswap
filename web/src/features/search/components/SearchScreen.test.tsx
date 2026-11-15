@@ -732,6 +732,19 @@ describe('SearchScreen filters', () => {
     expect(urlSearch()).toBe(fullUrl.replace('&minCapacity=3', ''));
   });
 
+  it('opens each result with the searched dates, so booking starts from them', () => {
+    renderSearchAt('/?startDate=2026-12-01&endDate=2026-12-05');
+
+    expect(screen.getByRole('link', { name: 'Garden home' }))
+      .toHaveAttribute('href', '/listings/result-1?startDate=2026-12-01&endDate=2026-12-05');
+  });
+
+  it('opens results without dates when the dates in the URL are invalid', () => {
+    renderSearchAt('/?startDate=2026-12-05&endDate=2026-12-01');
+
+    expect(screen.getByRole('link', { name: 'Garden home' })).toHaveAttribute('href', '/listings/result-1');
+  });
+
   it('removes the date filter when both dates are emptied', async () => {
     const user = userEvent.setup();
     renderSearchAt(`/${fullUrl}`);

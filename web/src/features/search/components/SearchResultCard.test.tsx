@@ -63,6 +63,30 @@ describe('SearchResultCard', () => {
     expect(screen.getByRole('link', { name: 'Sunny garden room' })).toHaveAttribute('href', '/listings/listing-42');
   });
 
+  it('carries the searched dates to the listing so the request form can start from them', () => {
+    render(
+      <MemoryRouter>
+        <SearchResultCard
+          listing={makeSearchResult({ id: 'listing-42' })}
+          stay={{ startDate: '2026-12-01', endDate: '2026-12-05' }}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('link', { name: 'Sunny garden room' }))
+      .toHaveAttribute('href', '/listings/listing-42?startDate=2026-12-01&endDate=2026-12-05');
+  });
+
+  it('links without dates when the search has no date range', () => {
+    render(
+      <MemoryRouter>
+        <SearchResultCard listing={makeSearchResult({ id: 'listing-42' })} stay={{ startDate: null, endDate: null }} />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('link', { name: 'Sunny garden room' })).toHaveAttribute('href', '/listings/listing-42');
+  });
+
   it('opens the listing when the photo, not the title, is clicked', async () => {
     const user = userEvent.setup();
     renderCard(makeSearchResult({

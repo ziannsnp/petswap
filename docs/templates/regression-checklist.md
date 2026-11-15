@@ -71,7 +71,7 @@ fill the result columns, and link it from the release-readiness PR.
 | 16 | Edit every supported field and photo on a listing you own, select a new main photo, and confirm the changes persist; delete it and confirm direct access and search no longer expose it | | | |
 | 17 | Listing detail shows host profile, facilities, capacity, pet types, photos, description | | | |
 | 18 | Search by location/keyword; empty query lists all published; no matches shows an empty state | | | |
-| 19 | Pet-type + capacity + date filters exclude listings that are too small or have an overlapping confirmed booking | | | |
+| 19 | Pet-type + capacity + date filters exclude listings that are too small or are fully booked on some night of the dates (peak confirmed bookings reach capacity) | | | |
 | US-2.2-A | Invalid listing edits and an eleventh photo are rejected; another user cannot update the listing or its photos | | | |
 
 ### Bookings (FR-5.1 – FR-5.4)

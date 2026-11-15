@@ -6,20 +6,25 @@ import { petSpeciesLabel } from '@/shared/lib/petSpecies';
 
 interface SearchResultCardProps {
   listing: Listing;
+  /** The dates the visitor searched for; they travel to the listing so the request form starts from them. */
+  stay?: { startDate: string | null; endDate: string | null };
 }
 
-export function SearchResultCard({ listing }: SearchResultCardProps) {
+export function SearchResultCard({ listing, stay }: SearchResultCardProps) {
   const titleId = useId();
   // Remembers which URL failed rather than a flag, so a refreshed signed URL for the same
   // listing gets a fresh attempt instead of staying on the placeholder.
   const [failedPhotoUrl, setFailedPhotoUrl] = useState<string | null>(null);
   const photoUrl = listing.cover_photo_url;
+  const listingPath = stay?.startDate && stay.endDate
+    ? `/listings/${listing.id}?${new URLSearchParams({ startDate: stay.startDate, endDate: stay.endDate })}`
+    : `/listings/${listing.id}`;
 
   return (
     <article className="card-hover h-full overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm hover:shadow-md focus-within:ring-2 focus-within:ring-brand-500">
       {/* The whole card is the link, so the photo is a click target too. Its accessible
           name comes from the title alone rather than from every line of text in the card. */}
-      <Link className="block h-full outline-none" to={`/listings/${listing.id}`} aria-labelledby={titleId}>
+      <Link className="block h-full outline-none" to={listingPath} aria-labelledby={titleId}>
         <div className="h-48 bg-gray-100">
           {photoUrl && photoUrl !== failedPhotoUrl ? (
             <img

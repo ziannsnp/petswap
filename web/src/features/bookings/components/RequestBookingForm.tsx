@@ -1,8 +1,8 @@
 import { useState, type FormEvent } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/features/auth';
 import { useMyPets } from '@/features/pets';
-import { earliestRequestStartDate, todayIsoDate, validateBookingRequestForm } from '../lib/bookingRequestForm';
+import { earliestRequestStartDate, readRequestedStay, todayIsoDate, validateBookingRequestForm } from '../lib/bookingRequestForm';
 import { BookingStartDateError } from '../lib/bookingErrors';
 import type { BookingRequestFormErrors } from '../lib/bookingRequestForm';
 import { useCreateBookingRequest } from '../hooks/useBookings';
@@ -26,12 +26,15 @@ function inputClassName(hasError: boolean) {
 
 export function RequestBookingForm({ listingId, listingOwnerId, acceptedPetTypes }: RequestBookingFormProps) {
   const location = useLocation();
+  const [searchParams] = useSearchParams();
   const { user, isAuthenticated } = useAuth();
   const myPetsQuery = useMyPets();
   const createBookingRequestMutation = useCreateBookingRequest();
   const [petId, setPetId] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  // Search hands over the dates it was filtering by; later edits stay local to the form.
+  const [requestedStay] = useState(() => readRequestedStay(searchParams));
+  const [startDate, setStartDate] = useState(requestedStay.startDate);
+  const [endDate, setEndDate] = useState(requestedStay.endDate);
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [isSent, setIsSent] = useState(false);
 

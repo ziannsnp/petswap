@@ -59,7 +59,7 @@ What these do not catch, and what does: access-control bugs such as a host keepi
 
 The protected `main` branch is the only shared integration branch. The [`main` branch ruleset](https://github.com/ziannsnp/petswap/rules/21811058) requires a pull request, one approving review, and resolution of review conversations before merge. Pushing new commits to an approved pull request can dismiss the approval; GitHub's **Update branch** button has kept approvals in practice. The ruleset has no bypass list, so administrators follow the same rules. Direct pushes, force pushes, and branch deletion are blocked.
 
-Until the repository admin applies the change below, the ruleset requires **no status checks** (read back through the API on 15 November 2026). A pull request with a red or still-running workflow can be merged once it is approved, so "the checks are the gate" is a team rule that reviewers enforce, not something GitHub enforces. Changing the ruleset needs repository admin. This is risk R5 in the [project management plan](project-management-plan.md).
+Since 15 November 2026 the ruleset also requires the seven [required checks](#required-checks) to pass on an up-to-date branch. Zian applied the change after [PR #130](https://github.com/ziannsnp/petswap/pull/130) merged, and it was read back through the API the same evening. Before that, a pull request with a red workflow could be merged once approved, and the checks were only a team rule; that was risk R5 in the [project management plan](project-management-plan.md), now closed. Changing the ruleset needs repository admin.
 
 ### Required checks
 
@@ -109,13 +109,15 @@ Run this once after the ruleset is applied, and again whenever the required set 
 4. When the checks finish, take a screenshot of the merge box. Expected: `web-quality` failing, the other required checks green, and **Merging is blocked** with the failing required check named. From the CLI, `gh pr merge <number> --merge` should be refused for the same reason; keep its output.
 5. Close the pull request without merging and delete the branch. Paste the screenshot, the pull request link, and the CLI output below.
 
-Evidence (fill in after the drill; nothing has been recorded yet):
+Evidence:
 
 | Date | Pull request | Failing required check | Merge box showed "Merging is blocked"? | Recorded by |
 | --- | --- | --- | --- | --- |
-| | | | | |
+| 15 Nov 2026 | [#131](https://github.com/ziannsnp/petswap/pull/131), closed without merging | `web-quality` (marked **Required**), the six other required checks green | Yes; GitHub reported the pull request as `BLOCKED` | Team D (Kasidech) |
 
-Before the ruleset change, the [release gate](#release-gate) was checked against the last twelve merges into `main` (15 November 2026, `python scripts/release_gate.py --sha <commit>`). Six were released and six would have been blocked, every one because `Reset local database and run contract checks` or `Public route smoke (desktop + mobile)` was `missing` from the pull request: the path filters had stopped them from running. That is the gap the workflow change above closes. It shows the gate script's blocking path, not the ruleset; the drill above is still needed.
+The 15 November run skipped step 3: nobody approved #131, so the merge box also listed the missing review. The failing check was shown with its **Required** badge and the pull request stayed blocked. To isolate the check completely, repeat the proof with an approval next time the required set changes.
+
+Before the ruleset change, the [release gate](#release-gate) was checked against the last twelve merges into `main` (15 November 2026, `python scripts/release_gate.py --sha <commit>`). Six were released and six would have been blocked, every one because `Reset local database and run contract checks` or `Public route smoke (desktop + mobile)` was `missing` from the pull request: the path filters had stopped them from running. That is the gap the workflow change above closes. It shows the gate script's blocking path, not the ruleset; the proof above shows the ruleset.
 
 ## Deployment
 

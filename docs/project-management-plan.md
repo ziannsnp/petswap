@@ -96,7 +96,7 @@ There is no staff cost (students) and no revenue. Recurring cost items to keep v
 
 ## 6. Risk register
 
-Probability and impact are rated Low, Medium, High. "Status" is as of 14 November 2026. Items marked "happened" are real events from the project history, kept because they show the mitigation worked.
+Probability and impact are rated Low, Medium, High. "Status" is as of 14 November 2026, except R5, updated 15 November 2026. Items marked "happened" are real events from the project history, kept because they show the mitigation worked.
 
 | ID | Risk | P | I | Mitigation and contingency | Owner | Status |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -104,7 +104,7 @@ Probability and impact are rated Low, Medium, High. "Status" is as of 14 Novembe
 | R2 | A user reads or changes data they should not (RLS gap) | M | H | RLS on every table, actor-based SQL tests per state change, database lint, review focus on policies | All, Team D checks | **Happened** (host kept pet access after declining; found 14 Nov, fix and regression test in progress) |
 | R3 | Tool upgrade breaks CI (Supabase CLI v3 rejected `config.toml`) | M | M | CLI version pinned from the lockfile; Dependabot proposes upgrades as reviewable PRs | Team D | **Happened** 2 Nov, fixed and prevented |
 | R4 | Shared hosted database used by previews, so review data is real | H | M | Documented as accepted in [environments.md](environments.md); revisit with a staging project | Team D | Accepted |
-| R5 | A red workflow can still be merged because `main` requires no status checks | M | M | Team rule; seven required checks and a ruleset file to apply ([ci-cd.md](ci-cd.md#required-checks)); release gate on `Supabase DB Push`; CODEOWNERS for review routing | Team D with repo owner | Mitigation ready (US-D.5); closes when the repo owner applies the ruleset |
+| R5 | A red workflow can still be merged because `main` requires no status checks | M | M | Seven required checks in the `main` ruleset ([ci-cd.md](ci-cd.md#required-checks)); release gate on `Supabase DB Push`; CODEOWNERS for review routing | Team D with repo owner | **Closed** 15 Nov (US-D.5): ruleset applied, gate proved on [#131](https://github.com/ziannsnp/petswap/pull/131) |
 | R6 | A test exists but never runs in CI | M | M | Loop over every SQL test file; guard that fails if a Playwright spec is run by no workflow | Team D | Mitigation added |
 | R7 | Vulnerable dependency or committed secret | L | H | Dependabot, dependency review, CodeQL, secret scanning and push protection | Team D | Mitigation added |
 | R8 | Cross-feature coupling grows into cycles (one exists between `listings` and `bookings`) | M | M | ESLint boundary rule; coupling table reviewed each sprint; planned refactor | Squads B and C | Open, recorded |

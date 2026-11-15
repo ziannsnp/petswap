@@ -1,4 +1,5 @@
 import { getSupabaseClient } from '../../../shared/lib/supabase';
+import { ListingError } from './listingErrors';
 import { createListing, deleteListing, getListing, listMyListings, listPublishedListings, PUBLISHED_LISTINGS_PAGE_SIZE, searchPublishedListings, setListingPublicationStatus, updateListing } from './listingApi';
 import {
   MISSING_LISTING_ID,
@@ -1238,6 +1239,29 @@ describe('updateListing', () => {
       ordered_image_ids: [],
       new_images: [],
     }));
+  });
+
+  it('reports a capacity cut below upcoming confirmed bookings as a listing error (ADR 0011)', async () => {
+    const listing = {
+      id: 'listing-1', owner_id: 'owner-123', title: 'Old home', location: 'Chiang Mai',
+      description: 'Old description.', capacity: 3, accepted_pet_types: ['dog'], facilities: null,
+      status: 'published', deleted_at: null, published_at: '2026-09-07T00:00:00.000Z',
+      created_at: '2026-09-07T00:00:00.000Z', updated_at: '2026-09-07T00:00:00.000Z',
+      listing_images: [],
+    };
+    const maybeSingle = jest.fn().mockResolvedValue({ data: listing, error: null });
+    const select = jest.fn(() => ({ eq: jest.fn().mockReturnValue({ maybeSingle }) }));
+    const from = jest.fn().mockReturnValue({ select });
+    const rpc = jest.fn().mockResolvedValue({
+      error: { code: 'PBC01', message: 'Capacity cannot be lower than the confirmed bookings on any upcoming night.' },
+    });
+    const getUser = jest.fn().mockResolvedValue({ data: { user: { id: 'owner-123' } }, error: null });
+    mockedGetSupabaseClient.mockReturnValue({ auth: { getUser }, from, rpc } as never);
+
+    const refusal = await updateListing('listing-1', { ...values, capacity: 1 }).catch((error: unknown) => error);
+
+    expect(refusal).toBeInstanceOf(ListingError);
+    expect(refusal).toMatchObject({ code: 'capacity_below_bookings' });
   });
 
   it('preserves mixed existing and new photo order in the owner RPC payload', async () => {

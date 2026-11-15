@@ -8,6 +8,7 @@ describe('listing error contract', () => {
     [{ code: 'PGRST116', message: 'JSON object requested, multiple (or no) rows returned' }, 'not_found'],
     [{ code: 'P0001', message: 'Listing is already deleted.' }, 'deleted'],
     [{ message: 'listing has an active booking' }, 'active_booking'],
+    [{ code: 'PBC01', message: 'Capacity cannot be lower than the confirmed bookings on any upcoming night.' }, 'capacity_below_bookings'],
   ] as const)('maps a backend error to %s', (error, expectedCode) => {
     expect(listingErrorCode(error)).toBe(expectedCode);
   });

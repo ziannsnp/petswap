@@ -4,6 +4,7 @@ export type ListingErrorCode =
   | 'not_found'
   | 'deleted'
   | 'active_booking'
+  | 'capacity_below_bookings'
   | 'network'
   | 'unknown';
 
@@ -66,6 +67,14 @@ export function toListingError(error: unknown): ListingError {
     }
     if (message.includes('active booking')) {
       return new ListingError('active_booking', 'This listing has an active booking.', { cause: error });
+    }
+    // guard_listing_capacity (ADR 0011): capacity may not drop below an upcoming night's confirmed pets.
+    if (code === 'PBC01') {
+      return new ListingError(
+        'capacity_below_bookings',
+        "Capacity can't be lower than the number of pets already confirmed for an upcoming night. Keep a higher capacity, or wait until those stays have ended.",
+        { cause: error },
+      );
     }
     if (code === 'PGRST116') {
       return new ListingError('not_found', 'The listing could not be found.', { cause: error });

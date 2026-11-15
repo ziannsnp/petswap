@@ -5,6 +5,8 @@ import {
   BookingCompletionError,
   BookingConflictError,
   BookingExpiredError,
+  BookingListingFullError,
+  BookingPetUnavailableError,
   BookingStartDateError,
   DuplicateBookingRequestError,
 } from './bookingErrors';
@@ -14,6 +16,8 @@ export {
   BookingCompletionError,
   BookingConflictError,
   BookingExpiredError,
+  BookingListingFullError,
+  BookingPetUnavailableError,
   BookingStartDateError,
   DuplicateBookingRequestError,
 };
@@ -142,9 +146,14 @@ export async function updateBookingStatus(
     .single();
 
   if (error) {
-    // The database exclusion constraint is the authoritative, concurrency-safe overlap check.
-    if (status === 'confirmed' && error.code === '23P01') {
-      throw new BookingConflictError();
+    // hold_booking_availability is the authoritative, concurrency-safe check (ADR 0011). Its refusals
+    // are mapped to fixed copy; the raw error is dropped so nothing about another booking leaks.
+    if (status === 'confirmed' && error.code === 'PBC01') {
+      throw new BookingListingFullError();
+    }
+    // PBP01 from the trigger; 23P01 only if the per-pet exclusion backstop ever fires instead.
+    if (status === 'confirmed' && (error.code === 'PBP01' || error.code === '23P01')) {
+      throw new BookingPetUnavailableError();
     }
 
     // guard_booking_change() raises P0001 when the stay has not ended or the booking is not confirmed.

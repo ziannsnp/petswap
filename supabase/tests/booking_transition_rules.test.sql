@@ -5,7 +5,7 @@
 --   - a pending request cannot be confirmed once its start date has passed (it can be declined)
 --   - a confirmed stay cannot be cancelled from its check-out day on (end-exclusive)
 --
--- Seed users: Alex (...001) owns the fixture listings, Casey (...003) owns Rocket (...004, a dog).
+-- Seed users: Alex (...001) owns the fixture listings, Casey (...003) owns the fixture dog (...801).
 -- Dates are relative to current_date so the cases never go stale. Everything is rolled back.
 --
 --   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/booking_transition_rules.test.sql
@@ -16,6 +16,11 @@
 begin;
 
 set local session_replication_role = replica;
+
+-- Casey's own dog: seed.sql's Rocket has confirmed stays near today, which the fixture stays
+-- below would overlap (a pet cannot hold two overlapping confirmed bookings, ADR 0011).
+insert into public.pets (id, owner_id, name, species)
+values ('20000000-0000-4000-8000-000000000801', '10000000-0000-4000-8000-000000000003', 'Rules pet', 'dog');
 
 insert into public.listings (
   id, owner_id, title, location, description, capacity, accepted_pet_types, status, published_at
@@ -30,19 +35,19 @@ insert into public.bookings (id, listing_id, pet_id, requester_id, status, start
 values
   -- pending, start date has passed: may be declined, not confirmed
   ('40000000-0000-4000-8000-000000000501', '30000000-0000-4000-8000-000000000502',
-   '20000000-0000-4000-8000-000000000004', '10000000-0000-4000-8000-000000000003',
+   '20000000-0000-4000-8000-000000000801', '10000000-0000-4000-8000-000000000003',
    'pending', current_date - 3, current_date + 2, null),
   -- pending, starts today: may still be confirmed
   ('40000000-0000-4000-8000-000000000502', '30000000-0000-4000-8000-000000000502',
-   '20000000-0000-4000-8000-000000000004', '10000000-0000-4000-8000-000000000003',
+   '20000000-0000-4000-8000-000000000801', '10000000-0000-4000-8000-000000000003',
    'pending', current_date, current_date + 1, null),
   -- confirmed, checks out today: may not be cancelled
   ('40000000-0000-4000-8000-000000000503', '30000000-0000-4000-8000-000000000502',
-   '20000000-0000-4000-8000-000000000004', '10000000-0000-4000-8000-000000000003',
+   '20000000-0000-4000-8000-000000000801', '10000000-0000-4000-8000-000000000003',
    'confirmed', current_date - 4, current_date, now()),
   -- confirmed, checks out tomorrow: may still be cancelled
   ('40000000-0000-4000-8000-000000000504', '30000000-0000-4000-8000-000000000502',
-   '20000000-0000-4000-8000-000000000004', '10000000-0000-4000-8000-000000000003',
+   '20000000-0000-4000-8000-000000000801', '10000000-0000-4000-8000-000000000003',
    'confirmed', current_date + 20, current_date + 22, now());
 
 set local session_replication_role = origin;
@@ -55,7 +60,7 @@ do $$
 begin
   begin
     insert into public.bookings (listing_id, pet_id, requester_id, start_date, end_date)
-    values ('30000000-0000-4000-8000-000000000501', '20000000-0000-4000-8000-000000000004',
+    values ('30000000-0000-4000-8000-000000000501', '20000000-0000-4000-8000-000000000801',
             '10000000-0000-4000-8000-000000000003', current_date + 40, current_date + 42);
     raise exception 'booking transition rules: a dog was booked at a cats-only listing';
   exception when raise_exception then
@@ -63,12 +68,12 @@ begin
   end;
 
   insert into public.bookings (listing_id, pet_id, requester_id, start_date, end_date)
-  values ('30000000-0000-4000-8000-000000000502', '20000000-0000-4000-8000-000000000004',
+  values ('30000000-0000-4000-8000-000000000502', '20000000-0000-4000-8000-000000000801',
           '10000000-0000-4000-8000-000000000003', current_date + 50, current_date + 52);
 
   begin
     insert into public.bookings (listing_id, pet_id, requester_id, start_date, end_date)
-    values ('30000000-0000-4000-8000-000000000502', '20000000-0000-4000-8000-000000000004',
+    values ('30000000-0000-4000-8000-000000000502', '20000000-0000-4000-8000-000000000801',
             '10000000-0000-4000-8000-000000000003', current_date + 50, current_date + 52);
     raise exception 'booking transition rules: an identical pending request was stored twice';
   exception when raise_exception then
@@ -77,7 +82,7 @@ begin
 
   -- Different dates for the same pet and listing are still a separate request.
   insert into public.bookings (listing_id, pet_id, requester_id, start_date, end_date)
-  values ('30000000-0000-4000-8000-000000000502', '20000000-0000-4000-8000-000000000004',
+  values ('30000000-0000-4000-8000-000000000502', '20000000-0000-4000-8000-000000000801',
           '10000000-0000-4000-8000-000000000003', current_date + 53, current_date + 55);
 
   begin

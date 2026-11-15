@@ -1,7 +1,32 @@
+import type { BookingConflictReason } from '../types';
+
+/**
+ * The database refused a confirmation (ADR 0011). Use the subclass to tell the two reasons apart;
+ * neither message names the other booking, its dates, its listing, or its requester.
+ */
 export class BookingConflictError extends Error {
-  constructor() {
-    super('This request overlaps another confirmed booking on this listing. Choose different dates before confirming.');
+  constructor(
+    public readonly reason: BookingConflictReason,
+    message: string,
+  ) {
+    super(message);
     this.name = 'BookingConflictError';
+  }
+}
+
+/** PBC01: confirming would put more pets on some night than the listing's capacity. */
+export class BookingListingFullError extends BookingConflictError {
+  constructor() {
+    super('listing_full', 'This listing is full for some of these dates. Confirming this request would exceed its capacity on at least one night.');
+    this.name = 'BookingListingFullError';
+  }
+}
+
+/** PBP01: the pet already has a confirmed stay, at any listing, overlapping these dates. */
+export class BookingPetUnavailableError extends BookingConflictError {
+  constructor() {
+    super('pet_booked', 'This pet already has a confirmed booking for some of these dates, so this request can no longer be confirmed.');
+    this.name = 'BookingPetUnavailableError';
   }
 }
 

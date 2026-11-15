@@ -284,7 +284,7 @@ export async function updateListing(listingId: string, values: UpdateListingValu
       new_images: newImages,
       ordered_image_ids: orderedImageIds,
     });
-    if (updateError) throw updateError;
+    if (updateError) throw updateError.code === 'PBC01' ? toListingError(updateError) : updateError;
     databaseCommitted = true;
 
     const { data: updatedListing, error: reloadError } = await supabase

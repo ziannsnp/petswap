@@ -73,6 +73,11 @@ jobs:
           done
           exit $failed
 
+      # Two real database sessions race confirmations and capacity edits (ADR 0011); a single
+      # psql session cannot reproduce that, so it is a script rather than a *.test.sql file.
+      - name: Concurrent confirmations and capacity edits
+        run: python3 supabase/tests/booking_concurrency.test.py --database-url "$DATABASE_URL"
+
       # Static checks of the database functions. `--level error` keeps this from failing on
       # advisory warnings in existing code; tighten to `warning` once the baseline is clean.
       - name: Lint database functions

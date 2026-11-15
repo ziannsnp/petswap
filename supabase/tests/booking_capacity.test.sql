@@ -320,8 +320,8 @@ begin
   end if;
 end;
 $$;
-\set local session_replication_role = origin;
-echo 'ok: the preflight fails loudly on over-capacity data and changes nothing'
+set local session_replication_role = origin;
+\echo 'ok: the preflight fails loudly on over-capacity data and changes nothing'
 
 rollback;
 

@@ -83,19 +83,22 @@ do $$
 declare
   zone text;
   refused boolean;
+  extra_nights int := 0;
 begin
   foreach zone in array array['Pacific/Kiritimati', 'Pacific/Pago_Pago'] loop
     perform set_config('TimeZone', zone, true);
+    -- Each zone files different dates: guard_booking_change() refuses an identical pending request.
+    extra_nights := extra_nights + 1;
 
     insert into public.bookings (listing_id, pet_id, requester_id, start_date, end_date)
     values ('30000000-0000-4000-8000-000000000601', '20000000-0000-4000-8000-000000000004',
             '10000000-0000-4000-8000-000000000003',
-            public.booking_today() + 20, public.booking_today() + 22);
+            public.booking_today() + 20, public.booking_today() + 21 + extra_nights);
 
     insert into public.bookings (listing_id, pet_id, requester_id, start_date, end_date)
     values ('30000000-0000-4000-8000-000000000601', '20000000-0000-4000-8000-000000000004',
             '10000000-0000-4000-8000-000000000003',
-            public.booking_today(), public.booking_today() + 2);
+            public.booking_today(), public.booking_today() + 1 + extra_nights);
 
     refused := false;
     begin

@@ -184,6 +184,77 @@ paths:
                     photo_url: { type: string, nullable: true }
                     location: { type: string, nullable: true }
 
+  /rest/v1/rpc/get_booking_detail:
+    post:
+      tags: [Bookings]
+      operationId: getBookingDetail
+      summary: One booking for its two participants
+      description: |
+        Returns the booking, its listing, the pet with care notes, and the other participant's safe
+        profile (ADR 0011 decision 7). The requester sees the host; the listing owner sees the requester.
+        The pet is returned to the requester always (soft-deleted pets included, marked by `pet_deleted`)
+        and to the host only while the booking is pending, confirmed or completed; after a decline or a
+        cancellation the `pet_*` columns are null. A draft or deleted listing still returns its bookings.
+        No email address or phone number is ever returned.
+      x-rls: Requester and the owner of the booked listing only. Anyone else, and an unknown id, get zero rows, so a missing booking and someone else's look the same. Anonymous callers have no execute right.
+      security:
+        - userJwt: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [target_booking_id]
+              properties:
+                target_booking_id: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Zero or one row.
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 1
+                items:
+                  type: object
+                  properties:
+                    id: { type: string, format: uuid }
+                    status: { type: string, enum: [pending, confirmed, declined, cancelled, completed] }
+                    start_date: { type: string, format: date }
+                    end_date: { type: string, format: date, description: End-exclusive. }
+                    requester_note: { type: string, nullable: true }
+                    owner_note: { type: string, nullable: true }
+                    created_at: { type: string, format: date-time }
+                    confirmed_at: { type: string, format: date-time, nullable: true }
+                    declined_at: { type: string, format: date-time, nullable: true }
+                    cancelled_at: { type: string, format: date-time, nullable: true }
+                    completed_at: { type: string, format: date-time, nullable: true }
+                    viewer_role: { type: string, enum: [requester, owner] }
+                    listing_id: { type: string, format: uuid }
+                    listing_title: { type: string }
+                    listing_location: { type: string }
+                    listing_status: { type: string, enum: [draft, published, deleted] }
+                    pet_id: { type: string, format: uuid, nullable: true }
+                    pet_name: { type: string, nullable: true }
+                    pet_species: { type: string, nullable: true }
+                    pet_breed: { type: string, nullable: true }
+                    pet_age_year: { type: integer, nullable: true }
+                    pet_photo_url: { type: string, nullable: true, description: Storage path in the pet-photos bucket; sign it to display. }
+                    pet_description: { type: string, nullable: true }
+                    pet_feeding_instruction: { type: string, nullable: true }
+                    pet_medical_note: { type: string, nullable: true }
+                    pet_behavior_note: { type: string, nullable: true }
+                    pet_allergies: { type: string, nullable: true }
+                    pet_vaccination_info: { type: string, nullable: true }
+                    pet_special_requirement: { type: string, nullable: true }
+                    pet_deleted: { type: boolean, nullable: true }
+                    peer_id: { type: string, format: uuid }
+                    peer_display_name: { type: string }
+                    peer_photo_url: { type: string, nullable: true }
+                    peer_location: { type: string, nullable: true }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
   /rest/v1/rpc/update_listing_with_images:
     post:
       tags: [Listings]

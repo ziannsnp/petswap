@@ -87,6 +87,11 @@ fill the result columns, and link it from the release-readiness PR.
 | 26 | Owner declines a pending request; requester cancels a pending/confirmed request | | | |
 | 27 | Overlapping confirmed bookings within listing capacity are allowed; confirming beyond capacity or for a pet already confirmed at another listing is blocked with a safe message; back-to-back dates are allowed | | | |
 | 28 | Owner completes a confirmed booking after its end date | | | |
+| 29 | **View details** on an outgoing and an incoming booking opens `/bookings/<id>`: booking ID, dates and nights, status, listing, pet, the other person (host for the requester, requester for the host), notes and activity. No email or phone number anywhere. The page does not scroll sideways at the mobile width | | | |
+| 30 | The host reads the pet's care notes on a pending, confirmed or completed booking; after a decline or cancellation the detail says the pet is no longer shared. A booking at an unpublished or deleted listing, or for a removed pet, still opens | | | |
+| 31 | Open a booking address while signed in as a third user, and while signed out: both give "Booking not found" / the login redirect, and show nothing about the booking | | | |
+| 32 | With the same pending request open in two sessions, cancel it as the requester, then confirm as the host: the host is told the booking was changed by someone else, and the lists and detail show `Cancelled` with no action left. Repeat with a full listing (capacity reached) and a pet already confirmed elsewhere: each gives its own message, naming no other booking | | | |
+| 33 | Detail by keyboard only: Tab reaches Back, then the actions in order; Enter activates; Escape closes the cancel dialog without cancelling | | | |
 
 ## Sign-off
 

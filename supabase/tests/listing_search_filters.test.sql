@@ -26,7 +26,8 @@ insert into public.listings (
 -- separately. CHECK and exclusion constraints remain enabled under replica.
 set local session_replication_role = replica;
 
--- Casey's own dogs, so no seed stay can overlap them (a pet cannot hold two overlapping
+-- Casey's own dogs (so no seed stay can overlap them), booked by Blair so that Casey stays an
+-- unrelated caller below (a pet cannot hold two overlapping
 -- confirmed bookings, whatever the listing).
 insert into public.pets (id, owner_id, name, species)
 select ('2f000000-0000-4000-8000-0000000000' || lpad(n::text, 2, '0'))::uuid,
@@ -40,11 +41,11 @@ values
   ('3f000000-0000-4000-8000-000000000001', '20000000-0000-4000-8000-000000000003',
    '10000000-0000-4000-8000-000000000002', 'confirmed', '2026-12-10', '2026-12-15'),
   ('3f000000-0000-4000-8000-000000000001', '2f000000-0000-4000-8000-000000000001',
-   '10000000-0000-4000-8000-000000000003', 'confirmed', '2026-12-10', '2026-12-15');
+   '10000000-0000-4000-8000-000000000002', 'confirmed', '2026-12-10', '2026-12-15');
 insert into public.bookings (listing_id, pet_id, requester_id, status, start_date, end_date)
 select '3f000000-0000-4000-8000-000000000003',
        ('2f000000-0000-4000-8000-0000000000' || lpad(n::text, 2, '0'))::uuid,
-       '10000000-0000-4000-8000-000000000003', 'confirmed', '2026-12-20', '2026-12-25'
+       '10000000-0000-4000-8000-000000000002', 'confirmed', '2026-12-20', '2026-12-25'
 from generate_series(1, 5) as n;
 
 -- Capacity 2, A [1,3) and B [3,5) January: peak 1, though both touch [1,5).
@@ -52,13 +53,13 @@ from generate_series(1, 5) as n;
 insert into public.bookings (listing_id, pet_id, requester_id, status, start_date, end_date)
 values
   ('3f000000-0000-4000-8000-000000000007', '2f000000-0000-4000-8000-000000000002',
-   '10000000-0000-4000-8000-000000000003', 'confirmed', '2027-01-01', '2027-01-03'),
+   '10000000-0000-4000-8000-000000000002', 'confirmed', '2027-01-01', '2027-01-03'),
   ('3f000000-0000-4000-8000-000000000007', '2f000000-0000-4000-8000-000000000002',
-   '10000000-0000-4000-8000-000000000003', 'confirmed', '2027-01-03', '2027-01-05'),
+   '10000000-0000-4000-8000-000000000002', 'confirmed', '2027-01-03', '2027-01-05'),
   ('3f000000-0000-4000-8000-000000000008', '2f000000-0000-4000-8000-000000000003',
-   '10000000-0000-4000-8000-000000000003', 'confirmed', '2027-01-01', '2027-01-04'),
+   '10000000-0000-4000-8000-000000000002', 'confirmed', '2027-01-01', '2027-01-04'),
   ('3f000000-0000-4000-8000-000000000008', '2f000000-0000-4000-8000-000000000004',
-   '10000000-0000-4000-8000-000000000003', 'confirmed', '2027-01-03', '2027-01-06');
+   '10000000-0000-4000-8000-000000000002', 'confirmed', '2027-01-03', '2027-01-06');
 insert into public.bookings (listing_id, pet_id, requester_id, status, start_date, end_date)
 select '3f000000-0000-4000-8000-000000000002', '20000000-0000-4000-8000-000000000003',
   '10000000-0000-4000-8000-000000000002', booking_status::public.booking_status, '2026-12-10', '2026-12-15'

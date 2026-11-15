@@ -53,7 +53,8 @@ Feature: Listings and search
     But searching the dates 3 to 4 January shows it only while a place is free on every night
 
   # Requirement: FR-4.2, FR-5.1
-  # Verified by: SearchResultCard.test.tsx, RequestBookingForm.test.tsx
+  # Verified by: web/src/features/search/components/SearchResultCard.test.tsx
+  # Verified by: web/src/features/bookings/components/RequestBookingForm.test.tsx
   Scenario: Searched dates carry into the booking request
     Given I searched for the dates 1 to 5 December
     When I open a result and start a booking request

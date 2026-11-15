@@ -1,5 +1,6 @@
 export { CreatePetScreen } from './components/CreatePetScreen';
 export { EditPetScreen } from './components/EditPetScreen';
+export { PetAvatar } from './components/PetAvatar';
 export { PetCareInfo } from './components/PetCareInfo';
 export type { PetCareValues } from './components/PetCareInfo';
 export { PetsScreen } from './components/PetsScreen';

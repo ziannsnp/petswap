@@ -59,6 +59,17 @@ export class BookingCancellationError extends Error {
   }
 }
 
+/**
+ * The booking does not exist or the signed-in user is not one of its two participants. The database
+ * answers both the same way, so this message must not say which one it was.
+ */
+export class BookingNotFoundError extends Error {
+  constructor() {
+    super('This booking could not be found. It may not exist, or it may not be yours to view.');
+    this.name = 'BookingNotFoundError';
+  }
+}
+
 export class DuplicateBookingRequestError extends Error {
   constructor() {
     super('You already have a pending request for this pet on these dates.');

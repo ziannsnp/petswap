@@ -2,9 +2,16 @@
 import '@testing-library/jest-dom';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { UseQueryResult } from '@tanstack/react-query';
+import { MemoryRouter } from 'react-router-dom';
 import { BookingsScreen } from './BookingsScreen';
 import { useIncomingBookings, useOutgoingBookings, useUpdateBookingStatus } from '../hooks/useBookings';
-import { BookingCompletionError, BookingListingFullError, BookingPetUnavailableError } from '../lib/bookingErrors';
+import {
+  BookingCancellationError,
+  BookingCompletionError,
+  BookingExpiredError,
+  BookingListingFullError,
+  BookingPetUnavailableError,
+} from '../lib/bookingErrors';
 import { utcTodayIsoDate } from '../lib/bookingDates';
 import type { BookingPetSummary, BookingWithDetails } from '../lib/bookingApi';
 
@@ -134,7 +141,7 @@ it('renders outgoing and incoming items with their pet and listing details', () 
   mockUseOutgoingBookings.mockReturnValue(successResult([outgoingBooking]));
   mockUseIncomingBookings.mockReturnValue(successResult([incomingBooking]));
 
-  render(<BookingsScreen />);
+  render(<MemoryRouter><BookingsScreen /></MemoryRouter>);
 
   expect(screen.getByText('Milo', { exact: false })).toBeInTheDocument();
   expect(screen.getByText('(Dog)')).toBeInTheDocument();
@@ -154,7 +161,7 @@ it('shows a loading indicator while a section is pending', () => {
   mockUseOutgoingBookings.mockReturnValue(loadingResult());
   mockUseIncomingBookings.mockReturnValue(successResult([]));
 
-  render(<BookingsScreen />);
+  render(<MemoryRouter><BookingsScreen /></MemoryRouter>);
 
   expect(screen.getByText(/loading outgoing requests/i)).toBeInTheDocument();
 });
@@ -164,7 +171,7 @@ it('shows an error banner with a retry button that calls refetch', () => {
   mockUseOutgoingBookings.mockReturnValue(errorResult('Network error', refetch));
   mockUseIncomingBookings.mockReturnValue(successResult([]));
 
-  render(<BookingsScreen />);
+  render(<MemoryRouter><BookingsScreen /></MemoryRouter>);
 
   expect(screen.getByRole('alert')).toHaveTextContent('Network error');
   fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
@@ -176,7 +183,7 @@ it('shows distinct empty messages when only one side has bookings', () => {
   mockUseOutgoingBookings.mockReturnValue(successResult([]));
   mockUseIncomingBookings.mockReturnValue(successResult([makeBooking()]));
 
-  render(<BookingsScreen />);
+  render(<MemoryRouter><BookingsScreen /></MemoryRouter>);
 
   expect(screen.getByText("You haven't sent any requests yet")).toBeInTheDocument();
   expect(screen.queryByText('No bookings yet.', { exact: false })).not.toBeInTheDocument();
@@ -186,7 +193,7 @@ it('shows the incoming empty message when only outgoing has bookings', () => {
   mockUseOutgoingBookings.mockReturnValue(successResult([makeBooking()]));
   mockUseIncomingBookings.mockReturnValue(successResult([]));
 
-  render(<BookingsScreen />);
+  render(<MemoryRouter><BookingsScreen /></MemoryRouter>);
 
   expect(screen.getByText('No incoming requests on your listings')).toBeInTheDocument();
 });
@@ -195,7 +202,7 @@ it('shows a single combined empty state when both lists are completely empty', (
   mockUseOutgoingBookings.mockReturnValue(successResult([]));
   mockUseIncomingBookings.mockReturnValue(successResult([]));
 
-  render(<BookingsScreen />);
+  render(<MemoryRouter><BookingsScreen /></MemoryRouter>);
 
   expect(screen.getByText('No bookings yet.')).toBeInTheDocument();
   expect(screen.queryByText("You haven't sent any requests yet")).not.toBeInTheDocument();
@@ -209,7 +216,7 @@ it('offers Confirm/Decline only on pending incoming requests, never on outgoing 
   mockUseOutgoingBookings.mockReturnValue(successResult([confirmedOutgoing]));
   mockUseIncomingBookings.mockReturnValue(successResult([pendingIncoming]));
 
-  render(<BookingsScreen />);
+  render(<MemoryRouter><BookingsScreen /></MemoryRouter>);
 
   expect(screen.getAllByRole('button', { name: 'Confirm' })).toHaveLength(1);
   expect(screen.getAllByRole('button', { name: 'Decline' })).toHaveLength(1);
@@ -219,7 +226,7 @@ it('does not offer actions on an incoming booking that is already confirmed', ()
   mockUseOutgoingBookings.mockReturnValue(successResult([]));
   mockUseIncomingBookings.mockReturnValue(successResult([makeBooking({ status: 'confirmed' })]));
 
-  render(<BookingsScreen />);
+  render(<MemoryRouter><BookingsScreen /></MemoryRouter>);
 
   expect(screen.queryByRole('button', { name: 'Confirm' })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Decline' })).not.toBeInTheDocument();
@@ -231,7 +238,7 @@ it('confirms a pending incoming booking', async () => {
   mockUseOutgoingBookings.mockReturnValue(successResult([]));
   mockUseIncomingBookings.mockReturnValue(successResult([makeBooking({ id: 'in-1', status: 'pending' })]));
 
-  render(<BookingsScreen />);
+  render(<MemoryRouter><BookingsScreen /></MemoryRouter>);
   fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
 
   await waitFor(() => expect(mutateAsync).toHaveBeenCalledWith({ bookingId: 'in-1', status: 'confirmed' }));
@@ -243,7 +250,7 @@ it('declines a pending incoming booking', async () => {
   mockUseOutgoingBookings.mockReturnValue(successResult([]));
   mockUseIncomingBookings.mockReturnValue(successResult([makeBooking({ id: 'in-1', status: 'pending' })]));
 
-  render(<BookingsScreen />);
+  render(<MemoryRouter><BookingsScreen /></MemoryRouter>);
   fireEvent.click(screen.getByRole('button', { name: 'Decline' }));
 
   await waitFor(() => expect(mutateAsync).toHaveBeenCalledWith({ bookingId: 'in-1', status: 'declined' }));
@@ -255,7 +262,7 @@ it.each(['pending', 'confirmed'] as const)('lets the requester cancel a %s outgo
   mockUseOutgoingBookings.mockReturnValue(successResult([makeBooking({ id: 'out-1', status })]));
   mockUseIncomingBookings.mockReturnValue(successResult([]));
 
-  render(<BookingsScreen />);
+  render(<MemoryRouter><BookingsScreen /></MemoryRouter>);
   fireEvent.click(screen.getByRole('button', { name: 'Cancel booking' }));
   const dialog = screen.getByRole('alertdialog', { name: 'Cancel booking for Milo?' });
   fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel booking' }));
@@ -271,7 +278,7 @@ it('does not offer cancellation for terminal bookings or incoming requests', () 
   ]));
   mockUseIncomingBookings.mockReturnValue(successResult([makeBooking({ id: 'incoming', status: 'pending' })]));
 
-  render(<BookingsScreen />);
+  render(<MemoryRouter><BookingsScreen /></MemoryRouter>);
 
   expect(screen.queryByRole('button', { name: 'Cancel booking' })).not.toBeInTheDocument();
 });
@@ -287,7 +294,7 @@ it('lets the owner mark an ended confirmed incoming booking as completed', async
     makeBooking({ id: 'ended-pending', status: 'pending', end_date: '2026-10-14' }),
   ]));
 
-  render(<BookingsScreen />);
+  render(<MemoryRouter><BookingsScreen /></MemoryRouter>);
 
   expect(screen.getAllByRole('button', { name: 'Mark completed' })).toHaveLength(1);
   fireEvent.click(screen.getByRole('button', { name: 'Mark completed' }));
@@ -301,7 +308,7 @@ it('shows an error on the affected card when a status update fails', async () =>
   mockUseOutgoingBookings.mockReturnValue(successResult([]));
   mockUseIncomingBookings.mockReturnValue(successResult([makeBooking({ id: 'in-1', status: 'pending' })]));
 
-  render(<BookingsScreen />);
+  render(<MemoryRouter><BookingsScreen /></MemoryRouter>);
   fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
 
   expect(await screen.findByRole('alert')).toHaveTextContent(/could not update this booking/i);
@@ -318,10 +325,72 @@ it.each([
   mockUseOutgoingBookings.mockReturnValue(successResult([]));
   mockUseIncomingBookings.mockReturnValue(successResult([makeBooking({ id: 'in-1', status: 'pending' })]));
 
-  render(<BookingsScreen />);
+  render(<MemoryRouter><BookingsScreen /></MemoryRouter>);
   fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
 
   expect(await screen.findByRole('alert')).toHaveTextContent(message);
+});
+
+it.each([
+  ['a request that expired', new BookingExpiredError(), /start date has passed/i],
+  ['a stay that already ended', new BookingCancellationError(), /already ended/i],
+])('shows the real reason, not the generic one, for %s', async (_reason, refusal, message) => {
+  mockUseUpdateBookingStatus.mockReturnValue({ mutateAsync: jest.fn().mockRejectedValue(refusal) });
+  mockUseOutgoingBookings.mockReturnValue(successResult([]));
+  mockUseIncomingBookings.mockReturnValue(successResult([makeBooking({ id: 'in-1', status: 'pending' })]));
+
+  render(<MemoryRouter><BookingsScreen /></MemoryRouter>);
+  fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+
+  const alert = await screen.findByRole('alert');
+  expect(alert).toHaveTextContent(message);
+  expect(alert).not.toHaveTextContent(/could not update this booking/i);
+});
+
+it('keeps the reason visible after the refetch leaves the booking with no action to show', async () => {
+  mockUseUpdateBookingStatus.mockReturnValue({ mutateAsync: jest.fn().mockRejectedValue(new BookingListingFullError()) });
+  mockUseOutgoingBookings.mockReturnValue(successResult([]));
+  mockUseIncomingBookings.mockReturnValue(successResult([makeBooking({ id: 'in-1', status: 'pending' })]));
+  const { rerender } = render(<MemoryRouter><BookingsScreen /></MemoryRouter>);
+  fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+  await screen.findByRole('alert');
+
+  // The mutation refetched the bookings: the requester had cancelled in the meantime.
+  mockUseIncomingBookings.mockReturnValue(successResult([makeBooking({ id: 'in-1', status: 'cancelled' })]));
+  rerender(<MemoryRouter><BookingsScreen /></MemoryRouter>);
+
+  expect(screen.queryByRole('button', { name: 'Confirm' })).not.toBeInTheDocument();
+  expect(screen.getByRole('alert')).toHaveTextContent(/listing is full/i);
+});
+
+// --- Booking detail link ---
+
+it('links each booking to its detail page', () => {
+  mockUseOutgoingBookings.mockReturnValue(successResult([makeBooking({ id: 'out-1', status: 'confirmed' })]));
+  mockUseIncomingBookings.mockReturnValue(successResult([makeBooking({ id: 'in-1', status: 'pending' })]));
+
+  render(<MemoryRouter><BookingsScreen /></MemoryRouter>);
+
+  const links = screen.getAllByRole('link', { name: /view details/i });
+  expect(links.map((link) => link.getAttribute('href'))).toEqual(['/bookings/out-1', '/bookings/in-1']);
+});
+
+it('names the booking in each details link, so links are told apart without their surroundings', () => {
+  mockUseOutgoingBookings.mockReturnValue(successResult([makeBooking({ id: 'out-1', status: 'confirmed' })]));
+  mockUseIncomingBookings.mockReturnValue(successResult([]));
+
+  render(<MemoryRouter><BookingsScreen /></MemoryRouter>);
+
+  expect(screen.getByRole('link', { name: 'View details for Milo at Cozy Yard, Confirmed' })).toBeInTheDocument();
+});
+
+it('links a booking whose pet is no longer shared', () => {
+  mockUseOutgoingBookings.mockReturnValue(successResult([]));
+  mockUseIncomingBookings.mockReturnValue(successResult([makeBooking({ id: 'in-1', status: 'declined', pet: null })]));
+
+  render(<MemoryRouter><BookingsScreen /></MemoryRouter>);
+
+  expect(screen.getByRole('link', { name: /view details/i })).toHaveAttribute('href', '/bookings/in-1');
 });
 
 // --- Confirm / decline (listing owner) ---
@@ -332,7 +401,7 @@ it.each(['declined', 'cancelled', 'completed'] as const)(
     mockUseOutgoingBookings.mockReturnValue(successResult([]));
     mockUseIncomingBookings.mockReturnValue(successResult([makeBooking({ status })]));
 
-    render(<BookingsScreen />);
+    render(<MemoryRouter><BookingsScreen /></MemoryRouter>);
 
     expect(screen.queryByRole('button', { name: 'Confirm' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Decline' })).not.toBeInTheDocument();
@@ -343,7 +412,7 @@ it('does not let a requester confirm or decline their own pending request', () =
   mockUseOutgoingBookings.mockReturnValue(successResult([makeBooking({ id: 'out-1', status: 'pending' })]));
   mockUseIncomingBookings.mockReturnValue(successResult([]));
 
-  render(<BookingsScreen />);
+  render(<MemoryRouter><BookingsScreen /></MemoryRouter>);
 
   expect(screen.queryByRole('button', { name: 'Confirm' })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Decline' })).not.toBeInTheDocument();
@@ -355,7 +424,7 @@ it('disables both responses on a card while its update is saving', async () => {
   mockUseOutgoingBookings.mockReturnValue(successResult([]));
   mockUseIncomingBookings.mockReturnValue(successResult([makeBooking({ id: 'in-1', status: 'pending' })]));
 
-  render(<BookingsScreen />);
+  render(<MemoryRouter><BookingsScreen /></MemoryRouter>);
   fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
 
   expect(await screen.findByRole('button', { name: 'Saving...' })).toBeDisabled();
@@ -372,7 +441,7 @@ it('shows a capacity conflict only on the card that failed to confirm', async ()
     makeBooking({ id: 'in-2', status: 'pending', pet: { id: 'pet-2', name: 'Bella', species: 'cat', photo_url: null, ...NO_CARE_INFO } }),
   ]));
 
-  render(<BookingsScreen />);
+  render(<MemoryRouter><BookingsScreen /></MemoryRouter>);
   fireEvent.click(screen.getAllByRole('button', { name: 'Confirm' })[0]);
 
   const alert = await screen.findByRole('alert');
@@ -386,7 +455,7 @@ it('does not let a listing owner cancel a confirmed incoming booking', () => {
   mockUseOutgoingBookings.mockReturnValue(successResult([]));
   mockUseIncomingBookings.mockReturnValue(successResult([makeBooking({ id: 'in-1', status: 'confirmed' })]));
 
-  render(<BookingsScreen />);
+  render(<MemoryRouter><BookingsScreen /></MemoryRouter>);
 
   expect(screen.queryByRole('button', { name: 'Cancel booking' })).not.toBeInTheDocument();
 });
@@ -397,7 +466,7 @@ it('shows an error on the outgoing card when a cancellation fails', async () => 
   mockUseOutgoingBookings.mockReturnValue(successResult([makeBooking({ id: 'out-1', status: 'confirmed' })]));
   mockUseIncomingBookings.mockReturnValue(successResult([]));
 
-  render(<BookingsScreen />);
+  render(<MemoryRouter><BookingsScreen /></MemoryRouter>);
   fireEvent.click(screen.getByRole('button', { name: 'Cancel booking' }));
   const dialog = screen.getByRole('alertdialog', { name: 'Cancel booking for Milo?' });
   fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel booking' }));
@@ -416,7 +485,7 @@ it('offers Mark completed on a confirmed incoming booking whose end date has pas
     makeBooking({ status: 'confirmed', start_date: '2020-01-05', end_date: ENDED }),
   ]));
 
-  render(<BookingsScreen />);
+  render(<MemoryRouter><BookingsScreen /></MemoryRouter>);
 
   expect(screen.getByRole('button', { name: 'Mark completed' })).toBeInTheDocument();
 });
@@ -427,7 +496,7 @@ it('offers Mark completed on the end date itself (check-out day)', () => {
     makeBooking({ status: 'confirmed', start_date: '2020-01-05', end_date: utcTodayIsoDate() }),
   ]));
 
-  render(<BookingsScreen />);
+  render(<MemoryRouter><BookingsScreen /></MemoryRouter>);
 
   expect(screen.getByRole('button', { name: 'Mark completed' })).toBeInTheDocument();
 });
@@ -442,7 +511,7 @@ describe('completion follows the database UTC day near midnight', () => {
     mockUseIncomingBookings.mockReturnValue(successResult([
       makeBooking({ status: 'confirmed', start_date: '2026-09-10', end_date: endDate }),
     ]));
-    render(<BookingsScreen />);
+    render(<MemoryRouter><BookingsScreen /></MemoryRouter>);
   }
 
   it('hides Mark completed one minute before the UTC end day, whatever the local day is', () => {
@@ -464,7 +533,7 @@ it('does not offer Mark completed before the end date', () => {
     makeBooking({ status: 'confirmed', start_date: '2020-01-05', end_date: NOT_ENDED }),
   ]));
 
-  render(<BookingsScreen />);
+  render(<MemoryRouter><BookingsScreen /></MemoryRouter>);
 
   expect(screen.queryByRole('button', { name: 'Mark completed' })).not.toBeInTheDocument();
 });
@@ -477,7 +546,7 @@ it.each(['pending', 'declined', 'cancelled', 'completed'] as const)(
       makeBooking({ status, start_date: '2020-01-05', end_date: ENDED }),
     ]));
 
-    render(<BookingsScreen />);
+    render(<MemoryRouter><BookingsScreen /></MemoryRouter>);
 
     expect(screen.queryByRole('button', { name: 'Mark completed' })).not.toBeInTheDocument();
   },
@@ -489,7 +558,7 @@ it('does not let the requester mark their own finished booking completed', () =>
   ]));
   mockUseIncomingBookings.mockReturnValue(successResult([]));
 
-  render(<BookingsScreen />);
+  render(<MemoryRouter><BookingsScreen /></MemoryRouter>);
 
   expect(screen.queryByRole('button', { name: 'Mark completed' })).not.toBeInTheDocument();
 });
@@ -502,7 +571,7 @@ it('marks a finished confirmed incoming booking completed', async () => {
     makeBooking({ id: 'in-1', status: 'confirmed', start_date: '2020-01-05', end_date: ENDED }),
   ]));
 
-  render(<BookingsScreen />);
+  render(<MemoryRouter><BookingsScreen /></MemoryRouter>);
   fireEvent.click(screen.getByRole('button', { name: 'Mark completed' }));
 
   await waitFor(() => expect(mutateAsync).toHaveBeenCalledWith({ bookingId: 'in-1', status: 'completed' }));
@@ -516,7 +585,7 @@ it('explains on the card when the database refuses a completion', async () => {
     makeBooking({ id: 'in-1', status: 'confirmed', start_date: '2020-01-05', end_date: ENDED }),
   ]));
 
-  render(<BookingsScreen />);
+  render(<MemoryRouter><BookingsScreen /></MemoryRouter>);
   fireEvent.click(screen.getByRole('button', { name: 'Mark completed' }));
 
   expect(await screen.findByRole('alert')).toHaveTextContent(
@@ -539,7 +608,7 @@ describe('pet care information on booking requests (FR-2.2)', () => {
     mockUseOutgoingBookings.mockReturnValue(successResult([]));
     mockUseIncomingBookings.mockReturnValue(successResult([makeBooking({ id: 'in-1', status: 'pending', pet: caredPet })]));
 
-    render(<BookingsScreen />);
+    render(<MemoryRouter><BookingsScreen /></MemoryRouter>);
 
     const care = screen.getByRole('region', { name: 'Care information' });
     expect(care).toHaveTextContent('Feeding instructions');
@@ -554,7 +623,7 @@ describe('pet care information on booking requests (FR-2.2)', () => {
     mockUseOutgoingBookings.mockReturnValue(successResult([]));
     mockUseIncomingBookings.mockReturnValue(successResult([makeBooking({ id: 'in-1', status: 'pending' })]));
 
-    render(<BookingsScreen />);
+    render(<MemoryRouter><BookingsScreen /></MemoryRouter>);
 
     expect(screen.queryByRole('region', { name: 'Care information' })).not.toBeInTheDocument();
     expect(screen.getByText('No care information added.')).toBeInTheDocument();
@@ -564,7 +633,7 @@ describe('pet care information on booking requests (FR-2.2)', () => {
     mockUseOutgoingBookings.mockReturnValue(successResult([makeBooking({ id: 'out-1', pet: caredPet })]));
     mockUseIncomingBookings.mockReturnValue(successResult([]));
 
-    render(<BookingsScreen />);
+    render(<MemoryRouter><BookingsScreen /></MemoryRouter>);
 
     expect(screen.queryByRole('region', { name: 'Care information' })).not.toBeInTheDocument();
     expect(screen.queryByText(/No care information added/)).not.toBeInTheDocument();
@@ -577,7 +646,7 @@ it('shows a declined incoming booking whose pet is no longer shared with the hos
     successResult([makeBooking({ id: 'in-declined', status: 'declined', pet: null })]),
   );
 
-  render(<BookingsScreen />);
+  render(<MemoryRouter><BookingsScreen /></MemoryRouter>);
 
   expect(screen.getByText('Pet details are no longer shared')).toBeInTheDocument();
   expect(screen.queryByText('No care information added.')).not.toBeInTheDocument();

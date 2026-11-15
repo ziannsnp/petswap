@@ -10,7 +10,7 @@ A short plan that names what the team already does for **Software Configuration 
 | Version control | Git on GitHub; short-lived branch per card, named by convention; squash and merge commits follow [conventions.md](conventions.md) | [conventions.md](conventions.md) |
 | Change control | Pull request to `main`, one approving review, resolved conversations, no direct or force push; PR template asks for requirement, card, evidence and ADR decision; `.github/CODEOWNERS` routes review to the owning squad | [ci-cd.md](ci-cd.md#main-branch-protection), `.github/pull_request_template.md` |
 | Decision records | Architecture decision records, one per durable choice, never rewritten | [decisions/](decisions/README.md) |
-| Build and release management | CI builds on every pull request; Cloudflare deploys `main`; Supabase migrations deploy from CI when `supabase/**` changes; rollback by promoting a previous Worker version, drilled on 22 August 2026 | [ci-cd.md](ci-cd.md#deployment) |
+| Build and release management | CI builds on every pull request; Cloudflare deploys `main`; Supabase migrations deploy from CI when `supabase/**` changes; rollback by promoting a previous Worker version, drilled on 22 August and 15 November 2026; seven required checks gate every merge | [ci-cd.md](ci-cd.md#deployment) |
 | Status accounting | Backlog, sprint backlog, burndown, and DSM notes in the team Google Sheet; GitHub Insights contributor graph | Google Drive folder in [AGENTS.md](../AGENTS.md) |
 | Audits | Weekly scheduled database-contract and Compose-health runs catch configuration drift between releases | [ci-cd.md](ci-cd.md) |
 

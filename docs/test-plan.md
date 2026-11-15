@@ -70,7 +70,7 @@ Tests are hermetic and independent; the database is reset instead of relying on 
 | Cache shared between users in the browser | Data shown to the wrong user | Regression test on sign-out and sign-in as a different user |
 | Missing input bounds | Bad data, abuse | Database `CHECK` constraints plus boundary tests |
 | Vulnerable dependency or committed secret | Security | Dependabot, dependency review, CodeQL, secret scanning with push protection |
-| Only some workflows are required checks | A red change can merge | Seven required checks agreed in US-D.5 and a ruleset file for the repository owner to apply; the release gate blocks `Supabase DB Push` when any of them failed ([ci-cd.md](ci-cd.md#required-checks)) |
+| Only some workflows are required checks | A red change can merge | Seven required checks in the `main` ruleset since 15 Nov (US-D.5); the release gate blocks `Supabase DB Push` when any of them failed ([ci-cd.md](ci-cd.md#required-checks)) |
 | Slow gate if every workflow becomes required | Developers bypass it | Job-level `if:` skips instead of trigger-level path filters |
 
 ## 9. Schedule

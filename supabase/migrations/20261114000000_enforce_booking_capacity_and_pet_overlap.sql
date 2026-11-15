@@ -24,9 +24,12 @@
 -- The migration preflights existing data and fails loudly; it never cancels or
 -- edits a booking to make the new rules fit.
 
--- Hold off writers while the rules change, so no booking is confirmed between
--- the preflight and the new trigger.
-lock table public.bookings, public.listings in share row exclusive mode;
+-- No explicit LOCK TABLE: `supabase db push/reset` does not run a migration file
+-- inside one transaction, so a table lock would not outlive its own statement.
+-- None is needed. Until bookings_no_confirmed_overlap is dropped below, a
+-- concurrent confirmation cannot exceed any capacity (capacity >= 1), and a pet
+-- overlap confirmed after the preflight makes the ADD CONSTRAINT below fail
+-- loudly, because adding an exclusion constraint validates every existing row.
 
 -- Peak number of confirmed bookings on one listing on any night of
 -- [window_start, window_end), optionally ignoring one booking (the one being

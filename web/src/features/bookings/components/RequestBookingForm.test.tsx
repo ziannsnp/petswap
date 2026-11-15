@@ -36,9 +36,12 @@ function petsResult(data: Array<{ id: string; name: string; species: string }> |
   return { data, isLoading: false, isSuccess: data !== undefined, isError: false, ...overrides };
 }
 
-function renderForm(overrides: Partial<{ listingId: string; listingOwnerId: string; acceptedPetTypes: string[] }> = {}) {
+function renderForm(
+  overrides: Partial<{ listingId: string; listingOwnerId: string; acceptedPetTypes: string[] }> = {},
+  url = '/',
+) {
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[url]}>
       <RequestBookingForm
         listingId={overrides.listingId ?? 'listing-1'}
         listingOwnerId={overrides.listingOwnerId ?? OWNER_ID}
@@ -194,4 +197,54 @@ it('explains and offers a retry when the pets cannot be loaded', () => {
   expect(screen.getByRole('alert')).toHaveTextContent(/could not load your pets/i);
   fireEvent.click(screen.getByRole('button', { name: /try again/i }));
   expect(refetch).toHaveBeenCalledTimes(1);
+});
+
+describe('dates handed over from search', () => {
+  beforeEach(() => {
+    authenticatedAs(REQUESTER_ID);
+    mockUseMyPets.mockReturnValue(petsResult([{ id: 'pet-1', name: 'Rocket', species: 'dog' }]));
+  });
+
+  it('starts from the dates the visitor searched for and sends them with the request', async () => {
+    const mutateAsync = jest.fn().mockResolvedValue({});
+    mockUseCreateBookingRequest.mockReturnValue({ mutateAsync, isPending: false, isError: false, reset: jest.fn() });
+
+    renderForm({ listingId: 'listing-9' }, '/listings/listing-9?startDate=2099-03-10&endDate=2099-03-14');
+
+    expect(screen.getByLabelText('Start date')).toHaveValue('2099-03-10');
+    expect(screen.getByLabelText('End date')).toHaveValue('2099-03-14');
+
+    fireEvent.change(screen.getByLabelText('Pet'), { target: { value: 'pet-1' } });
+    fireEvent.click(screen.getByRole('button', { name: /request booking/i }));
+
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledWith(expect.objectContaining({
+      listing_id: 'listing-9',
+      start_date: '2099-03-10',
+      end_date: '2099-03-14',
+    })));
+  });
+
+  it('lets the visitor change the handed-over dates', () => {
+    mockUseCreateBookingRequest.mockReturnValue({ mutateAsync: jest.fn(), isPending: false, isError: false, reset: jest.fn() });
+
+    renderForm({}, '/listings/listing-1?startDate=2099-03-10&endDate=2099-03-14');
+    fireEvent.change(screen.getByLabelText('End date'), { target: { value: '2099-03-20' } });
+
+    expect(screen.getByLabelText('Start date')).toHaveValue('2099-03-10');
+    expect(screen.getByLabelText('End date')).toHaveValue('2099-03-20');
+  });
+
+  it.each([
+    ['a past start', 'startDate=2020-01-01&endDate=2020-01-05'],
+    ['an end before the start', 'startDate=2099-03-14&endDate=2099-03-10'],
+    ['only one date', 'startDate=2099-03-10'],
+    ['text', 'startDate=soon&endDate=later'],
+  ])('opens empty for %s in the link', (_case, query) => {
+    mockUseCreateBookingRequest.mockReturnValue({ mutateAsync: jest.fn(), isPending: false, isError: false, reset: jest.fn() });
+
+    renderForm({}, `/listings/listing-1?${query}`);
+
+    expect(screen.getByLabelText('Start date')).toHaveValue('');
+    expect(screen.getByLabelText('End date')).toHaveValue('');
+  });
 });

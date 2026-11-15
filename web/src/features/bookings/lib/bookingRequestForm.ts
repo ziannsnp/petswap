@@ -9,6 +9,30 @@ export interface BookingRequestFormValues {
   endDate: string;
 }
 
+/**
+ * The stay a visitor already chose while searching, carried to the request form as
+ * `?startDate=&endDate=`. Anything that would not pass the form's own date checks (a
+ * missing half, an impossible day, a day already past, an end that is not later) is
+ * dropped whole, so a stale or hand-edited link opens an empty form, never a wrong one.
+ */
+export function readRequestedStay(
+  params: URLSearchParams,
+  earliestStart: string = earliestRequestStartDate(),
+): Pick<BookingRequestFormValues, 'startDate' | 'endDate'> {
+  const none = { startDate: '', endDate: '' };
+  const startDate = params.get('startDate') ?? '';
+  const endDate = params.get('endDate') ?? '';
+  if (!startDate || !endDate) return none;
+
+  try {
+    const start = asUtcDay(startDate);
+    if (start < asUtcDay(earliestStart) || start >= asUtcDay(endDate)) return none;
+  } catch {
+    return none;
+  }
+  return { startDate, endDate };
+}
+
 export type BookingRequestFormErrors = Partial<Record<keyof BookingRequestFormValues, string>>;
 
 /**

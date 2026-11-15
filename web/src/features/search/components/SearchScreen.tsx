@@ -117,7 +117,7 @@ export function SearchScreen() {
                   <ul className="mt-4 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
                     {listings.map((listing) => (
                       <li key={listing.id}>
-                        <SearchResultCard listing={listing} />
+                        <SearchResultCard listing={listing} stay={{ startDate: criteria.startDate, endDate: criteria.endDate }} />
                       </li>
                     ))}
                   </ul>

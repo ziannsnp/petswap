@@ -39,7 +39,22 @@ Feature: Listings and search
   # Requirement: FR-4.2
   # Verified by: supabase/tests/listing_search_filters.test.sql
   Scenario: Filters combine and respect availability
-    Given a listing has a confirmed booking from 1 to 5 February
+    Given a listing with capacity 1 has a confirmed booking from 1 to 5 February
     When I search with pet type, minimum capacity, and the dates 2 to 4 February
     Then that listing is not in the results
     But a listing that is free for those dates and fits is
+
+  # Requirement: FR-4.2 (ADR 0011)
+  # Verified by: supabase/tests/listing_search_filters.test.sql
+  Scenario: A listing with a free place stays available
+    Given a listing with capacity 2 has confirmed bookings from 1 to 3 January and from 3 to 5 January
+    When I search for the dates 1 to 5 January
+    Then that listing is in the results
+    But searching the dates 3 to 4 January shows it only while a place is free on every night
+
+  # Requirement: FR-4.2, FR-5.1
+  # Verified by: SearchResultCard.test.tsx, RequestBookingForm.test.tsx
+  Scenario: Searched dates carry into the booking request
+    Given I searched for the dates 1 to 5 December
+    When I open a result and start a booking request
+    Then the start and end dates are already filled in and I can still change them

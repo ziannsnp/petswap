@@ -1,4 +1,4 @@
-import { todayIsoDate, validateBookingRequestForm } from './bookingRequestForm';
+import { readRequestedStay, todayIsoDate, validateBookingRequestForm } from './bookingRequestForm';
 
 // Pinned so the suite does not start failing once the calendar reaches the
 // fixture dates below.
@@ -108,5 +108,31 @@ it('keeps the plain past-date message for days before local today', () => {
 it('rejects a date that is not a calendar day instead of reading it as the next month', () => {
   expect(validate({ startDate: '2027-02-30', endDate: '2027-03-05' })).toEqual({
     endDate: 'Enter valid dates.',
+  });
+});
+
+describe('readRequestedStay', () => {
+  const stay = (query: string) => readRequestedStay(new URLSearchParams(query), TODAY);
+  const none = { startDate: '', endDate: '' };
+
+  it('hands over the dates a search was filtering by', () => {
+    expect(stay('startDate=2027-01-10&endDate=2027-01-14')).toEqual({ startDate: '2027-01-10', endDate: '2027-01-14' });
+  });
+
+  it('accepts a stay starting on the earliest bookable day', () => {
+    expect(stay('startDate=2026-09-13&endDate=2026-09-14')).toEqual({ startDate: '2026-09-13', endDate: '2026-09-14' });
+  });
+
+  it.each([
+    ['no dates', ''],
+    ['only a start', 'startDate=2027-01-10'],
+    ['only an end', 'endDate=2027-01-14'],
+    ['a start already past', 'startDate=2026-09-12&endDate=2026-09-20'],
+    ['an end that is not later', 'startDate=2027-01-10&endDate=2027-01-10'],
+    ['an end before the start', 'startDate=2027-01-14&endDate=2027-01-10'],
+    ['an impossible calendar day', 'startDate=2027-02-30&endDate=2027-03-05'],
+    ['text instead of dates', 'startDate=soon&endDate=later'],
+  ])('drops %s so the form opens empty rather than wrong', (_case, query) => {
+    expect(stay(query)).toEqual(none);
   });
 });

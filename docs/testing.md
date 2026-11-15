@@ -149,8 +149,10 @@ Repeat from a filtered no-results state with an invalid date draft, and verify
 the error is cleared too. Check keyboard focus and narrow viewport overflow.
 
 The query/cache/adapter path is covered by `SearchScreen.integration.test.tsx`;
-`listing_search_filters.test.sql` covers server filters, availability, privacy,
-and ordering across pages. Recorded browser evidence and screenshots:
+`listing_search_filters.test.sql` covers server filters, availability from
+remaining capacity (ADR 0011), privacy, and ordering across pages. The searched
+dates reach the request form through the result link (`SearchResultCard.test.tsx`,
+`RequestBookingForm.test.tsx`). Recorded browser evidence and screenshots:
 [`qa/search-sort-reset-2026-11-07.md`](qa/search-sort-reset-2026-11-07.md).
 
 ## Manual listing journey

@@ -292,16 +292,19 @@ $$;
 select public.assert_booking_capacity_invariants();
 \echo 'ok: the invariants hold on the data above'
 
-do $$
+-- Break capacity behind the trigger's back: replica is switched on as a statement, as in the
+-- fixtures above and the other SQL tests, rather than via set_config inside the block.
+reset role;
+set local session_replication_role = replica;
+
+do $
 declare
   got_message text;
 begin
   begin
-    -- Break capacity behind the trigger's back: a second confirmed pet over G.
-    perform set_config('session_replication_role', 'replica', true);
+    -- A second confirmed pet over G.
     update public.bookings set status = 'confirmed'
     where id = (select id from _b where name = 'I');
-    perform set_config('session_replication_role', 'origin', true);
 
     perform public.assert_booking_capacity_invariants();
     raise exception using errcode = 'XX000', message = 'REGRESSION: the preflight accepted a listing over capacity';
@@ -317,7 +320,8 @@ begin
   end if;
 end;
 $$;
-\echo 'ok: the preflight fails loudly on over-capacity data and changes nothing'
+\set local session_replication_role = origin;
+echo 'ok: the preflight fails loudly on over-capacity data and changes nothing'
 
 rollback;
 

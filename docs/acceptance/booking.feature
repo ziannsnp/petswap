@@ -29,6 +29,7 @@ Feature: Booking requests and their lifecycle
       | the pet is not mine                      |
 
   # Requirement: FR-5.2
+  # Verified by: web/e2e/booking-conflict-and-capacity.spec.ts
   # Verified by: supabase/tests/booking_capacity.test.sql
   # Verified by: supabase/tests/booking_concurrency.test.py
   Scenario: Confirmed stays cannot exceed the listing's capacity
@@ -39,6 +40,7 @@ Feature: Booking requests and their lifecycle
     And the other stays "pending" with a message that the listing is full
 
   # Requirement: FR-5.2
+  # Verified by: web/e2e/booking-conflict-and-capacity.spec.ts
   # Verified by: supabase/tests/booking_capacity.test.sql
   # Verified by: supabase/tests/booking_concurrency.test.py
   Scenario: A pet cannot be confirmed at two listings for the same nights
@@ -58,6 +60,7 @@ Feature: Booking requests and their lifecycle
     Then it is confirmed
 
   # Requirement: FR-5.2
+  # Verified by: web/e2e/booking-conflict-and-capacity.spec.ts
   # Verified by: supabase/tests/booking_rules.test.sql
   # Verified by: supabase/tests/booking_capacity.test.sql
   Scenario: Back-to-back stays are allowed

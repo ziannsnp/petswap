@@ -30,8 +30,8 @@ jobs:
       run:
         working-directory: web
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -55,7 +55,7 @@ jobs:
   docs-links:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Verify documentation links resolve
         shell: python
         run: |
@@ -92,7 +92,7 @@ jobs:
   repo-checks:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Every acceptance scenario names an existing test
         run: bash scripts/check-acceptance-traceability.sh
       - name: Every e2e spec is run by a workflow, and SQL tests run by glob
@@ -110,8 +110,8 @@ jobs:
     outputs:
       supabase: ${{ steps.filter.outputs.supabase }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v3
+      - uses: actions/checkout@v7
+      - uses: dorny/paths-filter@v4
         id: filter
         with:
           filters: |
@@ -129,7 +129,7 @@ jobs:
     if: github.event_name == 'push' && needs.changes.outputs.supabase == 'true'
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Use the CLI version that local `npx supabase` gets from web/package-lock.json,
       # so CI only moves to a new release (such as v3) when the team upgrades it.
@@ -144,7 +144,7 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Setup Supabase CLI
-        uses: supabase/setup-cli@v1
+        uses: supabase/setup-cli@v3
         with:
           version: ${{ steps.supabase-cli.outputs.version }}
 

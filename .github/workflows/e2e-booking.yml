@@ -32,16 +32,16 @@ jobs:
     name: Booking journeys against local Supabase
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: web/package-lock.json
 
       - name: Set up Supabase CLI
-        uses: supabase/setup-cli@v1
+        uses: supabase/setup-cli@v3
         with:
           version: 2.117.0 # keep in step with web/package-lock.json; "latest" calls the rate-limited GitHub API
 
@@ -85,7 +85,7 @@ jobs:
           PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-report-navbar
         run: npx playwright test e2e/navbar-account-menu.spec.ts --workers=1
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: ${{ !cancelled() }}
         with:
           name: playwright-booking-report

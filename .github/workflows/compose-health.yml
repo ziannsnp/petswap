@@ -31,7 +31,7 @@ jobs:
     name: Build the Compose stack and check it
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Write .env with generated secrets
         run: sh scripts/stack-env.sh

@@ -7,6 +7,7 @@ import { todayIsoDate } from '../lib/bookingRequestForm';
 import { canCancelBooking, canCompleteBooking, canConfirmBooking } from '../lib/bookingRules';
 import type { BookingWithDetails } from '../lib/bookingApi';
 import type { Database } from '@/shared/types/database.types';
+import { CancelBookingDialog } from './CancelBookingDialog';
 
 type BookingStatus = Database['public']['Enums']['booking_status'];
 
@@ -39,7 +40,7 @@ interface BookingCardProps {
   readonly variant: 'incoming' | 'outgoing';
   readonly onConfirm?: (bookingId: string) => void;
   readonly onDecline?: (bookingId: string) => void;
-  readonly onCancel?: (bookingId: string) => void;
+  readonly onCancel?: (booking: BookingWithDetails) => void;
   readonly onComplete?: (bookingId: string) => void;
   readonly today: string;
   readonly isResponding?: boolean;
@@ -124,7 +125,7 @@ function BookingCard({
             <button
               type="button"
               className="btn-secondary"
-              onClick={() => onCancel?.(booking.id)}
+              onClick={() => onCancel?.(booking)}
               disabled={isResponding}
             >
               {isResponding ? 'Saving...' : 'Cancel booking'}
@@ -189,7 +190,7 @@ interface BookingSectionProps {
   readonly variant: 'incoming' | 'outgoing';
   readonly onConfirm?: (bookingId: string) => void;
   readonly onDecline?: (bookingId: string) => void;
-  readonly onCancel?: (bookingId: string) => void;
+  readonly onCancel?: (booking: BookingWithDetails) => void;
   readonly onComplete?: (bookingId: string) => void;
   readonly today: string;
   readonly respondingId?: string | null;
@@ -256,6 +257,7 @@ export function BookingsScreen() {
   const updateStatus = useUpdateBookingStatus();
   const [respondingId, setRespondingId] = useState<string | null>(null);
   const [responseError, setResponseError] = useState<{ bookingId: string; message: string } | null>(null);
+  const [cancellationBooking, setCancellationBooking] = useState<BookingWithDetails | null>(null);
   const today = todayIsoDate();
 
   const noRelatedBookings =
@@ -291,7 +293,7 @@ export function BookingsScreen() {
             emptyMessage="You haven't sent any requests yet"
             query={outgoing}
             variant="outgoing"
-            onCancel={(bookingId) => void changeStatus(bookingId, 'cancelled')}
+            onCancel={setCancellationBooking}
             today={today}
             respondingId={respondingId}
             responseError={responseError}
@@ -309,6 +311,14 @@ export function BookingsScreen() {
             responseError={responseError}
           />
         </>
+      )}
+      {cancellationBooking && (
+        <CancelBookingDialog
+          booking={cancellationBooking}
+          isOpen
+          onClose={() => setCancellationBooking(null)}
+          onConfirm={() => changeStatus(cancellationBooking.id, 'cancelled')}
+        />
       )}
     </main>
   );

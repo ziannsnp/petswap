@@ -15,17 +15,50 @@ insert into public.listings (
   ('3f000000-0000-4000-8000-000000000005', '10000000-0000-4000-8000-000000000001',
    'Filter fixture private', 'Filter City', 'Filter fixture', 50, array['cat']::public.pet_species[], 'draft', null),
   ('3f000000-0000-4000-8000-000000000006', '10000000-0000-4000-8000-000000000001',
-   'Filter fixture deleted', 'Filter City', 'Filter fixture', 50, array['cat']::public.pet_species[], 'deleted', now());
+   'Filter fixture deleted', 'Filter City', 'Filter fixture', 50, array['cat']::public.pet_species[], 'deleted', now()),
+  -- Remaining-capacity cases (ADR 0011) live in their own city so the counts above stay put.
+  ('3f000000-0000-4000-8000-000000000007', '10000000-0000-4000-8000-000000000001',
+   'Capacity fixture back-to-back', 'Capacity City', 'Capacity fixture', 2, array['dog']::public.pet_species[], 'published', null),
+  ('3f000000-0000-4000-8000-000000000008', '10000000-0000-4000-8000-000000000001',
+   'Capacity fixture peak', 'Capacity City', 'Capacity fixture', 2, array['dog']::public.pet_species[], 'published', null);
 
 -- Construct every status directly; request/status-transition behaviour is covered
 -- separately. CHECK and exclusion constraints remain enabled under replica.
 set local session_replication_role = replica;
+
+-- Casey's own dogs, so no seed stay can overlap them (a pet cannot hold two overlapping
+-- confirmed bookings, whatever the listing).
+insert into public.pets (id, owner_id, name, species)
+select ('2f000000-0000-4000-8000-0000000000' || lpad(n::text, 2, '0'))::uuid,
+       '10000000-0000-4000-8000-000000000003', 'Search pet ' || n, 'dog'
+from generate_series(1, 5) as n;
+
+-- Alpha (capacity 2) is full on 10-15 Dec with two pets; gamma (capacity 5) is full on
+-- 20-25 Dec with five. One stay on a capacity-2 or capacity-5 listing would leave it open.
 insert into public.bookings (listing_id, pet_id, requester_id, status, start_date, end_date)
 values
   ('3f000000-0000-4000-8000-000000000001', '20000000-0000-4000-8000-000000000003',
    '10000000-0000-4000-8000-000000000002', 'confirmed', '2026-12-10', '2026-12-15'),
-  ('3f000000-0000-4000-8000-000000000003', '20000000-0000-4000-8000-000000000003',
-   '10000000-0000-4000-8000-000000000002', 'confirmed', '2026-12-20', '2026-12-25');
+  ('3f000000-0000-4000-8000-000000000001', '2f000000-0000-4000-8000-000000000001',
+   '10000000-0000-4000-8000-000000000003', 'confirmed', '2026-12-10', '2026-12-15');
+insert into public.bookings (listing_id, pet_id, requester_id, status, start_date, end_date)
+select '3f000000-0000-4000-8000-000000000003',
+       ('2f000000-0000-4000-8000-0000000000' || lpad(n::text, 2, '0'))::uuid,
+       '10000000-0000-4000-8000-000000000003', 'confirmed', '2026-12-20', '2026-12-25'
+from generate_series(1, 5) as n;
+
+-- Capacity 2, A [1,3) and B [3,5) January: peak 1, though both touch [1,5).
+-- Capacity 2, C [1,4) and D [3,6): both stay on the night of the 3rd, so it is full.
+insert into public.bookings (listing_id, pet_id, requester_id, status, start_date, end_date)
+values
+  ('3f000000-0000-4000-8000-000000000007', '2f000000-0000-4000-8000-000000000002',
+   '10000000-0000-4000-8000-000000000003', 'confirmed', '2027-01-01', '2027-01-03'),
+  ('3f000000-0000-4000-8000-000000000007', '2f000000-0000-4000-8000-000000000002',
+   '10000000-0000-4000-8000-000000000003', 'confirmed', '2027-01-03', '2027-01-05'),
+  ('3f000000-0000-4000-8000-000000000008', '2f000000-0000-4000-8000-000000000003',
+   '10000000-0000-4000-8000-000000000003', 'confirmed', '2027-01-01', '2027-01-04'),
+  ('3f000000-0000-4000-8000-000000000008', '2f000000-0000-4000-8000-000000000004',
+   '10000000-0000-4000-8000-000000000003', 'confirmed', '2027-01-03', '2027-01-06');
 insert into public.bookings (listing_id, pet_id, requester_id, status, start_date, end_date)
 select '3f000000-0000-4000-8000-000000000002', '20000000-0000-4000-8000-000000000003',
   '10000000-0000-4000-8000-000000000002', booking_status::public.booking_status, '2026-12-10', '2026-12-15'
@@ -149,6 +182,36 @@ begin
     or exists (select 1 from public.search_published_listings('Filter City', '', 1, 24, 'newest', 'cat', 11)) then
     raise exception 'unmatched pet or capacity must return no rows';
   end if;
+
+  -- Remaining capacity (ADR 0011): a listing stays available while a place is free on
+  -- every night of the range; only a night at capacity hides it.
+  for window_start, window_end, ids in
+    select * from (values
+      -- back-to-back listing: peak 1 of 2 across the whole month, never full
+      (date '2027-01-01', date '2027-01-05', array['3f000000-0000-4000-8000-000000000007'::uuid]),
+      (date '2027-01-03', date '2027-01-04', array['3f000000-0000-4000-8000-000000000007'::uuid]),
+      -- peak listing: before, after, and ending the day it fills
+      (date '2027-01-01', date '2027-01-03', array['3f000000-0000-4000-8000-000000000007'::uuid, '3f000000-0000-4000-8000-000000000008'::uuid]),
+      (date '2027-01-04', date '2027-01-06', array['3f000000-0000-4000-8000-000000000007'::uuid, '3f000000-0000-4000-8000-000000000008'::uuid]),
+      -- the full night 3 Jan hides the peak listing for any range that includes it
+      (date '2027-01-02', date '2027-01-04', array['3f000000-0000-4000-8000-000000000007'::uuid]),
+      (date '2027-01-03', date '2027-01-04', array['3f000000-0000-4000-8000-000000000007'::uuid]),
+      (date '2027-01-01', date '2027-01-08', array['3f000000-0000-4000-8000-000000000007'::uuid])
+    ) as cases(start_date, end_date, expected)
+  loop
+    declare found uuid[];
+    begin
+      select array_agg(listing.id order by listing.id) into found
+      from public.search_published_listings('Capacity City', '', 1, 24, 'newest', null, null, window_start, window_end) as listing;
+      if found is distinct from (select array_agg(id order by id) from unnest(ids) as id) then
+        raise exception 'remaining capacity failed for % to %: got %, wanted %', window_start, window_end, found, ids;
+      end if;
+    end;
+  end loop;
+  -- The date filter shrinks the total, not just the page (all filters precede count and slice).
+  select min(total_count) into row_total
+  from public.search_published_listings('Capacity City', '', 1, 1, 'newest', null, null, '2027-01-02', '2027-01-04');
+  if row_total <> 1 then raise exception 'total_count ignored remaining capacity: %', row_total; end if;
 
   foreach invalid_query in array array[
     $q$select * from public.search_published_listings('', '', 1, 9, 'newest', null, 0)$q$,

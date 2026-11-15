@@ -15,10 +15,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      # Needs the repository's Dependency graph (Settings > Code security), which only an admin
-      # can enable. Until it is on, the action reports "not supported" instead of reviewing, so
-      # the step must not turn every pull request red. Remove continue-on-error once it is on.
+      # Needs the repository's Dependency graph (Settings > Code security), which is on. If it
+      # is ever turned off, this step fails with "not supported" on every pull request.
       - uses: actions/dependency-review-action@v4
-        continue-on-error: true
         with:
           fail-on-severity: high

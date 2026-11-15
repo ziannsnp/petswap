@@ -131,6 +131,7 @@ The booking capacity and pet-overlap rules (ADR 0011) are verified at every leve
 
 - Jest covers the pure `getBookingConflict()` / `hasBookingConflict()` helpers and the mapping of the database's refusals in `bookingApi.ts` (`PBC01` → `BookingListingFullError`, `PBP01` → `BookingPetUnavailableError`, neither passing on the raw error).
 - Postgres decides: the `hold_booking_availability` trigger checks peak occupancy and pet overlap under a listing-then-pet row lock on every confirmation, and `guard_listing_capacity` refuses capacity cuts below an upcoming night's confirmed peak. `booking_capacity.test.sql` exercises them as real actors, `booking_concurrency.test.py` races two sessions, and `booking_rules.test.sql` covers the `bookings_no_confirmed_pet_overlap` backstop that holds even with triggers off.
+- `booking_cancellation_release.test.sql` proves that cancelling a confirmed stay releases both its listing place and its pet, so a pending request refused only because of that stay can then be confirmed.
 
 Playwright is wired up: [`web/playwright.config.ts`](../web/playwright.config.ts) starts `npm run dev` and runs `web/e2e/` on desktop and mobile Chromium, and desktop Firefox. `e2e/smoke.spec.ts` covers the public shell (no auth or Supabase needed) and runs on every `web/**` change via the non-required [`e2e-smoke.yml`](ci-cd.md#e2e-smoke-workflow) workflow.
 

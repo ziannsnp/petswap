@@ -14,9 +14,9 @@ jobs:
   dependency-review:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # Needs the repository's Dependency graph (Settings > Code security), which is on. If it
       # is ever turned off, this step fails with "not supported" on every pull request.
-      - uses: actions/dependency-review-action@v4
+      - uses: actions/dependency-review-action@v5
         with:
           fail-on-severity: high

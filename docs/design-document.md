@@ -17,9 +17,9 @@
 | Sornchon Srichoonim | 6731350621 | C | 0.0% (0 lines) |
 | Kittichot Uaypornchaikul | 6730040921 | C | 20.4% (410 lines) |
 | Pisitpong Duangkaeo | 6730379721 | C | 0.0% (0 lines) |
-| Kasidech Aewsrisakul | 6730023221 | D | 64.1% (1290 lines) |
+| Kasidech Aewsrisakul (leader) | 6730023221 | D | 64.1% (1290 lines) |
 
-Contribution is measured from git: lines added or removed by each author in this document, the API specification (`docs/api/`), `docs/architecture.md`, and the ADRs, up to the commit that produced this PDF. Team leader: **(to be filled in)**.
+Contribution is measured from git: lines added or removed by each author in this document, the API specification (`docs/api/`), `docs/architecture.md`, and the ADRs, up to the commit that produced this PDF. Team leader: **Kasidech Aewsrisakul** (6730023221).
 <!-- /cover-page -->
 
 Software design document for **Don't Like My Pets (PetSwap)**, prepared for the Software Engineering final presentation (2110423). It is the single place that collects the diagrams the course taught: use case, activity, structural (ER), behavioural (sequence, state), component, and deployment diagrams, plus the quality metrics for coupling and cohesion.

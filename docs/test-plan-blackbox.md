@@ -17,9 +17,9 @@
 | Sornchon Srichoonim | 6731350621 | C | 8.3% (258 lines) |
 | Kittichot Uaypornchaikul | 6730040921 | C | 22.7% (703 lines) |
 | Pisitpong Duangkaeo | 6730379721 | C | 9.9% (305 lines) |
-| Kasidech Aewsrisakul | 6730023221 | D | 40.6% (1254 lines) |
+| Kasidech Aewsrisakul (leader) | 6730023221 | D | 40.6% (1254 lines) |
 
-Contribution is measured from git: lines added or removed by each author in this plan, [test-plan.md](test-plan.md), [testing.md](testing.md), the acceptance scenarios, the QA evidence in `docs/qa/`, and the Playwright specs in `web/e2e/`, up to the commit that produced this PDF. Team leader: **(to be filled in)**.
+Contribution is measured from git: lines added or removed by each author in this plan, [test-plan.md](test-plan.md), [testing.md](testing.md), the acceptance scenarios, the QA evidence in `docs/qa/`, and the Playwright specs in `web/e2e/`, up to the commit that produced this PDF. Team leader: **Kasidech Aewsrisakul** (6730023221).
 <!-- /cover-page -->
 
 This is the course's black-box test plan: two EPICs, four user stories from each, input equivalence classes for every story, test cases that cover every class, and a coverage matrix. The overall strategy (test levels, environments, entry and exit criteria, risks) is in [test-plan.md](test-plan.md); this document does not repeat it.

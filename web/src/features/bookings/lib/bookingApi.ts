@@ -91,7 +91,32 @@ export async function listOutgoingBookings(): Promise<BookingWithDetails[]> {
     throw error;
   }
 
-  return data ?? [];
+  // The generated types call the embedded listing non-null, but listings RLS shows a requester only
+  // published listings. After the host unpublishes or deletes one, its bookings come back with
+  // `listing: null`, and the list used to crash reading its title.
+  const rows = (data ?? []) as ReadonlyArray<Omit<BookingWithDetails, 'listing'> & { listing: BookingListingSummary | null }>;
+
+  return Promise.all(rows.map(async (row) => ({
+    ...row,
+    listing: row.listing ?? await hiddenListingSummary(row.id, row.listing_id),
+  })));
+}
+
+/** Title shown when a booked listing can no longer be read at all. */
+export const UNAVAILABLE_LISTING_TITLE = 'Listing no longer available';
+
+/**
+ * A booking's participants keep its history after the listing is unpublished or deleted
+ * (get_booking_detail returns the listing's title for any status), so the list shows the same
+ * title the detail page does. If even that fails, it says the listing is unavailable.
+ */
+async function hiddenListingSummary(bookingId: string, listingId: string): Promise<BookingListingSummary> {
+  try {
+    const { listing } = await getBookingDetail(bookingId);
+    return { id: listing.id, title: listing.title, location: listing.location };
+  } catch {
+    return { id: listingId, title: UNAVAILABLE_LISTING_TITLE, location: '' };
+  }
 }
 
 /** Bookings made against listings the current user owns, regardless of who requested them. */

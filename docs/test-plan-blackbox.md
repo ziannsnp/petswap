@@ -121,7 +121,7 @@ Inputs: the actor (listing owner or someone else), the action (confirm or declin
 | TC-6.4-01 | Alex confirms Casey's pending `[D+5, D+8)` | Status **Confirmed** for both users | CI-E2E `booking-flow.spec.ts`: Confirmed on all 3 browsers | EC-6.4-1 | P |
 | TC-6.4-02 | Alex declines a pending request | Status **Declined** | CI-E2E `booking-lifecycle.spec.ts` "a listing owner declines a pending request" | EC-6.4-2 | P |
 | TC-6.4-03 | Casey (requester) or Blair (outsider) sends confirm for that booking | Refused by the database; status unchanged | SQL `booking_lifecycle.test.sql` (requester and outsider cannot confirm or decline); the UI offers no button | EC-6.4-3 | P |
-| TC-6.4-04 | Booking cancelled in another tab, then Alex presses Confirm on the stale screen | "This booking was changed by someone else, so that action no longer applies. It has been refreshed." | CI-E2E `booking-detail-journey.spec.ts` "a stale confirmation is refused…": **the confirmation was refused, but the message was "Could not update this booking. Please try again."** on all 3 browsers. Cause: once cancelled, the row no longer matches the host's UPDATE policy, so the update matches no row (`PGRST116`) instead of raising the transition error the adapter maps. Defect D-1, see §6 | EC-6.4-4 | F |
+| TC-6.4-04 | Booking cancelled in another tab, then Alex presses Confirm on the stale screen | "This booking was changed by someone else, so that action no longer applies. It has been refreshed." | CI-E2E `booking-detail-journey.spec.ts` "a stale confirmation is refused…": **the confirmation was refused, but the message was "Could not update this booking. Please try again."** on all 3 browsers. Cause: once cancelled, the row no longer matches the host's UPDATE policy, so the update matches no row (`PGRST116`) instead of raising the transition error the adapter maps. Defect D-1, see §6. Re-test after the fix (PR #138, run 43824259552): passed | EC-6.4-4 | F, then P after fix |
 | TC-6.4-05 | Pending request whose start date was yesterday | Confirm is not offered; a direct update is refused | SQL `booking_transition_rules.test.sql`; JEST `canConfirmBooking` | EC-6.4-5 | P |
 | TC-6.4-06 | As TC-6.2-02 | Refused with the listing-full message | See TC-6.2-02 | EC-6.4-6 | P |
 
@@ -257,7 +257,7 @@ Inputs: the action (unpublish, delete), the owner's answer in the confirmation d
 | --- | --- | --- | --- |
 | US-6.1 | TC-6.1-01 … TC-6.1-08 | EC-6.1-1 … 8 (all) | P, P, P, P, P, P, P, P |
 | US-6.2 | TC-6.2-01 … TC-6.2-05 | EC-6.2-1 … 5 (all) | P, P, P, P, P |
-| US-6.4 | TC-6.4-01 … TC-6.4-06 | EC-6.4-1 … 6 (all) | P, P, P, F, P, P |
+| US-6.4 | TC-6.4-01 … TC-6.4-06 | EC-6.4-1 … 6 (all) | P, P, P, F→P (re-test after D-1 fix), P, P |
 | US-6.5 | TC-6.5-01 … TC-6.5-05 | EC-6.5-1 … 5 (all) | P, P, P, P, P |
 | US-4.1 | TC-4.1-01 … TC-4.1-12 | EC-4.1-1 … 12 (all) | P × 12 |
 | US-4.2 | TC-4.2-01 … TC-4.2-05 | EC-4.2-1 … 5 (all) | P × 5 |
@@ -295,7 +295,7 @@ npx playwright test -c playwright.demo.config.ts \
 npx playwright show-report
 ```
 
-Latest run: [E2E booking 43822524478](https://github.com/ziannsnp/petswap/actions/runs/43822524478) on `main`, 16 November 2026: 29 passed, 4 failed, 2 skipped by design (the seeded finished stay can be completed only once, so that test runs on desktop Chromium only). The 4 failures are the two defects in section 6.
+Latest run: [E2E booking 43822524478](https://github.com/ziannsnp/petswap/actions/runs/43822524478) on `main`, 16 November 2026: 29 passed, 4 failed, 2 skipped by design (the seeded finished stay can be completed only once, so that test runs on desktop Chromium only). The 4 failures are the two defects in section 6; both were fixed in PR #138, whose E2E booking run (43824259552) passed.
 
 ### 5.3 Unit testing one backend function with Jest: 100% statement coverage
 
@@ -321,5 +321,5 @@ Its test cases are themselves partitioned: invalid windows and capacities (throw
 
 | ID | Found by | Defect | Severity | Status |
 | --- | --- | --- | --- | --- |
-| D-1 | TC-6.4-04, all 3 browsers | A host who confirms a request the requester has just cancelled sees the generic "Could not update this booking. Please try again." instead of "This booking was changed by someone else…". The database correctly refuses the change; only the message is wrong. Root cause: the host's RLS update policy matches only pending or confirmed rows, so the update matches no row and PostgREST returns `PGRST116`, which `updateBookingStatus()` does not map. | Low: no wrong data, a misleading message | Open, fix in progress |
-| D-2 | `booking-lifecycle.spec.ts` "a listing owner marks a finished confirmed booking completed", desktop Chromium | A test defect, not a product defect. The owner-side assertion does not wait for the detail page, so it can still see the bookings list, which now holds two completed stays (the seed gained one in PR #129), and the locator matches both. The product steps before it (complete, no actions left, requester detail) passed. | Low: test only | Open, fix in progress |
+| D-1 | TC-6.4-04, all 3 browsers | A host who confirms a request the requester has just cancelled sees the generic "Could not update this booking. Please try again." instead of "This booking was changed by someone else…". The database correctly refuses the change; only the message is wrong. Root cause: the host's RLS update policy matches only pending or confirmed rows, so the update matches no row and PostgREST returns `PGRST116`, which `updateBookingStatus()` does not map. | Low: no wrong data, a misleading message | **Fixed** in PR #138: `PGRST116` now maps to the stale-booking message; E2E booking passed on the PR (run 43824259552) |
+| D-2 | `booking-lifecycle.spec.ts` "a listing owner marks a finished confirmed booking completed", desktop Chromium | A test defect, not a product defect. The owner-side assertion does not wait for the detail page, so it can still see the bookings list, which now holds two completed stays (the seed gained one in PR #129), and the locator matches both. The product steps before it (complete, no actions left, requester detail) passed. | Low: test only | **Fixed** in PR #138: the test waits for the detail page; E2E booking passed on the PR (run 43824259552) |

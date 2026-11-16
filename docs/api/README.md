@@ -29,7 +29,7 @@ docker run --rm -p 8081:8080 -e SWAGGER_JSON=/spec/openapi.yaml -v "$PWD/docs/ap
 
 then open <http://localhost:8081>. Or paste the raw file into <https://editor.swagger.io> (it is not sent anywhere you do not choose; the spec contains no secrets, only the public project URL and the public key description).
 
-The `Quality` workflow lints the file with Redocly on every pull request, so it cannot silently stop being valid OpenAPI.
+The `Quality` workflow validates the file with `openapi-spec-validator` on every pull request, so it cannot silently stop being valid OpenAPI.
 
 ## Keeping it true
 

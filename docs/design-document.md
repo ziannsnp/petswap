@@ -1,5 +1,18 @@
 # Design document
 
+<!-- cover-page -->
+**Project:** Don't Like My Pets (PetSwap), a pet-sitting marketplace
+**Course:** 2110423 Software Engineering, first semester 2026
+**Document date:** 16 November 2026
+**Repository:** [github.com/ziannsnp/petswap](https://github.com/ziannsnp/petswap)
+
+| Author | Student ID | Squad | Contribution to this document |
+| --- | --- | --- | --- |
+CONTRIBUTION_TABLE_DESIGN
+
+Contribution is measured from git: lines added or removed by each author in this document, the API specification (`docs/api/`), `docs/architecture.md`, and the ADRs, up to the commit that produced this PDF. Leader: LEADER_PLACEHOLDER.
+<!-- /cover-page -->
+
 Software design document for **Don't Like My Pets (PetSwap)**, prepared for the Software Engineering final presentation (2110423). It is the single place that collects the diagrams the course taught: use case, activity, structural (ER), behavioural (sequence, state), component, and deployment diagrams, plus the quality metrics for coupling and cohesion.
 
 Every diagram is [Mermaid](https://mermaid.js.org/), so GitHub renders it and a change to the code can change the diagram in the same pull request. Requirements are in [requirements.md](requirements.md), the module rules in [architecture.md](architecture.md), and the reasons behind the big choices in the [ADRs](decisions/README.md). This document does not repeat them; it draws them.
@@ -66,8 +79,8 @@ flowchart TD
     G -- yes --> H[Booking is Pending]
     H --> I{Host decides}
     I -- decline --> J[Declined]
-    I -- confirm --> K{Overlaps a confirmed<br/>booking on this listing?}
-    K -- yes --> L[Database rejects confirm<br/>host sees an error]
+    I -- confirm --> K{Pet already confirmed elsewhere<br/>for these nights, or any night<br/>above listing capacity?}
+    K -- yes --> L[Database refuses confirm<br/>PBP01 pet booked / PBC01 listing full<br/>request stays Pending]
     K -- no --> M[Confirmed]
     H --> N{Requester cancels?}
     M --> N
@@ -195,7 +208,8 @@ classDiagram
     }
     class BookingRules {
         <<utility>>
-        +hasBookingConflict(window, existing) bool
+        +getBookingConflict(candidate, existing, capacity) listing_full | pet_booked | null
+        +hasBookingConflict(candidate, existing, capacity) bool
         +isValidBookingTransition(from, to) bool
         +canCompleteBooking(booking, today) bool
         +canConfirmBooking(booking, today) bool
@@ -215,7 +229,8 @@ Design patterns in use: the **adapter** (each feature's `lib/*Api.ts` hides Supa
 Key constraints that are part of the design, not implementation detail:
 
 - `bookings_valid_window_check`: `start_date < end_date`.
-- `bookings_no_confirmed_overlap`: a Postgres exclusion constraint (`gist`, `daterange(start_date, end_date, '[)')`) on confirmed bookings of the same listing. This is the double-booking rule, enforced even if the browser is bypassed.
+- Capacity by peak nightly occupancy ([ADR 0011](decisions/0011-capacity-based-booking-availability.md)): the `hold_booking_availability` trigger (`guard_booking_availability()`) locks the listing and pet rows, then refuses a confirmation when the pet already has an overlapping confirmed stay on any listing (`PBP01`) or when any night of the window would exceed the listing's capacity (`PBC01`, counted by `confirmed_booking_peak()`). `guard_listing_capacity` refuses lowering a capacity below a current or future peak. This replaced the Sprint 2 listing-wide `bookings_no_confirmed_overlap` exclusion constraint; a per-pet exclusion constraint remains as a backstop. Enforced even if the browser is bypassed.
+- `booking_today()` pins "today" to the UTC day, so the browser and the database agree on which day a stay starts and ends.
 - `pets.id` is referenced with `on delete restrict`, and pets are soft-deleted so past bookings still show them.
 
 ## 5. Behavioural model
@@ -281,30 +296,53 @@ sequenceDiagram
     end
 ```
 
-### 5.4 Sequence diagram: host confirms (double-booking protection)
+### 5.4 Sequence diagram: host confirms (capacity and pet-overlap protection)
+
+This is the use case presented in the final review. It shows the API call from the UML API diagram (section 6.3) end to end, and why the browser's check is only advisory.
 
 ```mermaid
 sequenceDiagram
     actor Host
-    participant UI as BookingsScreen
-    participant API as bookingApi
+    participant UI as BookingsScreen / BookingDetailScreen
+    participant Hook as useUpdateBookingStatus
+    participant API as bookingApi.updateBookingStatus
+    participant REST as Supabase PostgREST<br/>PATCH /rest/v1/bookings
     participant DB as Postgres
 
-    Host->>UI: Confirm pending request
-    UI->>API: updateBookingStatus(id, confirmed)
-    API->>DB: UPDATE bookings SET status = confirmed
-    DB->>DB: trigger: actor is listing owner, transition allowed
-    DB->>DB: exclusion constraint: no confirmed overlap on listing
-    alt no overlap
-        DB-->>API: updated row, confirmed_at set
-        API-->>UI: ok
+    Host->>UI: Confirm a pending request
+    UI->>UI: canConfirmBooking(booking, utcToday)
+    UI->>Hook: mutate(id, confirmed)
+    Hook->>API: updateBookingStatus(id, confirmed)
+    API->>REST: PATCH status=confirmed (user JWT)
+    REST->>DB: UPDATE bookings as authenticated
+    DB->>DB: RLS: caller is a participant
+    DB->>DB: guard_booking_change: caller owns the listing,<br/>pending to confirmed, start date not passed
+    DB->>DB: hold_booking_availability: lock listing and pet rows
+    alt pet confirmed elsewhere on an overlapping night
+        DB-->>REST: error PBP01
+        REST-->>API: error
+        API-->>Hook: BookingPetUnavailableError
+        Hook->>Hook: refetch incoming, outgoing, detail, search
+        Hook-->>UI: error
+        UI-->>Host: "This pet already has a confirmed booking<br/>for some of these dates"
+    else some night would exceed listing capacity
+        DB-->>REST: error PBC01
+        REST-->>API: error
+        API-->>Hook: BookingListingFullError
+        Hook->>Hook: refetch the same queries
+        Hook-->>UI: error
+        UI-->>Host: "This listing is full for some of these dates"
+    else fits
+        DB-->>REST: row, status confirmed, confirmed_at set
+        REST-->>API: booking
+        API-->>Hook: booking
+        Hook->>Hook: invalidate bookings and search caches
+        Hook-->>UI: success
         UI-->>Host: shown as Confirmed
-    else overlap with another confirmed booking
-        DB-->>API: constraint violation
-        API-->>UI: mapped error
-        UI-->>Host: "dates already taken"
     end
 ```
+
+Two hosts confirming at the same moment cannot both win: the row locks serialize them, so the second sees the first's confirmed stay when it counts the peak (tested in `supabase/tests/booking_concurrency.test.py`).
 
 ### 5.5 Sequence diagram: sign in with username
 
@@ -374,6 +412,157 @@ flowchart LR
     app[app/router.tsx] --> auth & bookings & consent & listings & pets & profiles & search
 ```
 
+### 6.3 UML API diagram
+
+PetSwap has no application server of its own, so its API is the Supabase API the browser calls: REST resources over the tables, RPC functions for operations that need more than one table or must hide private rows, and one Edge Function. The diagram models each endpoint group as an interface (its operations are the HTTP calls, named by `operationId` from [api/openapi.yaml](api/openapi.yaml)), the web adapters that are the only callers, and the database rules each call passes through. Parameters and responses are abbreviated; the OpenAPI file is the full contract.
+
+```mermaid
+classDiagram
+    direction LR
+
+    class SignInFunction {
+        <<interface>>
+        POST /functions/v1/sign-in
+        +signInWithUsername(username, password) Session
+    }
+    class BookingsResource {
+        <<interface>>
+        /rest/v1/bookings
+        +listBookings(filter) Booking[]
+        +createBookingRequest(listing_id, pet_id, start_date, end_date) Booking
+        +updateBookingStatus(id, status) Booking
+    }
+    class ListingsResource {
+        <<interface>>
+        /rest/v1/listings
+        +listListings(owner_id) Listing[]
+        +createListing(title, location, capacity, accepted_pet_types, ...) Listing
+    }
+    class PetsResource {
+        <<interface>>
+        /rest/v1/pets
+        +listPets() Pet[]
+        +createPet(name, species, care fields) Pet
+        +updatePet(id, fields) Pet
+    }
+    class ProfilesResource {
+        <<interface>>
+        /rest/v1/profiles
+        +getProfile(id) Profile
+        +updateProfile(id, fields) Profile
+    }
+    class SearchRpc {
+        <<interface>>
+        /rest/v1/rpc
+        +searchPublishedListings(location, keyword, pet_type, min_capacity, start_date, end_date, sort, page) ListingPage
+        +getListingHost(listing_id) HostSummary
+        +isUsernameAvailable(username) bool
+    }
+    class BookingDetailRpc {
+        <<interface>>
+        /rest/v1/rpc
+        +getBookingDetail(booking_id) BookingDetail
+    }
+    class ListingWriteRpc {
+        <<interface>>
+        /rest/v1/rpc
+        +updateListingWithImages(listing_id, fields, images) Listing
+        +deleteListing(listing_id) void
+        +deletePet(pet_id) void
+    }
+
+    class authApi {
+        <<adapter: features/auth>>
+    }
+    class bookingApi {
+        <<adapter: features/bookings>>
+        +createBookingRequest()
+        +updateBookingStatus()
+        +getBookingDetail()
+        +listIncomingBookings()
+        +listOutgoingBookings()
+    }
+    class listingApi {
+        <<adapter: features/listings>>
+        +searchPublishedListings()
+        +createListing()
+        +updateListing()
+        +deleteListing()
+    }
+    class petApi {
+        <<adapter: features/pets>>
+    }
+    class profileApi {
+        <<adapter: features/profiles>>
+    }
+
+    class DatabaseRules {
+        <<Postgres>>
+        RLS policies per table
+        guard_booking_change()
+        hold_booking_availability()
+        guard_listing_capacity()
+        booking_today() UTC
+    }
+    class BookingErrors {
+        <<mapping>>
+        PBC01 to BookingListingFullError
+        PBP01 to BookingPetUnavailableError
+        P0001 to date, status and duplicate errors
+    }
+
+    authApi ..> SignInFunction : calls
+    authApi ..> SearchRpc : isUsernameAvailable
+    bookingApi ..> BookingsResource : calls
+    bookingApi ..> BookingDetailRpc : calls
+    bookingApi ..> BookingErrors : maps errors
+    listingApi ..> ListingsResource : calls
+    listingApi ..> SearchRpc : calls
+    listingApi ..> ListingWriteRpc : calls
+    petApi ..> PetsResource : calls
+    petApi ..> ListingWriteRpc : deletePet
+    profileApi ..> ProfilesResource : calls
+    BookingsResource ..> DatabaseRules : enforced by
+    ListingsResource ..> DatabaseRules : enforced by
+    PetsResource ..> DatabaseRules : enforced by
+    ProfilesResource ..> DatabaseRules : enforced by
+    SearchRpc ..> DatabaseRules : security definer, empty search_path
+    BookingDetailRpc ..> DatabaseRules : participants only
+    ListingWriteRpc ..> DatabaseRules : owner only
+```
+
+Access rule per endpoint group (who the database lets through, not what the UI shows):
+
+| Endpoint group | Caller | Rule |
+| --- | --- | --- |
+| `sign-in` Edge Function | anyone, from an allowed origin | resolves a username to its account and signs in; errors are generic so it cannot be used to discover accounts |
+| `bookings` | signed-in user | RLS: only the requester and the listing owner see a booking; the triggers decide who may change it and to what |
+| `listings`, `pets`, `profiles` | owner (published listings are public) | RLS: write only your own rows |
+| `search_published_listings`, `get_listing_host` | anyone | `security definer`; returns published listings and aggregate availability only, never other people's bookings ([ADR 0010](decisions/0010-listing-search-availability-privacy.md)) |
+| `get_booking_detail` | signed-in participant | `security definer`; zero rows for anyone else; returns the peer's display name, photo and location, never email or phone |
+| `update_listing_with_images`, delete RPCs | owner | one transaction; delete is refused while a pending or confirmed booking exists |
+
+### 6.4 Design quality of the API
+
+**Reusability.** Each endpoint is reached through exactly one adapter function (`bookingApi.updateBookingStatus`, `listingApi.searchPublishedListings`, and so on), so screens, hooks, and Playwright fixtures reuse the same call instead of building requests. The booking rules exist once as pure functions (`getBookingConflict`, `isValidBookingTransition`, `canConfirmBooking`) used by the list screen, the detail screen, and the tests; the database repeats them as the authority. `search_published_listings` serves both the plain search and the date-filtered search with optional parameters rather than a second endpoint. Error mapping (`bookingErrors.ts`) turns database codes into typed errors once, for every caller.
+
+**Maintainability.** The contract is written down in OpenAPI 3.0 and validated in CI (`openapi-spec-validator` in the Quality workflow), and AGENTS.md requires a change to an RPC, policy, or column to update `openapi.yaml` in the same pull request. Business rules live behind stable names (`PBC01`, `PBP01`, typed error classes), so the capacity rule changed in Sprint 3 (ADR 0011) without changing any screen's call. Features only see each other through `index.ts`, which ESLint enforces. Every rule has a test at the level that owns it: Jest for the pure functions, SQL contract tests for policies and triggers, Playwright for the journeys.
+
+**Scalability.** The browser talks straight to PostgREST, so there is no application server to scale; the static app is served from Cloudflare's edge and Supabase scales the database tier. Search is paginated (9 per page) and filters, counts, and sorts in one SQL query before paging, so a page costs the same however many listings exist; an index on confirmed bookings by listing and window (`bookings_confirmed_listing_window_idx`) keeps the availability check from scanning all bookings. Concurrency is handled where it scales correctly: row locks on the listing and pet serialize only the confirmations that compete for the same place or pet, not the whole table. Known limit: availability is computed per request rather than cached, which is fine at course scale and would be the first thing to revisit with real traffic.
+
+**Security.** Authorization is in the database, not the API surface: Row Level Security on every table, triggers that check the actor for every status change, and `security definer` functions with `set search_path = ''` and explicit `grant execute` (for example `get_booking_detail` only to `authenticated`). The browser holds only the publishable key and the user's JWT; the service role key is used only inside the Edge Function. Private data is minimized in responses (no other users' bookings in search, no email or phone in booking detail), errors are generic where detail would leak information (sign-in), and consent is recorded at sign-up (`consent_version`, `consent_given_at`). CI adds CodeQL, dependency review, and Dependabot.
+
+### 6.5 API documentation (Swagger)
+
+The API is documented in OpenAPI 3.0 at [`docs/api/openapi.yaml`](api/openapi.yaml): every endpoint in the diagram above, its parameters, responses, error codes (`PBC01`, `PBP01`), and the access rule. It is viewed in Swagger UI, either by opening the file in [editor.swagger.io](https://editor.swagger.io) or locally:
+
+```bash
+docker run --rm -p 8081:8080 -e SWAGGER_JSON=/spec/openapi.yaml -v "$PWD/docs/api:/spec" swaggerapi/swagger-ui
+# then open http://localhost:8081
+```
+
+Swagger UI's "Try it out" works against a local stack: set the server to `http://127.0.0.1:54321` (or the Docker Compose port) and authorize with the publishable key and a user's access token.
+
 ## 7. Deployment model
 
 ```mermaid
@@ -401,7 +590,7 @@ Decisions: Cloudflare Git integration deploys the web app and GitHub Actions dep
 | High cohesion | Everything a feature needs (UI, hooks, pure rules, API adapter, types) sits in one folder | `web/src/features/*`, [ADR 0001](decisions/0001-web-spa-feature-architecture.md) |
 | Low coupling | Cross-feature imports only via `index.ts`; Supabase calls only in adapters, never in components | [architecture.md](architecture.md), lint-enforced (see section 9) |
 | Information hiding | Pure business rules (`hasBookingConflict`, `isValidBookingTransition`) are tiny, dependency-free functions | `bookingRules.ts` |
-| Defence in depth | Browser validation gives feedback; the database enforces ownership and overlap | RLS, trigger, exclusion constraint |
+| Defence in depth | Browser validation gives feedback; the database enforces ownership, capacity, and pet overlap | RLS, `guard_booking_change` and `hold_booking_availability` triggers (ADR 0011) |
 | Least privilege | `security definer` search RPC with an empty search path, no booking details returned | [ADR 0010](decisions/0010-listing-search-availability-privacy.md) |
 | Expand/contract changes | Forward-only migrations so a Worker rollback still works | [ci-cd.md](ci-cd.md#rollback) |
 
@@ -444,7 +633,7 @@ flowchart TD
         PE --> PD["/pets/:id/edit"]
         LI["/listings"] --> LN["/listings/new"]
         LI --> LD["/listings/:id/edit"]
-        B["/bookings"]
+        B["/bookings"] --> BD["/bookings/:bookingId (detail)"]
     end
     D -->|request booking| B
 ```

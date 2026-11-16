@@ -1,11 +1,11 @@
 # Test plan
 
-Test plan for **PetSwap** (Don't Like My Pets), prepared for the Software Engineering final presentation. It is the plan-level view of the strategy in [testing.md](testing.md): what is tested, at which level, by whom, with what entry and exit criteria, and what the known risks are. Evidence lives in [qa/](qa/) and in CI runs.
+Test plan for **PetSwap** (Don't Like My Pets), prepared for the Software Engineering final presentation. It is the plan-level view of the strategy in [testing.md](testing.md): what is tested, at which level, by whom, with what entry and exit criteria, and what the known risks are. Evidence lives in [qa/](qa/) and in CI runs. The course black-box test plan (equivalence classes, test cases with actual outputs, and the coverage matrix for EPICs E-6 and E-4) is in [test-plan-blackbox.md](test-plan-blackbox.md).
 
 ## 1. Objectives
 
 - Show that every functional requirement in [requirements.md](requirements.md) has at least one automated check at the lowest layer that exercises the whole risk.
-- Protect the two rules that, if broken, break the product: no overlapping confirmed bookings, and a user may only read or change what they own or are party to.
+- Protect the two rules that, if broken, break the product: confirmed stays never exceed a listing's capacity and a pet is never confirmed in two places at once (ADR 0011), and a user may only read or change what they own or are party to.
 - Make the result visible: every pull request shows green or red checks, and every release candidate gets a recorded regression pass.
 
 ## 2. Scope
@@ -21,8 +21,8 @@ Test plan for **PetSwap** (Don't Like My Pets), prepared for the Software Engine
 | Unit | Jest | Pure rules: booking conflict, transitions, form validation, error mapping | White-box, equivalence classes and boundary values (end-exclusive dates, age 0 to 100, capacity above 0) | 56 Jest test files with 1,008 tests, unit and component together | `Quality` / `web-quality` |
 | Component | Jest + React Testing Library | Forms, empty and error states, protected routes | Black-box on user-visible roles and text | (included above) | `Quality` / `web-quality` |
 | Integration | Jest + TanStack Query with mocked client | Query, cache, and adapter paths, for example the search screen | Black-box | (included above) | `Quality` / `web-quality` |
-| Database contract | SQL on local Supabase, impersonating owner, requester, stranger, anonymous | RLS, triggers, constraints, RPCs, Storage policies | Black-box on actors and state transitions; negative tests for each denied actor | 15 SQL files in `supabase/tests/` | `Database contract` workflow |
-| End to end | Playwright (desktop and mobile Chromium, desktop Firefox) | Public shell; login, request, confirm, decline, cancel, complete | Scenario-based | 4 spec files in `web/e2e/` | `E2E smoke`, `E2E booking` |
+| Database contract | SQL on local Supabase, impersonating owner, requester, stranger, anonymous | RLS, triggers, constraints, RPCs, Storage policies | Black-box on actors and state transitions; negative tests for each denied actor | 20 SQL test files plus a concurrent-session test (`booking_concurrency.test.py`) in `supabase/tests/` | `Database contract` workflow |
+| End to end | Playwright (desktop and mobile Chromium, desktop Firefox) | Public shell; login and logout, request, confirm, decline, cancel, complete, capacity and pet overlap, booking detail | Scenario-based | 6 spec files in `web/e2e/` | `E2E smoke`, `E2E booking` |
 | Manual | Markdown evidence | Cross-feature regression, UI on desktop and mobile, offline and failure cases | Exploratory plus scripted checklist | 3 regression and release passes in `docs/qa/` | Before each sprint review |
 
 ## 4. Traceability: requirement to test

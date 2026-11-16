@@ -59,7 +59,8 @@ function BookingCard({
         <BookingStatusBadge status={booking.status} />
       </div>
       <p className="booking-card__listing">
-        {booking.listing.title} &middot; {booking.listing.location}
+        {booking.listing.title}
+        {booking.listing.location && <> &middot; {booking.listing.location}</>}
       </p>
       <p className="booking-card__dates">
         {formatBookingDate(booking.start_date)} &ndash; {formatBookingDate(booking.end_date)}

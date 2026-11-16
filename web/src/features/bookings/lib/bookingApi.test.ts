@@ -16,6 +16,7 @@ import {
   getBookingDetail,
   listIncomingBookings,
   listOutgoingBookings,
+  UNAVAILABLE_LISTING_TITLE,
   updateBookingStatus,
 } from './bookingApi';
 
@@ -105,6 +106,68 @@ describe('listOutgoingBookings', () => {
     mockUnauthenticatedClient();
 
     await expect(listOutgoingBookings()).rejects.toThrow('You must be signed in to view bookings.');
+  });
+
+  describe('a booking whose listing the requester can no longer read', () => {
+    // RLS shows a requester only published listings, so after the host unpublishes or deletes the
+    // listing the embedded `listing` comes back null. The list must not crash on it.
+    const hiddenRow = {
+      ...BOOKING_FIELDS,
+      requester_id: 'user-1',
+      pet: { id: 'pet-1', name: 'Milo', species: 'dog', photo_url: null },
+      listing: null,
+    };
+
+    function mockClientWithRpc(rpcResult: QueryResult | Error) {
+      const { builder, from, getUser } = mockAuthenticatedClient('user-1', { data: [hiddenRow], error: null });
+      const rpc = rpcResult instanceof Error ? jest.fn().mockRejectedValue(rpcResult) : jest.fn().mockResolvedValue(rpcResult);
+      mockGetSupabaseClient.mockReturnValue({ auth: { getUser }, from, rpc } as unknown as AppSupabaseClient);
+      return { builder, rpc };
+    }
+
+    it('takes the title from the booking detail, as the detail page shows it', async () => {
+      const { rpc } = mockClientWithRpc({
+        data: [{
+          ...BOOKING_FIELDS,
+          viewer_role: 'requester',
+          listing_title: 'Unpublished garden',
+          listing_location: 'Chiang Mai',
+          listing_status: 'draft',
+          pet_id: null,
+          pet_name: null,
+          pet_species: null,
+          peer_id: 'owner-1',
+          peer_display_name: 'Alex Rivera',
+          peer_photo_url: null,
+          peer_location: null,
+        }],
+        error: null,
+      });
+
+      const [booking] = await listOutgoingBookings();
+
+      expect(rpc).toHaveBeenCalledWith('get_booking_detail', { target_booking_id: 'booking-1' });
+      expect(booking.listing).toEqual({ id: 'listing-1', title: 'Unpublished garden', location: 'Chiang Mai' });
+    });
+
+    it('says the listing is unavailable when the detail cannot be read either', async () => {
+      mockClientWithRpc(new Error('network down'));
+
+      const [booking] = await listOutgoingBookings();
+
+      expect(booking.listing).toEqual({ id: 'listing-1', title: UNAVAILABLE_LISTING_TITLE, location: '' });
+    });
+
+    it('does not ask for details of bookings whose listing it can read', async () => {
+      const row = { ...hiddenRow, listing: { id: 'listing-1', title: 'Cozy Yard', location: 'Austin' } };
+      const { getUser, from } = mockAuthenticatedClient('user-1', { data: [row], error: null });
+      const rpc = jest.fn();
+      mockGetSupabaseClient.mockReturnValue({ auth: { getUser }, from, rpc } as unknown as AppSupabaseClient);
+
+      await listOutgoingBookings();
+
+      expect(rpc).not.toHaveBeenCalled();
+    });
   });
 });
 

@@ -182,6 +182,14 @@ export async function updateBookingStatus(
       throw new BookingStatusChangedError();
     }
 
+    // The bookings UPDATE policies only match a row that is still pending or confirmed, so once the
+    // booking has moved on (cancelled by the requester, declined or completed in another tab) the
+    // update reaches no row and .single() reports PGRST116 before the trigger ever runs. An outsider
+    // gets the same answer, but an outsider never had the booking on screen to act on.
+    if (error.code === 'PGRST116') {
+      throw new BookingStatusChangedError();
+    }
+
     throw error;
   }
 

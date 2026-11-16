@@ -8,9 +8,18 @@
 
 | Author | Student ID | Squad | Contribution to this document |
 | --- | --- | --- | --- |
-CONTRIBUTION_TABLE_DESIGN
+| Pattharakorn Amornsupparat | 6730363621 | A | 0.0% (0 lines) |
+| Sukrit Nuntasakulwiroj | 6730542621 | A | 0.0% (0 lines) |
+| Pinnaraya Kantakanith | 6730375121 | A | 2.3% (46 lines) |
+| Porrutai Chinkarnjanaroj | 6730356221 | B | 4.2% (84 lines) |
+| Pacharakamon Wattanasiri | 6730334421 | B | 8.8% (178 lines) |
+| Rahut Nopnirapath | 6731345521 | B | 0.3% (6 lines) |
+| Sornchon Srichoonim | 6731350621 | C | 0.0% (0 lines) |
+| Kittichot Uaypornchaikul | 6730040921 | C | 20.4% (410 lines) |
+| Pisitpong Duangkaeo | 6730379721 | C | 0.0% (0 lines) |
+| Kasidech Aewsrisakul | 6730023221 | D | 64.1% (1290 lines) |
 
-Contribution is measured from git: lines added or removed by each author in this document, the API specification (`docs/api/`), `docs/architecture.md`, and the ADRs, up to the commit that produced this PDF. Leader: LEADER_PLACEHOLDER.
+Contribution is measured from git: lines added or removed by each author in this document, the API specification (`docs/api/`), `docs/architecture.md`, and the ADRs, up to the commit that produced this PDF. Team leader: **(to be filled in)**.
 <!-- /cover-page -->
 
 Software design document for **Don't Like My Pets (PetSwap)**, prepared for the Software Engineering final presentation (2110423). It is the single place that collects the diagrams the course taught: use case, activity, structural (ER), behavioural (sequence, state), component, and deployment diagrams, plus the quality metrics for coupling and cohesion.
@@ -315,28 +324,28 @@ sequenceDiagram
     Hook->>API: updateBookingStatus(id, confirmed)
     API->>REST: PATCH status=confirmed (user JWT)
     REST->>DB: UPDATE bookings as authenticated
-    DB->>DB: RLS: caller is a participant
+    DB->>DB: RLS: caller owns the listing,<br/>row is still pending or confirmed
     DB->>DB: guard_booking_change: caller owns the listing,<br/>pending to confirmed, start date not passed
     DB->>DB: hold_booking_availability: lock listing and pet rows
     alt pet confirmed elsewhere on an overlapping night
         DB-->>REST: error PBP01
         REST-->>API: error
         API-->>Hook: BookingPetUnavailableError
-        Hook->>Hook: refetch incoming, outgoing, detail, search
+        Hook->>Hook: onSettled: refetch bookings and search
         Hook-->>UI: error
         UI-->>Host: "This pet already has a confirmed booking<br/>for some of these dates"
     else some night would exceed listing capacity
         DB-->>REST: error PBC01
         REST-->>API: error
         API-->>Hook: BookingListingFullError
-        Hook->>Hook: refetch the same queries
+        Hook->>Hook: onSettled: refetch bookings and search
         Hook-->>UI: error
         UI-->>Host: "This listing is full for some of these dates"
     else fits
         DB-->>REST: row, status confirmed, confirmed_at set
         REST-->>API: booking
         API-->>Hook: booking
-        Hook->>Hook: invalidate bookings and search caches
+        Hook->>Hook: onSettled: refetch bookings and search
         Hook-->>UI: success
         UI-->>Host: shown as Confirmed
     end
@@ -429,7 +438,7 @@ classDiagram
         <<interface>>
         /rest/v1/bookings
         +listBookings(filter) Booking[]
-        +createBookingRequest(listing_id, pet_id, start_date, end_date) Booking
+        +createBookingRequest(listing_id, pet_id, start_date, end_date, requester_note) Booking
         +updateBookingStatus(id, status) Booking
     }
     class ListingsResource {

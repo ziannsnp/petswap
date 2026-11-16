@@ -8,9 +8,18 @@
 
 | Author | Student ID | Squad | Contribution to this document |
 | --- | --- | --- | --- |
-CONTRIBUTION_TABLE_TEST
+| Pattharakorn Amornsupparat | 6730363621 | A | 11.6% (360 lines) |
+| Sukrit Nuntasakulwiroj | 6730542621 | A | 0.3% (8 lines) |
+| Pinnaraya Kantakanith | 6730375121 | A | 2.0% (63 lines) |
+| Porrutai Chinkarnjanaroj | 6730356221 | B | 0.0% (0 lines) |
+| Pacharakamon Wattanasiri | 6730334421 | B | 3.9% (121 lines) |
+| Rahut Nopnirapath | 6731345521 | B | 0.6% (19 lines) |
+| Sornchon Srichoonim | 6731350621 | C | 8.3% (258 lines) |
+| Kittichot Uaypornchaikul | 6730040921 | C | 22.7% (703 lines) |
+| Pisitpong Duangkaeo | 6730379721 | C | 9.9% (305 lines) |
+| Kasidech Aewsrisakul | 6730023221 | D | 40.6% (1254 lines) |
 
-Contribution is measured from git: lines added or removed by each author in this plan, [test-plan.md](test-plan.md), [testing.md](testing.md), the acceptance scenarios, the QA evidence in `docs/qa/`, and the Playwright specs in `web/e2e/`, up to the commit that produced this PDF. Leader: LEADER_PLACEHOLDER.
+Contribution is measured from git: lines added or removed by each author in this plan, [test-plan.md](test-plan.md), [testing.md](testing.md), the acceptance scenarios, the QA evidence in `docs/qa/`, and the Playwright specs in `web/e2e/`, up to the commit that produced this PDF. Team leader: **(to be filled in)**.
 <!-- /cover-page -->
 
 This is the course's black-box test plan: two EPICs, four user stories from each, input equivalence classes for every story, test cases that cover every class, and a coverage matrix. The overall strategy (test levels, environments, entry and exit criteria, risks) is in [test-plan.md](test-plan.md); this document does not repeat it.
@@ -35,7 +44,7 @@ Evidence sources used for actual outputs:
 
 | Source | What it ran | Date |
 | --- | --- | --- |
-| CI-E2E | GitHub Actions `E2E booking`, run [43822524478](https://github.com/ziannsnp/petswap/actions/runs/43822524478) on `main`: the four booking specs on desktop Chromium, mobile Chromium, and desktop Firefox against a fresh local Supabase | 16 Nov 2026 |
+| CI-E2E | GitHub Actions `E2E booking`, run [43822524478](https://github.com/ziannsnp/petswap/actions/runs/43822524478) on `main` (commit af35a41): the four booking specs on desktop Chromium, mobile Chromium, and desktop Firefox against a fresh local Supabase. 29 passed, 4 failed (two tests), 2 skipped by design | 16 Nov 2026 |
 | SQL | `supabase/tests/*.test.sql` in the `Database contract` CI job on `main` (the authoritative database rules) | 15 Nov 2026 |
 | JEST | `npx jest` on the validators the forms use (`listingForm`, `listingPhotos`, `bookingRequestForm`, `bookingRules`): 133 tests passed | 16 Nov 2026 |
 | REG-S3 | Manual Sprint 3 regression on the Docker Compose stack, desktop and 375 px: [qa/regression-sprint3-2026-11-14.md](qa/regression-sprint3-2026-11-14.md) | 14 Nov 2026 |
@@ -86,10 +95,10 @@ Inputs: the candidate stay's dates and pet, the listing's capacity, and the conf
 
 | Test case | Inputs | Expected output | Actual output | Classes | Status |
 | --- | --- | --- | --- | --- | --- |
-| TC-6.2-01 | Capacity 2; confirm A `[D+1, D+3)`, then B `[D+1, D+5)` (different pets) | Both confirmed | CI-E2E `booking-conflict-and-capacity.spec.ts` "allows overlapping confirmed stays within capacity…": both Confirmed | EC-6.2-1 | see §5 |
-| TC-6.2-02 | Then confirm C `[D+2, D+4)` on the same capacity-2 listing | Refused: "This listing is full for some of these dates…"; C stays Pending | Same test, second half: refusal message shown, C still Pending | EC-6.2-4 | see §5 |
-| TC-6.2-03 | Rocket confirmed at Alex's listing `[D+10, D+14)`; confirm Rocket at another listing `[D+12, D+16)` | Refused: "This pet already has a confirmed booking for some of these dates…" | CI-E2E "rejects confirming a stay when the same pet already has an overlapping confirmed booking at another listing" | EC-6.2-5 | see §5 |
-| TC-6.2-04 | Capacity 1; confirmed `[D+20, D+24)`; confirm `[D+24, D+28)` | Both confirmed | CI-E2E "allows back-to-back confirmed stays…" | EC-6.2-2 | see §5 |
+| TC-6.2-01 | Capacity 2; confirm A `[D+1, D+3)`, then B `[D+1, D+5)` (different pets) | Both confirmed | CI-E2E `booking-conflict-and-capacity.spec.ts` "allows overlapping confirmed stays within capacity…": both Confirmed, on all 3 browsers | EC-6.2-1 | P |
+| TC-6.2-02 | Then confirm C `[D+2, D+4)` on the same capacity-2 listing | Refused: "This listing is full for some of these dates…"; C stays Pending | Same test, second half: refusal message shown, C still Pending, on all 3 browsers | EC-6.2-4 | P |
+| TC-6.2-03 | Rocket confirmed at Alex's listing `[D+10, D+14)`; confirm Rocket at another listing `[D+12, D+16)` | Refused: "This pet already has a confirmed booking for some of these dates…" | CI-E2E "rejects confirming a stay when the same pet already has an overlapping confirmed booking at another listing": refused with that message, on all 3 browsers | EC-6.2-5 | P |
+| TC-6.2-04 | Capacity 1; confirmed `[D+20, D+24)`; confirm `[D+24, D+28)` | Both confirmed | CI-E2E "allows back-to-back confirmed stays…": both Confirmed, on all 3 browsers | EC-6.2-2 | P |
 | TC-6.2-05 | Two pending requests for the same nights on a capacity-1 listing; confirm one | The pending one never blocked the confirmation | SQL `booking_rules.test.sql` (a non-confirmed booking never blocks); `booking_cancellation_release.test.sql` (a cancelled stay frees its place) | EC-6.2-3 | P |
 
 ### US-6.4 Confirm or decline a pending request
@@ -112,9 +121,9 @@ Inputs: the actor (listing owner or someone else), the action (confirm or declin
 | TC-6.4-01 | Alex confirms Casey's pending `[D+5, D+8)` | Status **Confirmed** for both users | CI-E2E `booking-flow.spec.ts`: Confirmed on all 3 browsers | EC-6.4-1 | P |
 | TC-6.4-02 | Alex declines a pending request | Status **Declined** | CI-E2E `booking-lifecycle.spec.ts` "a listing owner declines a pending request" | EC-6.4-2 | P |
 | TC-6.4-03 | Casey (requester) or Blair (outsider) sends confirm for that booking | Refused by the database; status unchanged | SQL `booking_lifecycle.test.sql` (requester and outsider cannot confirm or decline); the UI offers no button | EC-6.4-3 | P |
-| TC-6.4-04 | Booking cancelled in another tab, then Alex presses Confirm on the stale screen | "This booking was changed by someone else, so that action no longer applies. It has been refreshed." | CI-E2E `booking-detail-journey.spec.ts` "a stale confirmation is refused, explained, and the screen refreshes" | EC-6.4-4 | see §5 |
+| TC-6.4-04 | Booking cancelled in another tab, then Alex presses Confirm on the stale screen | "This booking was changed by someone else, so that action no longer applies. It has been refreshed." | CI-E2E `booking-detail-journey.spec.ts` "a stale confirmation is refused…": **the confirmation was refused, but the message was "Could not update this booking. Please try again."** on all 3 browsers. Cause: once cancelled, the row no longer matches the host's UPDATE policy, so the update matches no row (`PGRST116`) instead of raising the transition error the adapter maps. Defect D-1, see §6 | EC-6.4-4 | F |
 | TC-6.4-05 | Pending request whose start date was yesterday | Confirm is not offered; a direct update is refused | SQL `booking_transition_rules.test.sql`; JEST `canConfirmBooking` | EC-6.4-5 | P |
-| TC-6.4-06 | As TC-6.2-02 | Refused with the listing-full message | See TC-6.2-02 | EC-6.4-6 | see §5 |
+| TC-6.4-06 | As TC-6.2-02 | Refused with the listing-full message | See TC-6.2-02 | EC-6.4-6 | P |
 
 ### US-6.5 Cancel a booking
 
@@ -247,8 +256,8 @@ Inputs: the action (unpublish, delete), the owner's answer in the confirmation d
 | User story | Test case IDs | Classes covered | Status |
 | --- | --- | --- | --- |
 | US-6.1 | TC-6.1-01 … TC-6.1-08 | EC-6.1-1 … 8 (all) | P, P, P, P, P, P, P, P |
-| US-6.2 | TC-6.2-01 … TC-6.2-05 | EC-6.2-1 … 5 (all) | STATUS_6_2 |
-| US-6.4 | TC-6.4-01 … TC-6.4-06 | EC-6.4-1 … 6 (all) | STATUS_6_4 |
+| US-6.2 | TC-6.2-01 … TC-6.2-05 | EC-6.2-1 … 5 (all) | P, P, P, P, P |
+| US-6.4 | TC-6.4-01 … TC-6.4-06 | EC-6.4-1 … 6 (all) | P, P, P, F, P, P |
 | US-6.5 | TC-6.5-01 … TC-6.5-05 | EC-6.5-1 … 5 (all) | P, P, P, P, P |
 | US-4.1 | TC-4.1-01 … TC-4.1-12 | EC-4.1-1 … 12 (all) | P × 12 |
 | US-4.2 | TC-4.2-01 … TC-4.2-05 | EC-4.2-1 … 5 (all) | P × 5 |
@@ -286,7 +295,7 @@ npx playwright test -c playwright.demo.config.ts \
 npx playwright show-report
 ```
 
-Latest run: CI_RUN_SUMMARY
+Latest run: [E2E booking 43822524478](https://github.com/ziannsnp/petswap/actions/runs/43822524478) on `main`, 16 November 2026: 29 passed, 4 failed, 2 skipped by design (the seeded finished stay can be completed only once, so that test runs on desktop Chromium only). The 4 failures are the two defects in section 6.
 
 ### 5.3 Unit testing one backend function with Jest: 100% statement coverage
 
@@ -307,3 +316,10 @@ Tests:       92 passed, 92 total
 ```
 
 Its test cases are themselves partitioned: invalid windows and capacities (throws `RangeError`), only non-confirmed stays (never block), self-check, same pet on another listing (`pet_booked`), within and over capacity including the A `[1,3)`, B `[3,5)`, C `[1,5)` capacity-2 case (overlap count is not occupancy), and back-to-back stays.
+
+## 6. Defects found by this plan
+
+| ID | Found by | Defect | Severity | Status |
+| --- | --- | --- | --- | --- |
+| D-1 | TC-6.4-04, all 3 browsers | A host who confirms a request the requester has just cancelled sees the generic "Could not update this booking. Please try again." instead of "This booking was changed by someone else…". The database correctly refuses the change; only the message is wrong. Root cause: the host's RLS update policy matches only pending or confirmed rows, so the update matches no row and PostgREST returns `PGRST116`, which `updateBookingStatus()` does not map. | Low: no wrong data, a misleading message | Open, fix in progress |
+| D-2 | `booking-lifecycle.spec.ts` "a listing owner marks a finished confirmed booking completed", desktop Chromium | A test defect, not a product defect. The owner-side assertion does not wait for the detail page, so it can still see the bookings list, which now holds two completed stays (the seed gained one in PR #129), and the locator matches both. The product steps before it (complete, no actions left, requester detail) passed. | Low: test only | Open, fix in progress |

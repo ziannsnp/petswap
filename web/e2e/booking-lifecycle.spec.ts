@@ -186,6 +186,8 @@ test.describe('booking lifecycle after the request', () => {
       await expect(requester.getByRole('button', { name: actions })).toHaveCount(0);
 
       await (await openBookingCard(owner, startDate, FINISHED_STAY_LISTING)).getByRole('link', { name: /view details/i }).click();
+      // Wait for the detail screen: the list behind it also holds another completed seeded stay.
+      await expect(owner.getByRole('heading', { name: 'Booking details' })).toBeVisible();
       await expect(owner.locator('.booking-status--completed')).toBeVisible();
       await expect(owner.getByRole('button', { name: actions })).toHaveCount(0);
     } finally {

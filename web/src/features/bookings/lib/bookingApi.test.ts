@@ -217,12 +217,20 @@ describe('updateBookingStatus status changes', () => {
     await expect(updateBookingStatus('booking-1', 'cancelled')).rejects.toBe(databaseError);
   });
 
-  it('passes through the error when RLS hides the booking from the caller', async () => {
-    const notFound = { code: 'PGRST116', message: 'JSON object requested, multiple (or no) rows returned' };
-    mockAuthenticatedClient('stranger-1', { data: null, error: notFound });
+  // The UPDATE policies only match a pending or confirmed row, so a booking that has moved on is
+  // updated nowhere and .single() reports PGRST116 instead of the trigger's P0001.
+  it.each(['confirmed', 'declined', 'cancelled', 'completed'] as const)(
+    'tells the user a booking changed underneath them when %s reaches no row under RLS (PGRST116)',
+    async (status) => {
+      const noRow = { code: 'PGRST116', message: 'JSON object requested, multiple (or no) rows returned' };
+      mockAuthenticatedClient('user-1', { data: null, error: noRow });
 
-    await expect(updateBookingStatus('booking-1', 'confirmed')).rejects.toBe(notFound);
-  });
+      const update = updateBookingStatus('booking-1', status);
+
+      await expect(update).rejects.toBeInstanceOf(BookingStatusChangedError);
+      await expect(update).rejects.toThrow('changed by someone else');
+    },
+  );
 });
 
 describe('updateBookingStatus completion', () => {
